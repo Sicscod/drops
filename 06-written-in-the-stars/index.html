@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Written in the stars</title>
+<meta name="description" content="Her name, written in the stars. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600&display=swap">
+<style>
+:root{--bg:#04050D;--ink:#EEF1FF;--mute:#8C93B8;--glow:#BFD4FF}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Figtree",system-ui,sans-serif;overflow:hidden;touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+.words{position:fixed;left:0;right:0;top:64%;text-align:center;padding:0 24px;pointer-events:none}
+.line{margin:0;font-size:clamp(18px,5vw,26px);font-weight:600;letter-spacing:.01em;text-shadow:0 0 18px rgba(191,212,255,.45)}
+.sub{margin:10px 0 0;font-size:clamp(13px,3.6vw,16px);color:var(--mute)}
+.line,.sub{opacity:0}
+.credit{position:fixed;bottom:14px;left:0;right:0;text-align:center;font-size:12px;color:var(--mute);opacity:.6}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<div class="words"><p class="line" id="line"></p><p class="sub" id="sub"></p></div>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Written in the Stars · free code by @sicscod.drops =====
+// Share it without coding: yoursite/?name=Delly&line=you%20are%20my%20universe
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "Delly",
+  line: url.get("line") || "you were written in the stars ✨",
+  sub: url.get("sub") || "tap the sky to make a wish",
+  font: url.get("font") || "Sacramento", // any Google Font; thin script fonts look best
+  starGap: 0.062,            // space between name stars (× font size)
+  skyStars: 260,             // background stars
+  color: [191, 212, 255]     // star glow, RGB
+};
+
+const $ = id => document.getElementById(id);
+$("line").textContent = CONFIG.line;
+$("sub").textContent = CONFIG.sub;
+const cv = $("sky"), g = cv.getContext("2d");
+let W, H, D, sky = [], name = [], edges = [], shooting = [], t0 = 0, nebula;
+const rgba = a => `rgba(${CONFIG.color.join(",")},${a})`;
+const ease = x => x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3) / 2;
+const clamp = x => Math.max(0, Math.min(1, x));
+
+// ---- a soft glowing dot we stamp for every star ----
+const sprite = document.createElement("canvas");
+sprite.width = sprite.height = 64;
+{ const s = sprite.getContext("2d"), r = s.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(.12, rgba(.9));
+  r.addColorStop(.35, rgba(.25)); r.addColorStop(1, rgba(0));
+  s.fillStyle = r; s.fillRect(0, 0, 64, 64); }
+const star = (x, y, size, a) => { g.globalAlpha = a; g.drawImage(sprite, x - size/2, y - size/2, size, size); };
+
+// ---- turn the name into stars: sample letter pixels, keep points far apart ----
+function nameStars(){
+  const c = document.createElement("canvas"), s = c.getContext("2d");
+  c.width = W; c.height = H;
+  let fs = Math.min(H * .42, W * .5);
+  s.font = `${fs}px "${CONFIG.font}"`;
+  fs = Math.min(fs, fs * W * .82 / s.measureText(CONFIG.name).width);
+  s.font = `${fs}px "${CONFIG.font}"`;
+  s.textAlign = "center"; s.textBaseline = "middle";
+  s.fillText(CONFIG.name, W/2, H * .45);
+  const px = s.getImageData(0, 0, W, H).data, step = Math.max(2, fs * .012 | 0), cand = [];
+  for (let y = 0; y < H; y += step) for (let x = 0; x < W; x += step)
+    if (px[(y*W + x)*4 + 3] > 140) cand.push([x, y]);
+  cand.sort(() => Math.random() - .5);
+  const gap = fs * CONFIG.starGap, pts = [];
+  for (const p of cand) if (pts.every(q => (p[0]-q[0])**2 + (p[1]-q[1])**2 > gap*gap)) pts.push(p);
+
+  // constellation lines = minimum spanning tree (short links only, so letters stay apart)
+  const inTree = [0], out = pts.map((_, i) => i).slice(1), E = [];
+  while (out.length){
+    let best = [1e18, 0, 0];
+    for (const a of inTree) for (let k = 0; k < out.length; k++){
+      const b = out[k], d = (pts[a][0]-pts[b][0])**2 + (pts[a][1]-pts[b][1])**2;
+      if (d < best[0]) best = [d, a, k];
+    }
+    const b = out.splice(best[2], 1)[0];
+    inTree.push(b);
+    if (best[0] < (gap * 2.4) ** 2) E.push([best[1], b]);
+  }
+  name = pts.map(([x, y], i) => ({ x, y, sx: Math.random()*W, sy: Math.random()*H, delay: Math.random()*.6, tw: Math.random()*6 }));
+  edges = E;
+}
+
+function resize(){
+  D = devicePixelRatio || 1; W = innerWidth; H = innerHeight;
+  cv.width = W*D; cv.height = H*D; g.setTransform(D, 0, 0, D, 0, 0);
+  sky = Array.from({length: CONFIG.skyStars}, () => ({ x: Math.random()*W, y: Math.random()*H, r: Math.random()**3*3 + .6, tw: Math.random()*6, sp: .6 + Math.random()*1.6 }));
+  // faint milky-way haze, drawn once
+  nebula = document.createElement("canvas"); nebula.width = W; nebula.height = H;
+  const n = nebula.getContext("2d");
+  for (let i = 0; i < 26; i++){
+    const k = i / 26, x = W*(-.1 + k*1.2), y = H*(.85 - k*.7) + (Math.random()-.5)*H*.12, r = W*(.18 + Math.random()*.2);
+    const gr = n.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, i % 3 ? "rgba(70,90,190,.07)" : "rgba(150,80,190,.06)"); gr.addColorStop(1, "rgba(0,0,0,0)");
+    n.fillStyle = gr; n.fillRect(0, 0, W, H);
+  }
+  nameStars();
+}
+
+function shoot(){
+  const x = W*(.2 + Math.random()*.7), y = H*(.05 + Math.random()*.25);
+  shooting.push({ x, y, vx: -W*.9, vy: H*.35, born: performance.now() });
+}
+
+// ---- the show ----
+let lastShot = 0;
+function frame(now){
+  if (!t0) t0 = now;
+  const t = (now - t0) / 1000;
+  const bg = g.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#02030A"); bg.addColorStop(.6, "#080B22"); bg.addColorStop(1, "#120B26");
+  g.globalAlpha = 1; g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  g.drawImage(nebula, 0, 0, W, H);
+
+  for (const s of sky){
+    const a = .35 + .35*Math.sin(t*s.sp + s.tw);
+    star(s.x, s.y, s.r * 6, a * .8);
+  }
+
+  // stars fly into place (1s → 3.6s), then lines draw one by one (3.6s → 6.2s)
+  const lineStart = 3.6, perEdge = 2.6 / Math.max(1, edges.length);
+  g.globalCompositeOperation = "lighter";
+  g.lineCap = "round";
+  edges.forEach(([a, b], i) => {
+    const k = clamp((t - lineStart - i*perEdge) / .35);
+    if (!k) return;
+    const A = name[a], B = name[b];
+    g.globalAlpha = .55; g.strokeStyle = rgba(1); g.lineWidth = 1.3;
+    g.shadowColor = rgba(.9); g.shadowBlur = 8;
+    g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(A.x + (B.x-A.x)*k, A.y + (B.y-A.y)*k); g.stroke();
+  });
+  g.shadowBlur = 0;
+  const glow = t > 6.2 ? 1 + .25*Math.sin((t - 6.2)*2.2) : 1;
+  for (const s of name){
+    const k = ease(clamp((t - 1 - s.delay) / 2));
+    const x = s.sx + (s.x - s.sx)*k, y = s.sy + (s.y - s.sy)*k;
+    const tw = .75 + .25*Math.sin(t*3 + s.tw);
+    star(x, y, (16 - k*2) * glow * tw, .8 + .2*k);
+  }
+
+  // shooting stars
+  if (t > 7 && now - lastShot > 5200){ shoot(); lastShot = now; }
+  shooting = shooting.filter(s => {
+    const a = (now - s.born) / 1000;
+    if (a > 1.1) return false;
+    const x = s.x + s.vx*a, y = s.y + s.vy*a, len = .16;
+    const tail = g.createLinearGradient(x, y, x - s.vx*len, y - s.vy*len);
+    tail.addColorStop(0, rgba(.95*(1 - a/1.1))); tail.addColorStop(1, rgba(0));
+    g.globalAlpha = 1; g.strokeStyle = tail; g.lineWidth = 2.2;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x - s.vx*len, y - s.vy*len); g.stroke();
+    star(x, y, 16, 1 - a/1.1);
+    return true;
+  });
+  g.globalCompositeOperation = "source-over"; g.globalAlpha = 1;
+
+  $("line").style.opacity = clamp((t - 6.2) / 1);
+  $("sub").style.opacity = clamp((t - 7.4) / 1) * .8;
+  requestAnimationFrame(frame);
+}
+
+addEventListener("pointerdown", () => { shoot(); shoot(); });
+addEventListener("resize", resize);
+// load the name font, then start
+const css = document.createElement("link");
+css.rel = "stylesheet";
+css.href = "https://fonts.googleapis.com/css2?display=block&family=" + encodeURIComponent(CONFIG.font);
+const start = () => document.fonts.load(`80px "${CONFIG.font}"`).finally(() => { resize(); requestAnimationFrame(frame); });
+css.onload = css.onerror = start;
+document.head.appendChild(css);
+</script>
+</body>
+</html>

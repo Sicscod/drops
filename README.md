@@ -1,26 +1,24 @@
-# ❤️ Terminal Heart
+# 🎁 sicscod.drops
 
-https://github.com/Sicscod/terminal-heart/raw/main/demo.mp4
+Free code from [@sicscod.drops](https://www.instagram.com/sicscod.drops/): websites, animations and little gifts for your person. Every drop is one HTML file (or one script), free to take.
 
-A beating heart made of **any name**, right in your terminal. Send it to your person.
+### 👉 [Browse all drops with previews → sicscod.github.io/drops](https://sicscod.github.io/drops/)
 
-## Run it
-You only need Python 3 (already on macOS/Linux).
+Saw a drop in a video? Its number is the folder.
 
-```bash
-python3 heart.py Mia
-```
-Put any name instead of `Mia`. Stop with **Ctrl + C**.
+| # | Drop | What it is |
+|---|------|-----------|
+| 01 | [✨ Particle Portfolio](01-particle-portfolio) | Your name made of particles that scatter under your cursor |
+| 02 | [❤️ Terminal Heart](02-terminal-heart) | A beating heart made of a name, right in your terminal |
+| 03 | [🐉 Neon Dragon](03-neon-dragon) | A glowing dragon that follows your finger |
+| 04 | [💌 Be Mine](04-be-mine) | Ask your crush out. The No button runs away |
+| 06 | [✨ Written in the Stars](06-written-in-the-stars) | Her name as a constellation |
+| 07 | [☕ late bean.](07-late-bean) | A full coffee shop website |
+| 08 | [🌌 Black Hole](08-black-hole) | An Interstellar-style black hole you can drag |
 
-Windows: `python heart.py Mia` (in Windows Terminal).
+## How to use a drop
+1. Open its folder → download `index.html`
+2. Edit the `CONFIG` block at the top
+3. Publish for free with GitHub Pages or Vercel
 
-## Customize
-Open `heart.py` and change the settings at the top:
-- `MESSAGE`: the line under the heart
-- `BPM`: heartbeat speed
-- `TOP` / `BOTTOM`: colors (RGB)
-
-Tip: make the terminal bigger or zoom out (Cmd/Ctrl + −) for a bigger heart.
-
----
-More free code every week → **[@sicscod.drops](https://www.instagram.com/sicscod.drops/)** on Instagram & TikTok
+MIT licensed. New drop every day 👀

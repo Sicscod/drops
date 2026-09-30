@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Alex Carter — Portfolio</title>
+<meta name="description" content="Particle portfolio template — edit the CONFIG block and ship.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* ============ THEME — change these to restyle everything ============ */
+:root{
+  --bg:#0C0D12;
+  --surface:#15171F;
+  --line:#262936;
+  --text:#ECECF1;
+  --muted:#9A9DB0;
+  --accent:#8FA6FF;
+  --accent-2:#FFB36B;
+  --radius:16px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:20px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+
+/* nav */
+nav{position:fixed;inset:0 0 auto 0;z-index:10;padding-top:env(safe-area-inset-top,0px);background:linear-gradient(var(--bg),rgba(12,13,18,0))}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+.logo{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:20px;text-decoration:none;letter-spacing:-.02em}
+.logo span{color:var(--accent)}
+nav ul{display:flex;gap:22px;list-style:none;margin:0;padding:0;font-size:14px}
+nav a{text-decoration:none;color:var(--muted);transition:color .2s}
+nav a:hover,nav a:focus-visible{color:var(--text)}
+@media (max-width:560px){nav ul{gap:14px;font-size:13px}}
+
+/* hero */
+.hero{position:relative;height:100svh;min-height:560px;max-height:1000px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+#field{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y}
+.hero-copy{position:relative;width:100%;padding-bottom:9vh;pointer-events:none}
+.eyebrow{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+.role{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:clamp(22px,3.4vw,34px);line-height:1.2;margin:0;max-width:24ch;text-wrap:balance}
+.role em{font-style:normal;color:var(--accent-2)}
+.hint{position:absolute;right:20px;bottom:24px;font-size:12px;color:var(--muted)}
+.sr-name{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.fallback-name{display:none;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:clamp(56px,14vw,160px);line-height:.9;letter-spacing:-.04em;margin:0 0 18px}
+.no-canvas .fallback-name{display:block}
+
+/* sections */
+section{padding-block:96px}
+.sec-title{display:flex;align-items:baseline;gap:14px;margin:0 0 36px}
+.sec-title h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:clamp(32px,5vw,52px);letter-spacing:-.03em;margin:0;line-height:1}
+.sec-title .mono{color:var(--muted);font-size:13px}
+.about{display:grid;grid-template-columns:1.2fr 1fr;gap:48px;align-items:start}
+.about p{margin:0 0 16px;color:var(--muted);max-width:60ch}
+.about p strong{color:var(--text);font-weight:600}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fact{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.fact b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:34px;line-height:1;margin-bottom:6px}
+.fact span{font-size:13px;color:var(--muted)}
+@media (max-width:760px){.about{grid-template-columns:1fr;gap:28px}}
+
+.projects{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+.card{position:relative;display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px;text-decoration:none;transition:transform .25s,border-color .25s}
+.card:hover,.card:focus-visible{transform:translateY(-4px);border-color:var(--accent)}
+.card .thumb{height:140px;border-radius:10px;background:var(--bg);overflow:hidden}
+.card .thumb canvas{width:100%;height:100%;display:block}
+.card h3{font-family:"Bricolage Grotesque",sans-serif;font-size:22px;margin:0;letter-spacing:-.01em}
+.card p{margin:0;color:var(--muted);font-size:15px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
+.tag{font-family:"JetBrains Mono",monospace;font-size:11px;padding:4px 8px;border-radius:6px;background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.card .arrow{position:absolute;top:22px;right:22px;color:var(--muted);transition:color .2s,transform .2s}
+.card:hover .arrow{color:var(--accent);transform:translate(2px,-2px)}
+
+.skills{display:flex;flex-wrap:wrap;gap:10px}
+.skill{padding:10px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:15px}
+.skill.hot{border-color:var(--accent);color:var(--accent)}
+
+.contact{text-align:left}
+.contact h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:clamp(40px,8vw,96px);letter-spacing:-.04em;line-height:.95;margin:0 0 28px;text-wrap:balance}
+.contact h2 a{text-decoration:none;background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.links{display:flex;flex-wrap:wrap;gap:12px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:12px;border:1px solid var(--line);background:var(--surface);text-decoration:none;font-weight:500;transition:border-color .2s}
+.btn:hover,.btn:focus-visible{border-color:var(--accent)}
+footer{padding-block:40px 60px;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="logo" href="#top" id="logo">ac<span>.</span></a>
+  <ul><li><a href="#about">About</a></li><li><a href="#work">Work</a></li><li><a href="#contact">Contact</a></li></ul>
+</div></nav>
+
+<header class="hero" id="top">
+  <canvas id="field" aria-hidden="true"></canvas>
+  <div class="wrap hero-copy">
+    <h1 class="sr-name" id="sr-name">Alex Carter</h1>
+    <div class="fallback-name" id="fallback-name" aria-hidden="true">Alex Carter</div>
+    <p class="eyebrow mono" id="eyebrow">Portfolio · 2026</p>
+    <p class="role" id="role">Frontend developer who makes <em>websites people remember.</em></p>
+  </div>
+  <div class="hint mono" id="hint">move your cursor ↝</div>
+</header>
+
+<main>
+  <section id="about"><div class="wrap">
+    <div class="sec-title"><h2>About</h2><span class="mono">01</span></div>
+    <div class="about">
+      <div id="about-text"></div>
+      <div class="facts" id="facts"></div>
+    </div>
+  </div></section>
+
+  <section id="work"><div class="wrap">
+    <div class="sec-title"><h2>Selected work</h2><span class="mono">02</span></div>
+    <div class="projects" id="projects"></div>
+  </div></section>
+
+  <section id="skills"><div class="wrap">
+    <div class="sec-title"><h2>Toolbox</h2><span class="mono">03</span></div>
+    <div class="skills" id="skill-list"></div>
+  </div></section>
+
+  <section id="contact" class="contact"><div class="wrap">
+    <p class="eyebrow mono">04 · Contact</p>
+    <h2><a id="mail-link" href="#">Let's build something.</a></h2>
+    <div class="links" id="links"></div>
+  </div></section>
+</main>
+
+<footer><div class="wrap">
+  <span id="copyright"></span>
+  <span>Template by <a href="https://www.instagram.com/sicscod.drops/" id="credit" target="_blank" rel="noopener">@sicscod.drops</a></span>
+</div></footer>
+
+<script>
+/* ================================================================
+   CONFIG — edit this block, nothing else is required.
+   ================================================================ */
+const CONFIG = {
+  name: "Alex Carter",           // shown as particles in the hero
+  initials: "ac",                // logo in the top-left
+  eyebrow: "Portfolio · 2026",
+  role: 'Frontend developer who makes <em>websites people remember.</em>',
+  email: "hello@example.com",
+  about: [
+    "I'm a <strong>computer science student</strong> who loves turning ideas into fast, playful websites.",
+    "Right now I'm learning 3D on the web, building side projects every week, and looking for my first internship."
+  ],
+  facts: [
+    ["12+", "projects shipped"],
+    ["3",   "hackathons"],
+    ["2",   "languages spoken"],
+    ["∞",   "cups of tea"]
+  ],
+  projects: [
+    { title: "Pixel Weather", text: "A weather app that paints the sky in real time.", tags: ["JS", "Canvas", "API"], url: "#" },
+    { title: "Study Timer",   text: "Pomodoro timer with streaks and lo-fi sounds.",   tags: ["React", "PWA"],       url: "#" },
+    { title: "Roblox Tycoon", text: "A multiplayer tycoon game with saves and upgrades.", tags: ["Luau", "Roblox"],  url: "#" }
+  ],
+  skills: ["HTML", "CSS", "JavaScript", "React", "Python", "Git", "Figma", "Luau"],
+  hotSkills: ["JavaScript", "React"],   // highlighted chips
+  links: [
+    ["GitHub",    "https://github.com/"],
+    ["Instagram", "https://instagram.com/"],
+    ["LinkedIn",  "https://linkedin.com/"]
+  ],
+  particles: {
+    gap: 0,          // 0 = auto; bigger = fewer particles
+    mouseRadius: 90, // how far the cursor pushes
+    colors: ["#ECECF1", "#8FA6FF", "#FFB36B"]
+  }
+};
+</script>
+
+<script>
+(function(){
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- fill content from CONFIG ----------
+  document.title = CONFIG.name + " — Portfolio";
+  $("sr-name").textContent = CONFIG.name;
+  $("fallback-name").textContent = CONFIG.name;
+  $("logo").innerHTML = "";
+  $("logo").append(CONFIG.initials);
+  const dot = document.createElement("span"); dot.textContent = "."; $("logo").append(dot);
+  $("eyebrow").textContent = CONFIG.eyebrow;
+  $("role").innerHTML = CONFIG.role;
+  $("about-text").innerHTML = CONFIG.about.map(p => "<p>" + p + "</p>").join("");
+  CONFIG.facts.forEach(([big, small]) => {
+    const d = document.createElement("div"); d.className = "fact";
+    const b = document.createElement("b"); b.textContent = big;
+    const s = document.createElement("span"); s.textContent = small;
+    d.append(b, s); $("facts").append(d);
+  });
+  CONFIG.projects.forEach((p, i) => {
+    const a = document.createElement("a"); a.className = "card"; a.href = p.url;
+    if (/^https?:/.test(p.url)) { a.target = "_blank"; a.rel = "noopener"; }
+    const thumb = document.createElement("div"); thumb.className = "thumb";
+    const c = document.createElement("canvas"); thumb.append(c); drawThumb(c, i);
+    const h = document.createElement("h3"); h.textContent = p.title;
+    const t = document.createElement("p"); t.textContent = p.text;
+    const tags = document.createElement("div"); tags.className = "tags";
+    p.tags.forEach(x => { const s = document.createElement("span"); s.className = "tag"; s.textContent = x; tags.append(s); });
+    const arrow = document.createElement("span"); arrow.className = "arrow"; arrow.textContent = "↗"; arrow.setAttribute("aria-hidden","true");
+    a.append(thumb, h, t, tags, arrow); $("projects").append(a);
+  });
+  CONFIG.skills.forEach(s => {
+    const d = document.createElement("span"); d.className = "skill" + (CONFIG.hotSkills.includes(s) ? " hot" : ""); d.textContent = s;
+    $("skill-list").append(d);
+  });
+  $("mail-link").href = "mailto:" + CONFIG.email;
+  CONFIG.links.forEach(([label, url]) => {
+    const a = document.createElement("a"); a.className = "btn"; a.href = url; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = label + " ↗"; $("links").append(a);
+  });
+  $("copyright").textContent = "© " + new Date().getFullYear() + " " + CONFIG.name;
+
+  // generative thumbnails so cards look good before you add screenshots
+  function drawThumb(c, seed){
+    const w = 600, h = 280; c.width = w; c.height = h;
+    const g = c.getContext("2d"); const cols = CONFIG.particles.colors;
+    g.fillStyle = "#0C0D12"; g.fillRect(0,0,w,h);
+    let s = seed * 9301 + 49297;
+    const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+    for (let i = 0; i < 26; i++){
+      g.globalAlpha = 0.18 + rnd()*0.5;
+      g.fillStyle = cols[i % cols.length];
+      const r = 6 + rnd()*60;
+      if (seed % 3 === 0){ g.beginPath(); g.arc(rnd()*w, rnd()*h, r, 0, Math.PI*2); g.fill(); }
+      else if (seed % 3 === 1){ g.fillRect(rnd()*w, rnd()*h, r*2, r/3); }
+      else { g.beginPath(); const x = rnd()*w, y = rnd()*h; g.moveTo(x,y); g.lineTo(x+r*2,y+r); g.lineTo(x-r,y+r*1.4); g.closePath(); g.fill(); }
+    }
+    g.globalAlpha = 1;
+  }
+
+  // ---------- particle name ----------
+  const canvas = $("field");
+  const ctx = canvas.getContext && canvas.getContext("2d");
+  if (!ctx){ document.documentElement.classList.add("no-canvas"); return; }
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let W = 0, H = 0, DPR = 1, parts = [], raf = 0;
+  const mouse = { x: -9999, y: -9999, active: false };
+
+  function build(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.getBoundingClientRect();
+    W = rect.width; H = rect.height;
+    canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    // draw the name offscreen, fitted to width
+    const off = document.createElement("canvas");
+    off.width = Math.round(W); off.height = Math.round(H);
+    const o = off.getContext("2d");
+    const words = CONFIG.name.split(" ");
+    const lines = (W < 700 && words.length > 1) ? words : [CONFIG.name];
+    let size = Math.min(H * 0.26, 220);
+    o.font = `800 ${size}px "Bricolage Grotesque", sans-serif`;
+    const left = Math.max(20, (W - 1080) / 2 + 20);
+    const avail = Math.min(1040, W - 40);           // same width as the page content
+    const widest = Math.max(...lines.map(l => o.measureText(l).width));
+    size = Math.min(size, size * avail / widest);
+    o.font = `800 ${size}px "Bricolage Grotesque", sans-serif`;
+    o.fillStyle = "#fff"; o.textBaseline = "middle";
+    const lh = size * 0.95, total = lh * lines.length;
+    const top = H * 0.40 - total / 2 + lh / 2;
+    lines.forEach((l, i) => o.fillText(l, left, top + i * lh));
+
+    const gap = CONFIG.particles.gap || Math.max(3, Math.round(size / 26));
+    const data = o.getImageData(0, 0, off.width, off.height).data;
+    const cols = CONFIG.particles.colors;
+    const next = [];
+    for (let y = 0; y < off.height; y += gap){
+      for (let x = 0; x < off.width; x += gap){
+        if (data[(y * off.width + x) * 4 + 3] > 128){
+          const old = parts[next.length];
+          next.push({
+            x: old ? old.x : Math.random() * W,
+            y: old ? old.y : H + Math.random() * H * 0.5,
+            vx: 0, vy: 0, tx: x, ty: y,
+            r: gap * 0.42,
+            c: cols[(Math.random() * cols.length * 1.6 | 0) % cols.length]
+          });
+        }
+      }
+    }
+    parts = next;
+    if (reduce){ parts.forEach(p => { p.x = p.tx; p.y = p.ty; }); draw(); }
+  }
+
+  function draw(){
+    ctx.clearRect(0, 0, W, H);
+    for (const p of parts){
+      ctx.fillStyle = p.c;
+      ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+    }
+  }
+
+  function tick(){
+    const R = CONFIG.particles.mouseRadius, R2 = R * R;
+    for (const p of parts){
+      const dx = p.x - mouse.x, dy = p.y - mouse.y, d2 = dx*dx + dy*dy;
+      if (d2 < R2 && d2 > 0.01){
+        const d = Math.sqrt(d2), f = (R - d) / R;
+        p.vx += (dx / d) * f * 6; p.vy += (dy / d) * f * 6;
+      }
+      p.vx += (p.tx - p.x) * 0.045; p.vy += (p.ty - p.y) * 0.045;
+      p.vx *= 0.82; p.vy *= 0.82;
+      p.x += p.vx; p.y += p.vy;
+    }
+    draw();
+    raf = requestAnimationFrame(tick);
+  }
+
+  function point(e){
+    const r = canvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    mouse.x = t.clientX - r.left; mouse.y = t.clientY - r.top;
+    if (!mouse.active){ mouse.active = true; $("hint").style.opacity = "0"; }
+  }
+  function leave(){ mouse.x = -9999; mouse.y = -9999; }
+  canvas.addEventListener("pointermove", point);
+  canvas.addEventListener("pointerdown", point);
+  canvas.addEventListener("pointerleave", leave);
+  canvas.addEventListener("touchmove", point, { passive: true });
+  canvas.addEventListener("touchend", leave);
+  $("hint").textContent = matchMedia("(hover: none)").matches ? "touch the name ↝" : "move your cursor ↝";
+
+  // pause when hero is off screen
+  let visible = true;
+  new IntersectionObserver(([en]) => {
+    visible = en.isIntersecting;
+    if (reduce) return;
+    if (visible && !raf) raf = requestAnimationFrame(tick);
+    if (!visible && raf){ cancelAnimationFrame(raf); raf = 0; }
+  }).observe(canvas);
+
+  let rt;
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(build, 150); });
+
+  const start = () => { build(); if (!reduce && visible && !raf) raf = requestAnimationFrame(tick); };
+  (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(start, start);
+})();
+</script>
+</body>
+</html>

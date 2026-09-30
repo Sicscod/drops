@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>sicscod.drops · free code, every day</title>
+<meta name="description" content="Every drop from @sicscod.drops in one place: websites, animations and little gifts in one HTML file. Free code.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+:root{--bg:#07080D;--card:#10121A;--line:#1F2230;--ink:#F2F3F8;--mute:#8C91A8;--accent:#A78BFA;--accent2:#FF79C6}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--ink);font-family:"Figtree",system-ui,sans-serif;line-height:1.45}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1120px;margin:0 auto;padding:0 18px}
+header{padding:46px 0 18px}
+.mono{font-family:"JetBrains Mono",monospace}
+.kick{font-size:13px;color:var(--accent)}
+h1{font-size:clamp(40px,9vw,76px);line-height:1;margin:10px 0 12px;letter-spacing:-.03em;font-weight:800}
+h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:var(--mute);font-size:17px;max-width:46ch;margin:0}
+.social{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+.social a{border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600}
+.bar{position:sticky;top:0;z-index:5;background:rgba(7,8,13,.85);backdrop-filter:blur(10px);padding:12px 0;border-bottom:1px solid var(--line)}
+.search{width:100%;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 16px;color:var(--ink);font:inherit;font-size:16px;outline:none}
+.search:focus{border-color:var(--accent)}
+.tags{display:flex;gap:8px;margin-top:10px;overflow-x:auto;scrollbar-width:none}
+.tag{flex:none;border:1px solid var(--line);background:transparent;color:var(--mute);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.tag.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;padding:20px 0 40px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;display:flex;flex-direction:column;transition:transform .2s,border-color .2s}
+.card:hover{transform:translateY(-3px);border-color:#34384d}
+.card.hit{border-color:var(--accent);box-shadow:0 0 0 3px rgba(167,139,250,.25)}
+.shot{position:relative;aspect-ratio:4/3;background:#000;overflow:hidden}
+.shot img{width:100%;height:100%;object-fit:cover;display:block}
+.num{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);border-radius:10px;padding:4px 9px;font-size:15px;font-weight:800}
+.body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;flex:1}
+.body h3{margin:0;font-size:19px}
+.body p{margin:0;color:var(--mute);font-size:14px;flex:1}
+.kind{font-size:12px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.btns{display:flex;gap:8px;margin-top:10px}
+.btn{flex:1;text-align:center;border-radius:12px;padding:10px;font-weight:700;font-size:14px;border:1px solid var(--line)}
+.btn.live{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.empty{color:var(--mute);padding:30px 0;text-align:center;display:none}
+footer{border-top:1px solid var(--line);padding:26px 0 40px;color:var(--mute);font-size:14px;text-align:center}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="kick mono">// free code by @sicscod.drops</div>
+  <h1>every drop,<br><span>one place.</span></h1>
+  <p class="lead">Websites, animations and little gifts for your person. One HTML file each, free to take. Saw a drop in a video? Type its number.</p>
+  <div class="social">
+    <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">Instagram ↗</a>
+    <a href="https://www.tiktok.com/@sicscod.drops" target="_blank" rel="noopener">TikTok ↗</a>
+    <a href="https://github.com/Sicscod/drops" target="_blank" rel="noopener">GitHub ↗</a>
+  </div>
+</div></header>
+
+<div class="bar"><div class="wrap">
+  <input class="search" id="q" type="search" placeholder="Search: 06, stars, website, crush…" autocomplete="off">
+  <div class="tags" id="tags"></div>
+</div></div>
+
+<main class="wrap">
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty">Nothing here yet. New drop every day 👀</div>
+</main>
+<footer>free code by <a href="https://www.instagram.com/sicscod.drops/">@sicscod.drops</a> · take it, change it, make it yours</footer>
+
+<script>
+// ===== Drops catalog · free code by @sicscod.drops =====
+// New drop = add one line to DROPS (newest first).
+const DROPS = [
+  { n: "08", title: "Black Hole", kind: "effect", desc: "An Interstellar-style black hole. Drag it, tap to feed it stars.", live: "08-black-hole/", img: "08-black-hole/poster.jpg" },
+  { n: "07", title: "late bean. coffee shop", kind: "website", desc: "A full café landing page: menu, bag, reviews, hours. Rename it in the link.", live: "07-late-bean/", img: "07-late-bean/poster.jpg" },
+  { n: "06", title: "Written in the Stars", kind: "for your person", desc: "Her name as a constellation. Change the name in the link and send it.", live: "06-written-in-the-stars/?name=Delly", img: "06-written-in-the-stars/poster.jpg" },
+  { n: "04", title: "Be Mine", kind: "for your person", desc: "Ask your crush out. The No button runs away.", live: "04-be-mine/?name=Delly", img: "04-be-mine/poster.jpg" },
+  { n: "03", title: "Neon Dragon", kind: "effect", desc: "A glowing dragon that follows your finger.", live: "03-neon-dragon/", img: "03-neon-dragon/poster.jpg" },
+  { n: "02", title: "Terminal Heart", kind: "for your person", desc: "A beating heart made of a name, right in your terminal (Python).", live: "", img: "02-terminal-heart/poster.jpg" },
+  { n: "01", title: "Particle Portfolio", kind: "website", desc: "Your name made of particles that scatter under your cursor.", live: "01-particle-portfolio/", img: "01-particle-portfolio/poster.jpg" }
+];
+
+const $ = id => document.getElementById(id);
+// "Get the code" opens the drop's folder on GitHub (works whatever this repo is called)
+const REPO = location.pathname.split("/")[1] || "drops";
+const folder = d => d.img.split("/")[0];
+const codeUrl = d => `https://github.com/Sicscod/${REPO}/tree/main/${folder(d)}`;
+const kinds = ["all", ...new Set(DROPS.map(d => d.kind))];
+let kind = "all";
+$("tags").innerHTML = kinds.map(k => `<button class="tag${k === "all" ? " on" : ""}" data-k="${k}" type="button">${k}</button>`).join("");
+$("tags").addEventListener("click", e => {
+  const b = e.target.closest(".tag"); if (!b) return;
+  kind = b.dataset.k;
+  document.querySelectorAll(".tag").forEach(t => t.classList.toggle("on", t === b));
+  render();
+});
+
+function render(){
+  const q = $("q").value.trim().toLowerCase().replace(/^#|^drop\s*/, "");
+  const list = DROPS.filter(d => (kind === "all" || d.kind === kind) &&
+    (!q || d.n === q.padStart(2, "0") || `${d.n} ${d.title} ${d.kind} ${d.desc}`.toLowerCase().includes(q)));
+  $("grid").innerHTML = list.map(d => `
+    <article class="card${q && d.n === q.padStart(2, "0") ? " hit" : ""}" id="d${d.n}">
+      <a class="shot" href="${d.live || codeUrl(d)}"><img src="${d.img}" alt="${d.title}" loading="lazy"><span class="num mono">#${d.n}</span></a>
+      <div class="body">
+        <span class="kind">${d.kind}</span>
+        <h3>${d.title}</h3>
+        <p>${d.desc}</p>
+        <div class="btns">
+          ${d.live ? `<a class="btn live" href="${d.live}">Live ↗</a>` : ""}
+          <a class="btn" href="${codeUrl(d)}">Get the code</a>
+        </div>
+      </div>
+    </article>`).join("");
+  $("empty").style.display = list.length ? "none" : "block";
+}
+$("q").addEventListener("input", render);
+// sicscod.github.io/Sicscod/#06 opens straight on drop 06
+if (location.hash) $("q").value = location.hash.slice(1);
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>late bean. coffee till 2am</title>
+<meta name="description" content="A full coffee shop landing page in one HTML file. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Figtree:wght@400;500;700;800&display=swap">
+<style>
+:root{--bg:#120D0A;--card:#1D1511;--line:#34261E;--ink:#F4EADF;--mute:#A8968A;--accent:#FF7A2F;--accent2:#FFC58F}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--ink);font-family:"Figtree",system-ui,sans-serif;font-size:16px;line-height:1.5;overflow-x:hidden}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;opacity:.09;z-index:50;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+.serif{font-family:"Instrument Serif",Georgia,serif;font-weight:400}
+.serif i{color:var(--accent2)}
+
+/* nav */
+nav{position:sticky;top:0;z-index:20;background:rgba(18,13,10,.78);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+.logo{font-family:"Instrument Serif",serif;font-size:27px;letter-spacing:-.01em}
+.logo b{color:var(--accent);font-weight:400}
+.navr{display:flex;gap:10px;align-items:center}
+.pill{border:1px solid var(--line);border-radius:999px;padding:7px 15px;font-size:14px;font-weight:600;background:transparent;color:var(--ink);font-family:inherit;cursor:pointer}
+.cart{position:relative}
+.cart i{position:absolute;top:-7px;right:-7px;min-width:20px;height:20px;border-radius:10px;background:var(--accent);color:#1A0E06;font-style:normal;font-size:12px;font-weight:800;display:grid;place-items:center;padding:0 5px}
+
+/* hero */
+.hero{padding:34px 0 26px;position:relative}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--accent2);background:rgba(255,122,47,.1);border:1px solid rgba(255,122,47,.25);border-radius:999px;padding:5px 12px}
+.badge s{width:8px;height:8px;border-radius:50%;background:#46E08A;text-decoration:none;display:inline-block}
+h1{font-size:clamp(50px,13.5vw,120px);line-height:.92;margin:16px 0 0;letter-spacing:-.025em}
+h1 span{display:block}
+.herobot{display:grid;grid-template-columns:1fr 150px;gap:10px;align-items:end;margin-top:12px}
+.lead{color:var(--mute);margin:0 0 16px;font-size:16px;max-width:30ch}
+.cta{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:#1A0E06;border:0;border-radius:999px;padding:14px 22px;font:inherit;font-weight:800;font-size:16px;cursor:pointer;box-shadow:0 10px 30px rgba(255,122,47,.28)}
+#cup{width:150px;height:170px;display:block}
+
+/* marquee */
+.marquee{border-block:1px solid var(--line);overflow:hidden;white-space:nowrap;padding:13px 0;background:#170F0B}
+.marquee div{display:inline-block;font-family:"Instrument Serif",serif;font-size:30px;will-change:transform}
+.marquee em{color:var(--accent);font-style:normal;margin:0 16px}
+
+/* sections */
+section{padding:44px 0 8px}
+.kick{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:700}
+h2{font-size:clamp(38px,10vw,72px);line-height:1;margin:8px 0 20px;letter-spacing:-.02em}
+.bento{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.item{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px;position:relative;overflow:hidden;cursor:pointer;min-height:150px;display:flex;flex-direction:column;justify-content:flex-end}
+.item.big{grid-column:span 2;min-height:190px;background:radial-gradient(120% 90% at 90% 0%,#6B2E10 0%,#2A1810 55%,var(--card) 100%)}
+.item h3{margin:0;font-size:19px;font-weight:700}
+.item p{margin:2px 0 0;color:var(--mute);font-size:13.5px}
+.price{position:absolute;top:12px;right:14px;font-family:"Instrument Serif",serif;font-size:30px;color:var(--accent2)}
+.add{position:absolute;top:14px;left:14px;width:32px;height:32px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font-size:20px;line-height:1;color:var(--ink)}
+.item.added .add{background:var(--accent);color:#1A0E06;border-color:var(--accent)}
+.tag{position:absolute;top:18px;left:56px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;background:var(--accent);color:#1A0E06;border-radius:999px;padding:4px 9px}
+.blob{position:absolute;right:-20px;bottom:-28px;width:120px;height:120px;border-radius:50%;filter:blur(2px);opacity:.9}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
+.stat{border-top:1px solid var(--line);padding-top:12px}
+.stat b{display:block;font-family:"Instrument Serif",serif;font-weight:400;font-size:46px;line-height:1}
+.stat span{color:var(--mute);font-size:13px}
+
+.quote{background:var(--ink);color:#1A120D;border-radius:26px;padding:24px 22px;margin-top:8px}
+.quote p{font-family:"Instrument Serif",serif;font-size:29px;line-height:1.08;margin:0 0 14px}
+.quote small{font-weight:700;font-size:13px;opacity:.75}
+.stars{color:var(--accent);letter-spacing:2px;font-size:15px}
+
+.visit{display:grid;gap:10px}
+.row{display:flex;justify-content:space-between;border-bottom:1px dashed var(--line);padding:10px 0;font-size:15px}
+.row span:last-child{color:var(--mute)}
+footer{padding:46px 0 30px;text-align:center}
+.bigword{font-family:"Instrument Serif",serif;font-size:clamp(80px,26vw,240px);line-height:.85;letter-spacing:-.04em;color:var(--accent)}
+.credit{color:var(--mute);font-size:12px;margin-top:14px;opacity:.7}
+.credit a{text-decoration:underline}
+.toast{position:fixed;left:50%;bottom:22px;z-index:40;background:var(--ink);color:#1A120D;font-weight:700;border-radius:14px;padding:12px 16px;font-size:14px;opacity:0;transform:translate(-50%,20px);white-space:nowrap;box-shadow:0 12px 30px rgba(0,0,0,.4)}
+@media (min-width:800px){.bento{grid-template-columns:repeat(4,1fr)}.item.big{grid-row:span 2}.visit{grid-template-columns:1fr 1fr;gap:40px}}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="logo" href="#" id="logo"></a>
+  <div class="navr"><button class="pill" type="button">Menu</button><button class="pill cart" type="button" id="cartBtn">Bag <i id="count">0</i></button></div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <span class="badge" data-r><s id="dot"></s><span id="open"></span></span>
+  <h1 class="serif" id="headline"></h1>
+  <div class="herobot">
+    <div data-r>
+      <p class="lead" id="lead"></p>
+      <button class="cta" type="button" id="order">Order ahead <span>→</span></button>
+    </div>
+    <canvas id="cup" width="300" height="340" aria-hidden="true"></canvas>
+  </div>
+</div></header>
+
+<div class="marquee"><div id="marq"></div></div>
+
+<section id="menu"><div class="wrap">
+  <div class="kick" data-r>the menu</div>
+  <h2 class="serif" data-r>small list,<br><i>big</i> flavour.</h2>
+  <div class="bento" id="bento"></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="kick" data-r>why night people love us</div>
+  <div class="stats" id="stats"></div>
+  <div class="quote" data-r>
+    <div class="stars">★★★★★</div>
+    <p id="quote"></p>
+    <small id="quoteBy"></small>
+  </div>
+</div></section>
+
+<section><div class="wrap visit">
+  <div data-r>
+    <div class="kick">come by</div>
+    <h2 class="serif" id="address"></h2>
+  </div>
+  <div id="hours"></div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="bigword" data-r id="bigword"></div>
+  <div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+</div></footer>
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== Late Bean · free code by @sicscod.drops =====
+// A full coffee-shop landing page. Rename it without coding: yoursite/?name=Moon%20Beans&city=Almaty
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "late bean",
+  city: url.get("city") || "Xi'an",
+  open: "open now · till 2am",
+  headline: ["coffee for", "people who", "<i>stay up late.</i>"],
+  lead: "Slow espresso, warm buns and a quiet table, from 8am until the city falls asleep.",
+  marquee: ["espresso", "oat latte", "cold brew", "honey flat white", "cardamom bun", "matcha"],
+  menu: [
+    { name: "Midnight Latte", note: "espresso, dark caramel, sea salt", price: "4.5", big: true },
+    { name: "Cold Brew", note: "18h steep, citrus notes", price: "3.9", color: "#3B6BFF" },
+    { name: "Honey Flat White", note: "oat milk, wildflower honey", price: "4.2", color: "#FFB23F" },
+    { name: "Cardamom Bun", note: "baked every night at 11", price: "3.2", color: "#E0567A" },
+    { name: "Matcha Cloud", note: "ceremonial matcha, cream top", price: "4.8", color: "#4FD08A" }
+  ],
+  stats: [["2am", "we close"], ["14", "single-origin beans"], ["4.9", "on maps, 1.2k reviews"]],
+  quote: "“The only place in town where the coffee is still good at 1am.”",
+  quoteBy: "Delly, regular since day one",
+  address: "12 Night St,<br><i>{city}</i>",
+  hours: [["Mon – Thu", "8:00 – 1:00"], ["Fri – Sat", "8:00 – 2:00"], ["Sunday", "10:00 – 0:00"], ["Wi-Fi", "yes, and it's fast"]]
+};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[<>&"]/g, "");
+const brand = esc(CONFIG.name);
+$("logo").innerHTML = brand.replace(/(\S+)$/, "$1<b>.</b>");
+$("open").textContent = CONFIG.open;
+$("headline").innerHTML = CONFIG.headline.map(l => `<span data-r>${l}</span>`).join("");
+$("lead").textContent = CONFIG.lead;
+const word = CONFIG.marquee.map(w => `${w}<em>✦</em>`).join("");
+$("marq").innerHTML = word.repeat(4);
+$("bento").innerHTML = CONFIG.menu.map((m, i) => `
+  <div class="item${m.big ? " big" : ""}" data-r data-i="${i}">
+    ${m.color ? `<div class="blob" style="background:radial-gradient(circle at 35% 35%,${m.color},transparent 70%)"></div>` : ""}
+    ${m.big ? `<span class="tag">bestseller</span>` : ""}<span class="add">+</span><span class="price">$${m.price}</span>
+    <h3>${m.name}</h3><p>${m.note}</p>
+  </div>`).join("");
+$("stats").innerHTML = CONFIG.stats.map(([n, l]) => `<div class="stat" data-r><b data-count="${n}">${n}</b><span>${l}</span></div>`).join("");
+$("quote").textContent = CONFIG.quote;
+$("quoteBy").textContent = "— " + CONFIG.quoteBy;
+$("address").innerHTML = CONFIG.address.replace("{city}", esc(CONFIG.city));
+$("hours").innerHTML = CONFIG.hours.map(([a, b]) => `<div class="row" data-r><span>${a}</span><span>${b}</span></div>`).join("");
+$("bigword").innerHTML = brand.split(" ")[0] + "<span style='color:var(--ink)'>.</span>";
+document.title = `${brand}. coffee till 2am`;
+
+// ---- bag: tap a drink to add it ----
+let count = 0, bump = -1e9, toastAt = -1e9, toastText = "";
+document.querySelectorAll(".item").forEach(el => el.addEventListener("click", () => {
+  el.classList.add("added"); el.querySelector(".add").textContent = "✓";
+  count++; $("count").textContent = count; bump = performance.now();
+  toast(`${CONFIG.menu[el.dataset.i].name} added to your bag`);
+}));
+$("order").addEventListener("click", () => toast("order ahead: ready in 6 min ☕"));
+function toast(t){ toastText = t; $("toast").textContent = t; toastAt = performance.now(); }
+
+// ---- steaming cup, drawn every frame ----
+const cup = $("cup"), c = cup.getContext("2d");
+function drawCup(t){
+  c.clearRect(0, 0, 300, 340);
+  // steam
+  c.lineCap = "round";
+  for (let s = 0; s < 3; s++){
+    c.beginPath();
+    for (let y = 0; y <= 120; y += 4){
+      const k = y / 120, x = 110 + s*40 + Math.sin(y*.06 - t*2.4 + s*2) * (6 + k*14);
+      y ? c.lineTo(x, 150 - y) : c.moveTo(x, 150 - y);
+    }
+    const a = .35 + .15*Math.sin(t*1.7 + s);
+    const gr = c.createLinearGradient(0, 150, 0, 30);
+    gr.addColorStop(0, `rgba(244,234,223,${a})`); gr.addColorStop(1, "rgba(244,234,223,0)");
+    c.strokeStyle = gr; c.lineWidth = 7; c.stroke();
+  }
+  // saucer, cup body, handle
+  c.fillStyle = "#2B1E17"; c.beginPath(); c.ellipse(150, 312, 132, 20, 0, 0, 7); c.fill();
+  const body = c.createLinearGradient(40, 0, 250, 0);
+  body.addColorStop(0, "#FF9A57"); body.addColorStop(.55, "#FF7A2F"); body.addColorStop(1, "#C9551C");
+  c.strokeStyle = "#E0662A"; c.lineWidth = 16;
+  c.beginPath(); c.ellipse(246, 222, 30, 34, 0, -1.4, 1.4); c.stroke();
+  c.fillStyle = body;
+  c.beginPath(); c.moveTo(42, 168); c.lineTo(258, 168); c.bezierCurveTo(258, 260, 220, 302, 150, 302); c.bezierCurveTo(80, 302, 42, 260, 42, 168); c.fill();
+  c.fillStyle = "#3A2216"; c.beginPath(); c.ellipse(150, 168, 108, 17, 0, 0, 7); c.fill();
+  // latte-art heart that slowly spins in the crema
+  c.save(); c.translate(150, 168); c.scale(1, .16); c.rotate(Math.sin(t*.8) * .25);
+  c.fillStyle = "rgba(255,226,196,.9)"; c.beginPath();
+  c.moveTo(0, 40); c.bezierCurveTo(-70, -5, -40, -60, 0, -25); c.bezierCurveTo(40, -60, 70, -5, 0, 40); c.fill(); c.restore();
+  c.fillStyle = "rgba(255,255,255,.18)"; c.beginPath(); c.ellipse(80, 220, 8, 30, .1, 0, 7); c.fill();
+}
+
+// ---- everything moves from one loop: scroll reveals, counters, marquee ----
+const reveal = [...document.querySelectorAll("[data-r]")];
+const ease = x => 1 - Math.pow(1 - x, 3);
+const clamp = x => Math.max(0, Math.min(1, x));
+function frame(now){
+  const t = now / 1000, vh = innerHeight;
+  drawCup(t);
+  $("marq").style.transform = `translateX(${-(t*60 % ($("marq").scrollWidth/4))}px)`;
+  $("dot").style.opacity = .45 + .55*Math.abs(Math.sin(t*2.2));
+  for (const el of reveal){
+    const top = el.getBoundingClientRect().top;
+    const k = ease(clamp((vh - top - 10) / (vh*.28)));
+    el.style.opacity = k;
+    el.style.transform = `translateY(${(1-k)*34}px)`;
+    const n = el.querySelector("[data-count]");
+    if (n){ const v = parseFloat(n.dataset.count), unit = n.dataset.count.replace(/[\d.]/g, "");
+      n.textContent = (v % 1 ? (v*k).toFixed(1) : Math.round(v*k)) + unit; }
+  }
+  const b = clamp(1 - (now - bump)/350);
+  $("count").style.transform = `scale(${1 + b*.6})`;
+  const ta = (now - toastAt) / 1000, tk = ta < .3 ? ease(ta/.3) : ta < 2.2 ? 1 : clamp(1 - (ta-2.2)/.3);
+  $("toast").style.opacity = tk; $("toast").style.transform = `translate(-50%,${(1-tk)*20}px)`;
+  requestAnimationFrame(frame);
+}
+document.fonts.ready.then(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>

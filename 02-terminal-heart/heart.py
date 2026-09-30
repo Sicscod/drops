@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Beating heart made of a name — right in your terminal.
-Usage:  python3 heart.py Mia
+Usage:  python3 heart.py Delly
         python3 heart.py            (asks for a name)
 Stop:   Ctrl + C
 
