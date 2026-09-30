@@ -15,6 +15,7 @@ Saw a drop in a video? Its number is the folder.
 | 06 | [✨ Written in the Stars](06-written-in-the-stars) | Her name as a constellation |
 | 07 | [☕ late bean.](07-late-bean) | A full coffee shop website |
 | 08 | [🌌 Black Hole](08-black-hole) | An Interstellar-style black hole you can drag |
+| 09 | [🌹 3D Rose](09-rose) | A particle rose that blooms for your person, ?name= in the link |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
