@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>How much do you love me?</title>
+<meta name="description" content="A love meter that only goes one way. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&display=block">
+<style>
+:root{--paper:#f4eadf;--ink:#3a1d1f;--soft:#9a7570;--rose:#d9475e;--wine:#8e2236}
+html,body{height:100%;margin:0;background:var(--paper);overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{color:var(--ink);font-family:"Instrument Serif",Georgia,serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;cursor:grab}
+.top,.bottom{position:fixed;left:0;right:0;text-align:center;padding:0 22px;pointer-events:none}
+.top{top:max(26px,env(safe-area-inset-top))}
+.kicker{margin:0;font:500 11px "DM Mono",monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--soft)}
+h1{margin:8px auto 0;max-width:12em;font-weight:400;font-size:clamp(32px,8.6vw,44px);line-height:1.02;letter-spacing:-.015em}
+h1 em{color:var(--wine)}
+.bottom{bottom:max(40px,calc(env(safe-area-inset-bottom) + 30px))}
+.num{margin:0;font-size:clamp(58px,15vw,76px);line-height:.9;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.num small{font-size:.42em;color:var(--soft);margin-left:2px;letter-spacing:0}
+.say{margin:6px 0 0;font-style:italic;font-size:21px;color:var(--wine);min-height:26px}
+.credit{position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:0;right:0;text-align:center;font:400 10.5px "DM Mono",monospace;letter-spacing:.06em;color:var(--soft);opacity:.75}
+.credit a{color:inherit}
+.veil{position:fixed;inset:0;background:rgba(244,234,223,.55);pointer-events:none;opacity:0}
+.card{position:fixed;left:50%;top:50%;width:min(78vw,330px);box-sizing:border-box;padding:30px 26px 22px;background:#fbf6ef;border-radius:4px;text-align:center;
+  box-shadow:0 1px 0 rgba(58,29,31,.06),0 18px 50px -12px rgba(110,30,45,.35);opacity:0;pointer-events:none}
+.card .k{margin:0;font:500 10.5px "DM Mono",monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--soft)}
+.card h2{margin:12px 0 0;font-weight:400;font-size:46px;line-height:1;letter-spacing:-.02em}
+.card p{margin:10px 0 0;font-style:italic;font-size:24px;color:var(--wine)}
+.card button{margin-top:18px;border:0;background:none;padding:6px 10px;font:400 11px "DM Mono",monospace;letter-spacing:.1em;color:var(--soft);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="top"><p class="kicker">a very serious survey</p><h1>How much do you love me, <em id="who"></em>?</h1></div>
+<div class="bottom"><p class="num"><span id="num">0</span><small>%</small></p><p class="say" id="say"></p></div>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<div class="veil" id="veil"></div>
+<div class="card" id="card"><p class="k">result · 100%</p><h2 id="head"></h2><p id="msg"></p><button id="again">ask again</button></div>
+<script>
+// ===== Love Meter · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&msg=see%20you%20tonight%3F
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "Delly",
+  head: url.get("head") || "I knew it. 💗",      // big line on the card at 100%
+  msg: url.get("msg") || "see you tonight?",       // small line under it
+  creep: 0.035,          // how fast it crawls back up after she lets go (per second)
+  // what it says on the way up: [from %, text]
+  says: [[0, "drag it up. gently."], [4, "hm."], [22, "that's it?"], [38, "go on"],
+         [50, "okay okay"], [66, "keep going"], [80, "getting warm"], [93, "almost…"]],
+  colors: { liquid: "#e0566b", deep: "#a3263c", ink: "#3a1d1f", glass: "#fbf6ef" }
+};
+const $ = id => document.getElementById(id);
+$("who").textContent = CONFIG.name;
+$("head").textContent = CONFIG.head;
+$("msg").textContent = CONFIG.msg;
+
+const cv = $("c"), g = cv.getContext("2d");
+let W, H, D, L = {};                     // L: layout of heart + thermometer
+let v = 0, shown = 0, peak = 0;         // v: real value 0..1, shown: what the number shows
+let drag = null, released = -1, creepT = 0, done = -1, sayKey = "", sayA = 1, nextSay = "";
+let parts = [], t0 = 0, last = 0;
+
+function resize(){
+  D = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+  cv.width = W*D; cv.height = H*D; g.setTransform(D, 0, 0, D, 0, 0);
+  const top = document.querySelector(".top").getBoundingClientRect().bottom + 14;
+  const bot = document.querySelector(".bottom").getBoundingClientRect().top - 10;
+  const zh = bot - top, hs = Math.min(zh * .76, W * .5);
+  L.k = hs / 32;                                   // heart curve is ~32 units wide
+  L.hx = W/2 - hs*.16; L.hy = top + zh*.5 - L.k*2.5;
+  L.tx = L.hx + hs*.5 + Math.max(34, hs*.2);       // thermometer x
+  const len = Math.min(zh - 42, Math.max(hs * 1.15, 220)), mid = top + 12 + (zh - 42) / 2;
+  L.t0 = mid - len/2; L.t1 = mid + len/2;           // track top / bottom
+}
+addEventListener("resize", resize);
+
+function heartPath(cx, cy, k){
+  g.beginPath();
+  for (let i = 0; i <= 80; i++){
+    const a = i / 80 * Math.PI * 2, s = Math.sin(a);
+    const x = 16*s*s*s, y = 13*Math.cos(a) - 5*Math.cos(2*a) - 2*Math.cos(3*a) - Math.cos(4*a);
+    i ? g.lineTo(cx + x*k, cy - y*k) : g.moveTo(cx + x*k, cy - y*k);
+  }
+  g.closePath();
+}
+function tinyHeart(x, y, r, rot, col, a){
+  g.save(); g.translate(x, y); g.rotate(rot); g.globalAlpha = a; g.fillStyle = col;
+  g.beginPath(); g.moveTo(0, r*.35);
+  g.bezierCurveTo(-r*1.1, -r*.35, -r*.45, -r*1.15, 0, -r*.45);
+  g.bezierCurveTo(r*.45, -r*1.15, r*1.1, -r*.35, 0, r*.35); g.fill();
+  g.restore();
+}
+
+// ---- dragging: anywhere on the page, relative, like a big slider ----
+cv.addEventListener("pointerdown", e => { if (done >= 0) return; drag = { y: e.clientY, v }; released = -1; });
+addEventListener("pointermove", e => {
+  if (!drag) return;
+  v = Math.max(0, Math.min(1, drag.v + (drag.y - e.clientY) / (L.t1 - L.t0)));
+});
+addEventListener("pointerup", () => { if (drag){ drag = null; released = performance.now(); creepT = 0; } });
+$("again").addEventListener("click", () => { done = -1; v = shown = peak = 0; parts = []; released = -1; });
+
+function boom(now){
+  done = now;
+  for (let i = 0; i < 150; i++){                        // burst out of the heart's outline
+    const a = i / 150 * Math.PI * 2 + Math.random()*.05, sn = Math.sin(a);
+    const ox = 16*sn*sn*sn, oy = 13*Math.cos(a) - 5*Math.cos(2*a) - 2*Math.cos(3*a) - Math.cos(4*a);
+    const len = Math.hypot(ox, oy) || 1, s = 240 + Math.random()*640;
+    parts.push({ x: L.hx + ox*L.k*.8, y: L.hy - oy*L.k*.8, vx: ox/len*s, vy: -oy/len*s - 220, r: 6 + Math.random()*13,
+      rot: (Math.random()-.5), vr: (Math.random()-.5)*6, c: Math.random() < .6 ? CONFIG.colors.liquid : Math.random() < .6 ? CONFIG.colors.deep : "#f0a3a6", life: 0, g: 560 });
+  }
+}
+function rain(){                                          // then a soft rain from the top
+  parts.push({ x: Math.random()*W, y: -20, vx: (Math.random()-.5)*30, vy: 40 + Math.random()*60, r: 4 + Math.random()*8,
+    rot: (Math.random()-.5), vr: (Math.random()-.5)*2, c: Math.random() < .5 ? CONFIG.colors.liquid : "#f0a3a6", life: 0, g: 30 });
+}
+
+function frame(now){
+  requestAnimationFrame(frame);
+  if (!t0) t0 = now;
+  const t = (now - t0) / 1000, dt = Math.min(.05, (now - last) / 1000 || .016); last = now;
+  const C = CONFIG.colors;
+
+  // it only goes one way: let go below 100 and it crawls back up by itself
+  if (!drag && released >= 0 && v < 1 && now - released > 600){
+    creepT += dt; v = Math.min(1, v + dt * (CONFIG.creep + creepT * .02));
+  }
+  if (v >= 1 && done < 0) boom(now);
+  shown += (v - shown) * Math.min(1, dt * 9);
+  peak = Math.max(peak, v);
+
+  // background: warm paper with a slow glow that grows with love
+  g.fillStyle = "#f4eadf"; g.fillRect(0, 0, W, H);
+  const glow = g.createRadialGradient(L.hx, L.hy, 0, L.hx, L.hy, Math.max(W, H)*.75);
+  glow.addColorStop(0, `rgba(240,150,150,${.12 + shown*.28})`); glow.addColorStop(1, "rgba(244,234,223,0)");
+  g.fillStyle = glow; g.fillRect(0, 0, W, H);
+
+  // ---- the heart: fills like a glass, beats faster the higher it gets ----
+  const intro = Math.min(1, t / .9), ie = 1 - Math.pow(1 - intro, 3);
+  const bpm = 54 + shown*80, ph = (t * bpm / 60) % 1;
+  const beat = 1 + (Math.exp(-ph*9) * .045 + Math.exp(-Math.max(0, ph - .18)*9) * (ph > .18 ? .03 : 0)) * (.3 + shown);
+  const sb = done >= 0 ? (now - done) / 1000 : -1;
+  const pop = sb >= 0 ? 1 + .22*Math.exp(-sb*7)*Math.cos(sb*22) : 1;   // the heart jolts when it hits 100
+  const k = L.k * beat * (.92 + .08*ie) * pop;
+  const top = L.hy - 12.6*k, bot = L.hy + 17.2*k;           // heart's highest / lowest point
+  g.globalAlpha = ie;
+  heartPath(L.hx, L.hy, k); g.fillStyle = C.glass; g.fill();
+  g.save(); heartPath(L.hx, L.hy, k); g.clip();
+  const lvl = bot - (bot - top) * (shown*1.02) - (shown > .01 ? 4 : -2);
+  const lg = g.createLinearGradient(0, top, 0, bot); lg.addColorStop(0, C.liquid); lg.addColorStop(1, C.deep);
+  g.fillStyle = lg; g.beginPath(); g.moveTo(L.hx - 20*k, bot + 5);
+  for (let x = -20; x <= 20; x += 1){
+    const w = Math.sin(x*.32 + t*2.6) * (2 + 5*Math.abs(shown - v + .02)) * (k/8) + Math.sin(x*.7 - t*1.7) * k*.12;
+    g.lineTo(L.hx + x*k, lvl + w);
+  }
+  g.lineTo(L.hx + 20*k, bot + 5); g.closePath(); g.fill();
+  g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = Math.max(2, k*.55);   // soft shine
+  g.beginPath(); g.arc(L.hx - 8*k, L.hy - 5*k, 4.6*k, Math.PI*1.08, Math.PI*1.42); g.stroke();
+  g.restore();
+  heartPath(L.hx, L.hy, k); g.lineWidth = 2; g.strokeStyle = C.ink; g.stroke();
+
+  if (sb >= 0 && sb < 1.4){                        // shockwave rings + a warm flash
+    for (let r = 0; r < 3; r++){
+      const u = (sb - r*.12) / .9; if (u < 0 || u > 1) continue;
+      const e = 1 - Math.pow(1 - u, 3);
+      g.globalAlpha = (1 - u) * .7; g.lineWidth = 3 * (1 - u) + 1; g.strokeStyle = r == 1 ? C.deep : C.liquid;
+      heartPath(L.hx, L.hy, L.k * (1 + e*2.4)); g.stroke();
+    }
+    g.globalAlpha = Math.max(0, .55 - sb*1.6); g.fillStyle = "#fff4ec"; g.fillRect(0, 0, W, H);
+    g.globalAlpha = ie;
+  }
+  // ---- thermometer ----
+  const tx = L.tx, ty0 = L.t0, ty1 = L.t1, br = 13, tw = 5.5;
+  const ty = ty1 - (ty1 - ty0) * shown;
+  g.lineCap = "round";
+  g.font = '400 10px "DM Mono", monospace'; g.textAlign = "left"; g.textBaseline = "middle";
+  for (let i = 0; i <= 10; i++){
+    const y = ty1 - (ty1 - ty0) * i/10, big = i % 5 == 0;
+    g.strokeStyle = "rgba(58,29,31,.35)"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(tx + 13, y); g.lineTo(tx + (big ? 22 : 17), y); g.stroke();
+    if (big){ g.fillStyle = "#9a7570"; g.fillText(i*10, tx + 27, y); }
+  }
+  g.lineWidth = tw*2 + 4; g.strokeStyle = C.ink; g.beginPath(); g.moveTo(tx, ty0); g.lineTo(tx, ty1 + br); g.stroke();
+  g.beginPath(); g.arc(tx, ty1 + br + 4, br + 2, 0, Math.PI*2); g.fillStyle = C.ink; g.fill();
+  g.lineWidth = tw*2; g.strokeStyle = C.glass; g.beginPath(); g.moveTo(tx, ty0); g.lineTo(tx, ty1 + br); g.stroke();
+  g.beginPath(); g.arc(tx, ty1 + br + 4, br, 0, Math.PI*2); g.fillStyle = C.liquid; g.fill();
+  g.lineWidth = tw*2 - 5; g.strokeStyle = C.liquid; g.beginPath(); g.moveTo(tx, ty1 + br); g.lineTo(tx, ty); g.stroke();
+  // the handle
+  const hr = 11 + (drag ? 2 : 0);
+  g.beginPath(); g.arc(tx, ty, hr, 0, Math.PI*2); g.fillStyle = C.glass; g.fill();
+  g.lineWidth = 2; g.strokeStyle = C.ink; g.stroke();
+  tinyHeart(tx, ty + 1.5, 5, 0, C.liquid, 1);
+  g.globalAlpha = 1;
+
+  // ---- the number and what it says ----
+  $("num").textContent = Math.round(shown * 100);
+  let s = CONFIG.says[0][1];
+  for (const [p, txt] of CONFIG.says) if (shown*100 >= p) s = txt;
+  if (released >= 0 && !drag && v < 1 && now - released > 900) s = "it's going up by itself. interesting.";
+  if (peak > .3 && v < .04) s = "nice try.";
+  if (done >= 0) s = "told you.";
+  if (s !== sayKey){ nextSay = s; sayKey = s; sayA = Math.min(sayA, .999); }
+  if (sayA < 1){                                     // quick fade out → swap → fade in
+    sayA -= dt * 6;
+    if (sayA <= 0){ $("say").textContent = nextSay; sayA = 1.0001; }
+    $("say").style.opacity = Math.max(0, sayA);
+  } else if (sayA > 1){ $("say").style.opacity = 1; sayA = 1; }
+  if (!$("say").textContent) $("say").textContent = s;
+
+  // ---- 100%: hearts everywhere, then the card ----
+  if (done >= 0){
+    const since = (now - done) / 1000;
+    if (since < 6 && Math.random() < .5) rain();
+    const c = Math.max(0, Math.min(1, (since - .85) / .55)), ce = 1 - Math.pow(1 - c, 3);
+    const over = 1 + Math.sin(c*Math.PI) * .04;
+    $("card").style.opacity = ce; $("card").style.pointerEvents = c > .5 ? "auto" : "none";
+    $("card").style.transform = `translate(-50%,${-50 + (1 - ce)*14}%) rotate(${-2.2 + (1 - ce)*4}deg) scale(${over})`;
+    $("veil").style.opacity = ce;
+  } else { $("card").style.opacity = 0; $("veil").style.opacity = 0; $("card").style.pointerEvents = "none"; }
+  for (const p of parts){
+    p.life += dt; p.vy += p.g*dt; p.vx *= 1 - dt*.9; if (p.g < 100) p.vx += Math.sin(p.life*2 + p.r)*8*dt;
+    p.x += p.vx*dt; p.y += p.vy*dt; p.rot += p.vr*dt;
+    tinyHeart(p.x, p.y, p.r, p.rot, p.c, Math.min(1, p.life*6) * (p.g > 100 ? Math.max(0, 1 - p.life/2.6) : 1));
+  }
+  parts = parts.filter(p => p.y < H + 40 && (p.g < 100 || p.life < 2.6));
+}
+resize();
+document.fonts.ready.then(resize);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

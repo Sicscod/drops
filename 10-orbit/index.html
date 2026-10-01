@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Orbit · the calm team calendar</title>
+<meta name="description" content="A full SaaS landing page in one HTML file. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@1,6..72,400;1,6..72,500&display=swap">
+<style>
+:root{--bg:#F3F1EC;--paper:#FBFAF7;--ink:#121318;--mute:#6A6C74;--line:#E2DED5;--accent:#2F54FF;--accent-soft:rgba(47,84,255,.1);--warm:#FF7A45;--green:#1FA978}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--ink);font-family:"Geist",system-ui,sans-serif;font-size:16px;line-height:1.5;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;cursor:pointer}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+em.s{font-family:"Newsreader",Georgia,serif;font-style:italic;font-weight:400;letter-spacing:-.01em}
+.mono{font-family:"Geist Mono",ui-monospace,monospace}
+
+/* nav */
+nav{position:sticky;top:0;z-index:30;border-bottom:1px solid transparent}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:58px}
+.logo{display:flex;align-items:center;gap:9px;font-weight:600;font-size:18px;letter-spacing:-.02em}
+.logo svg{width:24px;height:24px}
+.links{display:none;gap:26px;font-size:14px;color:var(--mute)}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:10px;padding:9px 14px;font-size:14px;font-weight:600;border:1px solid var(--ink);background:var(--ink);color:var(--paper);white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.big{padding:14px 20px;font-size:15.5px;border-radius:12px}
+.btn.acc{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* hero */
+.hero{position:relative;padding:0 0 30px;overflow:hidden}
+.stage{position:relative;height:300px;margin:0 -20px}
+#planet{position:absolute;inset:0;width:100%;height:100%}
+.chip{position:absolute;display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--line);border-radius:11px;padding:7px 10px;font-size:12px;box-shadow:0 10px 24px -14px rgba(18,19,24,.35);white-space:nowrap}
+.chip i{width:8px;height:8px;border-radius:3px;display:inline-block}
+.chip small{color:var(--mute);font-size:11px}
+.c1{left:22px;top:46px}.c2{right:20px;top:176px}
+.badge{display:inline-flex;gap:8px;align-items:center;font-size:12.5px;font-weight:500;color:var(--mute);border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:4px 11px 4px 5px}
+.badge b{background:var(--ink);color:var(--paper);font-weight:600;border-radius:999px;padding:1px 8px;font-size:11.5px}
+h1{font-size:clamp(42px,10.4vw,84px);line-height:.98;letter-spacing:-.045em;font-weight:600;margin:14px 0 14px}
+h1 em.s{font-size:1.08em;color:var(--accent)}
+.lead{color:var(--mute);font-size:16.5px;max-width:36ch;margin:0 0 20px}
+.ctas{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.fine{font-size:12.5px;color:var(--mute);margin-top:12px}
+
+/* logos */
+.logos{border-block:1px solid var(--line);padding:18px 0;overflow:hidden;white-space:nowrap}
+.logos p{margin:0 0 12px;text-align:center;font-size:12px;color:var(--mute)}
+.track{display:inline-flex;gap:44px;align-items:center;padding-left:44px;will-change:transform}
+.track span{font-size:21px;color:#8C8E95;letter-spacing:-.02em}
+
+/* sections */
+section{padding:64px 0 10px}
+.kick{font-family:"Geist Mono",monospace;font-size:12px;color:var(--accent);letter-spacing:.04em;text-transform:uppercase}
+h2{font-size:clamp(32px,8vw,56px);line-height:1.02;letter-spacing:-.04em;font-weight:600;margin:10px 0 12px}
+.sub{color:var(--mute);margin:0 0 26px;max-width:42ch}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.feat{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:16px 15px 17px}
+.feat svg{width:30px;height:30px;display:block;margin-bottom:22px}
+.feat h3{font-size:15.5px;margin:0 0 4px;letter-spacing:-.02em;font-weight:600}
+.feat p{margin:0;color:var(--mute);font-size:13.5px;line-height:1.42}
+
+/* product mock */
+.app{background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 30px 60px -40px rgba(18,19,24,.45);position:relative}
+.bar{display:flex;align-items:center;gap:6px;padding:11px 14px;border-bottom:1px solid var(--line);font-size:12.5px}
+.bar i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.bar b{margin-left:8px;font-weight:600}.bar span{margin-left:auto;color:var(--mute)}
+.week{display:grid;grid-template-columns:34px repeat(5,1fr);position:relative}
+.week .hd{font-size:11px;color:var(--mute);padding:8px 6px;border-bottom:1px solid var(--line);border-left:1px solid var(--line)}
+.week .hd b{display:block;color:var(--ink);font-size:15px;font-weight:600}
+.week .hd.today b{color:var(--accent)}
+.times{position:relative;height:330px}
+.times span{position:absolute;right:5px;font-size:9.5px;color:var(--mute);font-family:"Geist Mono",monospace;transform:translateY(-50%)}
+.col{position:relative;height:330px;border-left:1px solid var(--line);background:repeating-linear-gradient(180deg,transparent 0 54px,var(--line) 54px 55px)}
+.ev{position:absolute;left:3px;right:3px;border-radius:7px;padding:4px 6px;font-size:10.5px;line-height:1.2;overflow:hidden}
+.ev b{display:block;font-weight:600;font-size:10.5px}
+.ev.m{background:#EDEAE3;border-left:3px solid var(--ink)}
+.ev.f{background:repeating-linear-gradient(135deg,var(--accent-soft) 0 6px,transparent 6px 12px),var(--accent-soft);border-left:3px solid var(--accent);color:var(--accent)}
+.ev.w{background:rgba(255,122,69,.13);border-left:3px solid var(--warm)}
+.now{position:absolute;left:34px;right:0;height:2px;background:var(--warm);z-index:2}
+.now::before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--warm)}
+.forecast{position:absolute;right:12px;bottom:12px;background:var(--ink);color:var(--paper);border-radius:13px;padding:11px 13px;font-size:12px;width:178px;z-index:3}
+.forecast b{display:block;font-size:24px;letter-spacing:-.03em;font-weight:600;line-height:1.1}
+.forecast .meter{height:5px;border-radius:3px;background:rgba(255,255,255,.15);margin-top:8px;overflow:hidden}
+.forecast .meter i{display:block;height:100%;background:var(--accent);border-radius:3px;width:0}
+.forecast small{color:#A9ABB3}
+
+/* pricing */
+.toggle{display:inline-flex;position:relative;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:22px}
+.toggle button{position:relative;z-index:1;border:0;background:none;padding:8px 16px;font-size:14px;font-weight:600;border-radius:9px}
+.toggle button em{font-style:normal;font-size:11px;color:var(--green);margin-left:6px;font-weight:600}
+.knob{position:absolute;top:4px;bottom:4px;left:0;border-radius:9px;background:var(--ink)}
+.plans{display:grid;gap:12px}
+.plan{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:20px 18px}
+.plan.hot{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.plan .top{display:flex;justify-content:space-between;align-items:center}
+.plan h3{margin:0;font-size:16px;font-weight:600}
+.plan .tag{font-size:11px;font-weight:600;background:var(--accent);color:#fff;border-radius:999px;padding:3px 9px}
+.price{display:flex;align-items:baseline;gap:6px;margin:14px 0 2px}
+.price b{font-size:46px;letter-spacing:-.05em;font-weight:600;line-height:1}
+.price>span{font-size:13px;opacity:.6}
+.price b span{font:inherit}
+.plan .note{font-size:13px;opacity:.62;margin:0 0 14px;min-height:20px}
+.plan ul{list-style:none;padding:0;margin:0 0 18px;font-size:14px}
+.plan li{padding:6px 0;border-top:1px dashed rgba(127,127,127,.25);display:flex;gap:9px}
+.plan li::before{content:"";flex:none;width:14px;height:14px;margin-top:4px;border-radius:4px;background:var(--accent);mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.5l2.6 2.5L11 4' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat}
+.plan .btn{width:100%;justify-content:center}
+.plan.hot .btn{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* testimonials */
+.quotes{display:grid;gap:12px}
+.q{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:20px 18px}
+.q p{margin:0 0 16px;font-family:"Newsreader",Georgia,serif;font-style:italic;font-size:22px;line-height:1.22;letter-spacing:-.01em}
+.who{display:flex;align-items:center;gap:10px;font-size:13px}
+.who i{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:600;color:#fff;font-size:13px}
+.who b{display:block;font-weight:600}.who span{color:var(--mute)}
+.q.big{background:var(--accent);border-color:var(--accent);color:#fff}
+.q.big .who span{color:rgba(255,255,255,.75)}
+.q.big .who i{background:#fff!important;color:var(--accent)}
+
+/* faq */
+.faq{border-top:1px solid var(--line)}
+.fq{border-bottom:1px solid var(--line)}
+.fq button{display:flex;width:100%;justify-content:space-between;align-items:center;gap:16px;background:none;border:0;padding:18px 0;text-align:left;font-size:16.5px;font-weight:500;letter-spacing:-.01em}
+.pm{flex:none;width:26px;height:26px;border-radius:8px;border:1px solid var(--line);position:relative}
+.pm::before,.pm::after{content:"";position:absolute;left:50%;top:50%;width:10px;height:1.6px;background:var(--ink);margin:-.8px 0 0 -5px}
+.pm::after{transform:rotate(var(--r,90deg))}
+.ans{height:0;overflow:hidden}
+.ans p{margin:0;padding:0 34px 18px 0;color:var(--mute);font-size:15px}
+
+/* final cta */
+.final{margin:70px 0 0;background:var(--ink);color:var(--paper);border-radius:24px;padding:40px 22px 30px;position:relative;overflow:hidden}
+.final h2{margin-top:0;max-width:12ch}
+.final p{color:#A9ABB3;margin:0 0 22px;max-width:34ch}
+#mini{position:absolute;right:-60px;top:-50px;width:240px;height:240px;opacity:.9}
+.final .btn{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+.final .btn.ghost{background:transparent;color:var(--paper);border-color:#3A3C45}
+.final .rel{position:relative}
+
+footer{padding:42px 0 34px}
+.fcols{display:grid;grid-template-columns:1fr 1fr;gap:24px 10px;font-size:14px}
+.fcols h4{margin:0 0 8px;font-size:12px;font-family:"Geist Mono",monospace;font-weight:400;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+.fcols a{display:block;padding:3px 0}
+.fcols a.logo{display:flex;padding:0}
+.fbase{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:34px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--mute)}
+.fbase a{text-decoration:underline}
+.toast{position:fixed;left:50%;bottom:20px;z-index:40;background:var(--ink);color:var(--paper);font-weight:500;border-radius:12px;padding:11px 15px;font-size:14px;opacity:0;white-space:nowrap;pointer-events:none}
+
+@media (min-width:860px){
+  .links{display:flex}
+  .hero .wrap{display:grid;grid-template-columns:1.05fr 1fr;align-items:center;gap:30px}
+  .stage{order:2;height:560px;margin:0}
+  .hero{padding:30px 0 50px}
+  .grid{grid-template-columns:repeat(3,1fr);gap:14px}.feat{padding:22px}
+  .plans{grid-template-columns:repeat(3,1fr)}
+  .quotes{grid-template-columns:1.3fr 1fr 1fr}
+  .times,.col{height:440px}
+  .final{padding:70px 60px}#mini{width:420px;height:420px;right:-40px;top:-60px}
+  .fcols{grid-template-columns:2fr 1fr 1fr 1fr}
+}
+</style>
+</head>
+<body>
+<nav id="nav"><div class="wrap">
+  <a class="logo" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5.2" fill="var(--accent)"/><ellipse cx="12" cy="12" rx="10.5" ry="4" fill="none" stroke="var(--ink)" stroke-width="1.6" transform="rotate(-24 12 12)"/></svg><span class="bname"></span></a>
+  <div class="links"><a href="#features">Product</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a></div>
+  <a class="btn" href="#pricing" id="navcta">Start free</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="stage">
+    <canvas id="planet" aria-hidden="true"></canvas>
+    <div class="chip c1" id="chip1"><i style="background:var(--accent)"></i><span><b>Deep work</b> <small>9:00 – 11:30</small></span></div>
+    <div class="chip c2" id="chip2"><i style="background:var(--warm)"></i><span><b>Standup moved</b> <small>→ 4:15 pm</small></span></div>
+  </div>
+  <div>
+    <span class="badge" data-r><b>New</b> Focus forecasts for every team</span>
+    <h1 data-r>The calm calendar for <em class="s">focused</em> teams.</h1>
+    <p class="lead" data-r id="lead"></p>
+    <div class="ctas" data-r><a class="btn big acc" href="#pricing" id="herocta">Start free</a><a class="btn big ghost" href="#product">See it in action</a></div>
+    <div class="fine" data-r>Free for up to 5 people · no card needed</div>
+  </div>
+</div></header>
+
+<div class="logos"><p>Quietly running the week at 2,400+ teams</p><div class="track" id="track"></div></div>
+
+<section id="features"><div class="wrap">
+  <div class="kick" data-r>01 · Features</div>
+  <h2 data-r>Fewer meetings.<br><em class="s">More</em> finished work.</h2>
+  <p class="sub" data-r id="featSub"></p>
+  <div class="grid" id="grid"></div>
+</div></section>
+
+<section id="product"><div class="wrap">
+  <div class="kick" data-r>02 · Product</div>
+  <h2 data-r>Your week, <em class="s">rearranged</em><br>while you sleep.</h2>
+  <p class="sub" data-r>Meetings cluster into the afternoon. Mornings turn blue. Everyone stops asking "are you free at 10?".</p>
+  <div class="app" data-r>
+    <div class="bar"><i></i><i></i><i></i><b>Week 41</b><span>Design team · 6 people</span></div>
+    <div class="week" id="week"></div>
+    <div class="forecast"><small>Focus forecast this week</small><b><span id="fc">0</span>h <small style="font-size:12px;color:var(--green)">+32%</small></b><div class="meter"><i id="meter"></i></div></div>
+  </div>
+</div></section>
+
+<section id="pricing"><div class="wrap">
+  <div class="kick" data-r>03 · Pricing</div>
+  <h2 data-r>Simple pricing.<br><em class="s">No</em> sales call.</h2>
+  <div class="toggle" data-r id="toggle"><span class="knob" id="knob"></span><button type="button" id="bm">Monthly</button><button type="button" id="by">Yearly<em>−20%</em></button></div>
+  <div class="plans" id="plans"></div>
+</div></section>
+
+<section id="love"><div class="wrap">
+  <div class="kick" data-r>04 · Loved by teams</div>
+  <h2 data-r>People got their<br><em class="s">mornings</em> back.</h2>
+  <div class="quotes" id="quotes"></div>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <div class="kick" data-r>05 · FAQ</div>
+  <h2 data-r>Questions, <em class="s">answered</em>.</h2>
+  <div class="faq" id="faqs"></div>
+</div></section>
+
+<div class="wrap"><div class="final" id="final">
+  <canvas id="mini" aria-hidden="true"></canvas>
+  <div class="rel">
+    <h2 data-r>Give your team its <em class="s">mornings</em> back.</h2>
+    <p data-r>Connect Google or Outlook in two minutes. Orbit plans the first week for you.</p>
+    <div class="ctas" data-r><a class="btn big" href="#pricing" id="finalcta">Start free</a><a class="btn big ghost" href="#faq">Book a demo</a></div>
+  </div>
+</div></div>
+
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5.2" fill="var(--accent)"/><ellipse cx="12" cy="12" rx="10.5" ry="4" fill="none" stroke="var(--ink)" stroke-width="1.6" transform="rotate(-24 12 12)"/></svg><span class="bname"></span></a><p style="color:var(--mute);font-size:13.5px;max-width:28ch;margin:10px 0 0">The calm team calendar. Made by a small, remote, very well-rested team.</p></div>
+    <div><h4>Product</h4><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#product">Changelog</a></div>
+    <div><h4>Company</h4><a href="#">About</a><a href="#">Careers</a><a href="#">Press</a></div>
+    <div><h4>Help</h4><a href="#faq">FAQ</a><a href="#">Status</a><a href="#">Privacy</a></div>
+  </div>
+  <div class="fbase"><span id="copy"></span><span>free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></span></div>
+</div></footer>
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== Orbit · free code by @sicscod.drops =====
+// A full SaaS landing page. Rebrand it without coding: yoursite/?name=Lumen&accent=%23FF5A1F
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "Orbit",
+  accent: url.get("accent") || "#2F54FF",
+  lead: "{name} finds the hours nobody booked, guards them for deep work, and moves meetings into tidy afternoon clusters.",
+  logos: ["Halcyon", "fieldnote", "KETTLE", "Paperplane", "quarry/", "Lumen & Co", "northbound"],
+  featSub: "Everything a team calendar should have done from the start. Nothing you have to babysit.",
+  features: [
+    ["Focus blocks", "Two-hour windows, booked for you before meetings can grab them.", "focus"],
+    ["Meeting clusters", "Calls slide together so your day isn't cut into 20-minute crumbs.", "cluster"],
+    ["Time-zone aware", "Finds the one hour that works from Lisbon to Seoul.", "globe"],
+    ["Async standups", "A 3-line check-in replaces the 9:30 call. Read it with coffee.", "async"],
+    ["Two-way sync", "Google, Outlook and iCloud. Changes land in seconds.", "sync"],
+    ["Weekly forecast", "See how much real work time the week holds, on Monday.", "chart"]
+  ],
+  yearlyOff: 0.2,
+  plans: [
+    { name: "Starter", monthly: 0, note: "For small teams trying it out", per: "forever",
+      items: ["Up to 5 people", "Focus blocks", "Google & Outlook sync"], cta: "Start free" },
+    { name: "Team", monthly: 9, hot: true, note: "per person / month", per: "",
+      items: ["Unlimited people", "Meeting clusters", "Async standups", "Focus forecasts"], cta: "Try 14 days free" },
+    { name: "Business", monthly: 16, note: "per person / month", per: "",
+      items: ["Everything in Team", "SSO & audit log", "Priority support"], cta: "Talk to us" }
+  ],
+  quotes: [
+    { text: "We cut our meetings by a third in the first month. Mornings are quiet now and the roadmap finally moves.", name: "Delly", role: "Head of Design, Fieldnote", big: true },
+    { text: "The forecast on Monday is the most honest number in the company.", name: "Kettle engineering", role: "40 engineers, 3 offices" },
+    { text: "I stopped playing calendar Tetris across four time zones.", name: "Paperplane ops", role: "Four time zones, one calendar" }
+  ],
+  faq: [
+    ["Does it replace Google Calendar?", "No. {name} sits on top of the calendar you already use and writes changes back to it. Nobody has to switch apps."],
+    ["Will it move my meetings without asking?", "Only the ones you allow. Every move is suggested first, and you can lock any event so it never moves."],
+    ["How long does setup take?", "About two minutes. Connect your calendar, invite the team, and {name} drafts your first focused week."],
+    ["Is our data private?", "Event titles are encrypted at rest, we never sell data, and Business plans get SSO and an audit log."],
+    ["Can we cancel anytime?", "Yes. Monthly plans stop at the end of the month. Yearly plans are refunded for unused months."]
+  ]
+};
+
+// ---- helpers ----
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[<>&"]/g, "");
+const brand = esc(CONFIG.name).slice(0, 24) || "Orbit";
+const fill = s => s.replaceAll("{name}", brand);
+let acc = CONFIG.accent.trim(); if (!acc.startsWith("#")) acc = "#" + acc;
+if (!/^#[0-9a-f]{6}$/i.test(acc)) acc = "#2F54FF";
+const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const A = rgb(acc), mix = (c, w, k) => c.map((v, i) => Math.round(v + (w[i] - v) * k));
+const css = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+document.documentElement.style.setProperty("--accent", acc);
+document.documentElement.style.setProperty("--accent-soft", css(A, .11));
+
+// ---- content ----
+document.querySelectorAll(".bname").forEach(e => e.textContent = brand);
+document.title = `${brand} · the calm team calendar`;
+$("lead").textContent = fill(CONFIG.lead);
+$("featSub").textContent = CONFIG.featSub;
+$("copy").textContent = `© 2026 ${brand} Labs`;
+const fonts = ["Newsreader;font-style:italic", "Geist Mono", "Geist;font-weight:700;letter-spacing:.08em", "Geist;font-weight:600", "Geist Mono;font-weight:500", "Newsreader;font-style:italic;font-weight:500", "Geist;font-weight:500;letter-spacing:-.05em"];
+const logoRow = CONFIG.logos.map((l, i) => `<span style="font-family:${fonts[i % fonts.length].split(";")[0]};${fonts[i % fonts.length].split(";").slice(1).join(";")}">${esc(l)}</span>`).join("");
+$("track").innerHTML = logoRow + logoRow;
+
+const ICON = {
+  focus: '<circle cx="15" cy="15" r="11"/><circle cx="15" cy="15" r="5" fill="var(--accent)" stroke="none"/>',
+  cluster: '<rect x="4" y="5" width="9" height="9" rx="2.5"/><rect x="17" y="5" width="9" height="9" rx="2.5" fill="var(--accent)" stroke="none"/><rect x="4" y="17" width="22" height="8" rx="2.5"/>',
+  globe: '<circle cx="15" cy="15" r="11"/><ellipse cx="15" cy="15" rx="4.5" ry="11"/><path d="M4 15h22"/>',
+  async: '<path d="M5 8h20M5 15h14M5 22h9"/><circle cx="23" cy="22" r="3.4" fill="var(--accent)" stroke="none"/>',
+  sync: '<path d="M6 13a9 9 0 0 1 16-4l2 2M24 17a9 9 0 0 1-16 4l-2-2"/><path d="M24 6v5h-5M6 24v-5h5"/>',
+  chart: '<path d="M5 25V5M5 25h20"/><rect x="9" y="15" width="4" height="7" rx="1"/><rect x="15" y="11" width="4" height="11" rx="1" fill="var(--accent)" stroke="none"/><rect x="21" y="7" width="4" height="15" rx="1"/>'
+};
+$("grid").innerHTML = CONFIG.features.map(([h, p, ic]) => `<div class="feat" data-r>
+  <svg viewBox="0 0 30 30" fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[ic]}</svg>
+  <h3>${h}</h3><p>${p}</p></div>`).join("");
+
+// week mock: [day, startHour, endHour, kind, title, note]
+const EV = [[0,9,11.5,"f","Deep work","protected"],[0,13,14,"m","Design crit",""],[0,14,14.5,"m","1:1 Delly",""],
+  [1,9,11,"f","Deep work","protected"],[1,13.5,14.5,"m","Planning","6 people"],[1,15,16,"w","Customer call",""],
+  [2,9,12,"f","Focus","no meetings"],[2,14,15,"m","Review",""],[2,15,15.5,"m","Sync",""],
+  [3,9,11.5,"f","Deep work","protected"],[3,13,14,"w","Interviews",""],[3,14,15.5,"m","Roadmap",""],
+  [4,9,10.5,"f","Writing",""],[4,11,12,"m","Demo day",""],[4,13,16,"f","Focus","Friday"]];
+const H0 = 8.5, H1 = 16.5, colH = () => document.querySelector(".col").offsetHeight;
+const days = [["Mon", 6], ["Tue", 7], ["Wed", 8], ["Thu", 9], ["Fri", 10]];
+let wk = `<div class="hd" style="border-left:0"></div>` + days.map(([d, n], i) => `<div class="hd${i === 2 ? " today" : ""}">${d}<b>${n}</b></div>`).join("");
+wk += `<div class="times">${[9, 10, 11, 12, 13, 14, 15, 16].map(h => `<span data-h="${h}">${h > 12 ? h - 12 : h}${h >= 12 ? "p" : "a"}</span>`).join("")}</div>`;
+wk += days.map((_, d) => `<div class="col">${EV.filter(e => e[0] === d).map(e => `<div class="ev ${e[3]}" data-ev="${e[1]},${e[2]}"><b>${e[4]}</b>${e[5]}</div>`).join("")}</div>`).join("");
+wk += `<div class="now" id="now"></div>`;
+$("week").innerHTML = wk;
+const evEls = [...document.querySelectorAll(".ev")];
+function layoutWeek(){
+  const h = colH(), y = v => (v - H0) / (H1 - H0) * h;
+  evEls.forEach(el => { const [a, b] = el.dataset.ev.split(",").map(Number); el.style.top = y(a) + 1 + "px"; el.style.height = y(b) - y(a) - 2 + "px"; });
+  document.querySelectorAll(".times span").forEach(s => s.style.top = y(+s.dataset.h) + "px");
+  document.querySelectorAll(".col").forEach(c => c.style.backgroundSize = `100% ${h / (H1 - H0)}px`);
+}
+
+// pricing
+$("plans").innerHTML = CONFIG.plans.map((p, i) => `<div class="plan${p.hot ? " hot" : ""}" data-r>
+  <div class="top"><h3>${p.name}</h3>${p.hot ? '<span class="tag">Most teams</span>' : ""}</div>
+  <div class="price"><b>$<span data-p="${i}">${p.monthly}</span></b><span>${p.per || ""}</span></div>
+  <p class="note" data-n="${i}">${p.note}</p>
+  <ul>${p.items.map(t => `<li>${t}</li>`).join("")}</ul>
+  <a class="btn" href="#pricing">${p.cta}</a></div>`).join("");
+const priceEls = [...document.querySelectorAll("[data-p]")], noteEls = [...document.querySelectorAll("[data-n]")];
+let yearly = false, swapAt = -1e9;
+const priceOf = (p, y) => y ? Math.round(p.monthly * (1 - CONFIG.yearlyOff)) : p.monthly;
+function setBilling(y){
+  if (y === yearly) return;
+  yearly = y; swapAt = performance.now();
+  noteEls.forEach((n, i) => { const p = CONFIG.plans[i]; n.textContent = p.monthly && y ? `per person / month, billed $${priceOf(p, true) * 12} yearly` : p.note; });
+}
+$("bm").addEventListener("click", () => setBilling(false));
+$("by").addEventListener("click", () => setBilling(true));
+
+// testimonials
+const avatarCols = [acc, "#FF7A45", "#1FA978"];
+$("quotes").innerHTML = CONFIG.quotes.map((q, i) => `<div class="q${q.big ? " big" : ""}" data-r>
+  <p>“${esc(q.text)}”</p><div class="who"><i style="background:${avatarCols[i % 3]}">${esc(q.name)[0]}</i><div><b>${esc(q.name)}</b><span>${esc(q.role)}</span></div></div></div>`).join("");
+
+// faq accordion
+$("faqs").innerHTML = CONFIG.faq.map(([q, a], i) => `<div class="fq" data-r><button type="button" data-f="${i}">${q}<span class="pm"></span></button><div class="ans"><p>${fill(a)}</p></div></div>`).join("");
+const faqState = CONFIG.faq.map(() => ({ open: false, at: -1e9, from: 0 }));
+const fqEls = [...document.querySelectorAll(".fq")];
+document.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => {
+  const s = faqState[b.dataset.f], now = performance.now();
+  s.from = faqK(s, now); s.open = !s.open; s.at = now;
+}));
+const ease = x => 1 - Math.pow(1 - x, 3), clamp = x => Math.max(0, Math.min(1, x));
+const ease2 = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+function faqK(s, now){ const k = ease(clamp((now - s.at) / 420)); return s.from + ((s.open ? 1 : 0) - s.from) * k; }
+
+// toast for CTAs
+let toastAt = -1e9;
+["navcta", "herocta", "finalcta"].forEach(id => $(id).addEventListener("click", e => {
+  e.preventDefault(); $("toast").textContent = `Welcome to ${brand}. Your first calm week is on its way.`; toastAt = performance.now();
+}));
+
+// ---- the planet: dotted globe, rings, orbiting moons ----
+const cv = $("planet"), g = cv.getContext("2d"), mini = $("mini"), gm = mini.getContext("2d");
+const DPR = Math.min(2, devicePixelRatio || 1);
+let W = 0, H = 0, MW = 0;
+function size(){
+  W = cv.clientWidth; H = cv.clientHeight; cv.width = W * DPR; cv.height = H * DPR;
+  MW = mini.clientWidth; mini.width = mini.height = MW * DPR; layoutWeek();
+}
+addEventListener("resize", size);
+const DOTS = [];
+for (let i = 0, n = 900; i < n; i++){ // fibonacci sphere
+  const y = 1 - (i + .5) / n * 2, r = Math.sqrt(1 - y * y), th = i * 2.39996;
+  DOTS.push([Math.cos(th) * r, y, Math.sin(th) * r]);
+}
+const LIGHT = mix(A, [255, 255, 255], .55), DEEP = mix(A, [8, 10, 30], .78), MID = mix(A, [10, 12, 40], .35);
+const MOONS = [ // radius factor, flattening, tilt, speed, size, colour
+  { r: 1.62, k: .3, rot: -.38, sp: .55, s: 6, c: "#FF7A45", ph: 0 },
+  { r: 2.0, k: .22, rot: -.2, sp: -.38, s: 4.5, c: "#1FA978", ph: 2.4 },
+  { r: 1.32, k: .55, rot: .9, sp: .8, s: 4, c: "#121318", ph: 4.1 }
+];
+function drawPlanet(c, w, h, cx, cy, R, t, spin, small){
+  c.clearRect(0, 0, w, h);
+  const ringRot = -.38, ringK = .3;
+  // faint orbit guides
+  if (!small) for (const m of MOONS){ c.strokeStyle = "rgba(18,19,24,.09)"; c.lineWidth = 1; c.setLineDash([2, 5]); c.beginPath(); c.ellipse(cx, cy, R * m.r, R * m.r * m.k, m.rot, 0, 7); c.stroke(); c.setLineDash([]); }
+  const moonPos = MOONS.map(m => { const a = t * m.sp + m.ph, lx = Math.cos(a) * R * m.r, ly = Math.sin(a) * R * m.r * m.k;
+    return { x: cx + lx * Math.cos(m.rot) - ly * Math.sin(m.rot), y: cy + lx * Math.sin(m.rot) + ly * Math.cos(m.rot), front: Math.sin(a) > 0, m, a }; });
+  const ring = (from, to) => {
+    const bands = [[1.38, .16, 7], [1.5, .3, 3], [1.62, .1, 9], [1.78, .22, 2]];
+    for (const [f, al, lw] of bands){
+      c.strokeStyle = small ? `rgba(243,241,236,${al * 1.6})` : css([18, 19, 24], al); c.lineWidth = lw * R / 120;
+      c.beginPath(); c.ellipse(cx, cy, R * f, R * f * ringK, ringRot, from, to); c.stroke();
+    }
+    for (let i = 0; i < 70; i++){ // ring dust
+      const a = i * 2.17 + t * (.25 + (i % 5) * .03), aa = ((a % 6.2832) + 6.2832) % 6.2832;
+      if ((aa > Math.PI) !== (from >= Math.PI)) continue;
+      const f = 1.36 + (i * 37 % 45) / 100, lx = Math.cos(a) * R * f, ly = Math.sin(a) * R * f * ringK;
+      c.fillStyle = small ? "rgba(243,241,236,.7)" : css(A, .75);
+      c.beginPath(); c.arc(cx + lx * Math.cos(ringRot) - ly * Math.sin(ringRot), cy + lx * Math.sin(ringRot) + ly * Math.cos(ringRot), (i % 3 ? 1 : 1.8) * R / 120, 0, 7); c.fill();
+    }
+  };
+  const moon = p => {
+    const s = p.m.s * R / 120;
+    c.fillStyle = small ? "#F3F1EC" : p.m.c; c.beginPath(); c.arc(p.x, p.y, s, 0, 7); c.fill();
+    if (!small){ c.strokeStyle = css([18, 19, 24], .0); }
+  };
+  moonPos.filter(p => !p.front).forEach(moon);
+  ring(Math.PI, Math.PI * 2);
+  // body
+  const bg = c.createRadialGradient(cx - R * .38, cy - R * .42, R * .1, cx, cy, R * 1.05);
+  bg.addColorStop(0, css(LIGHT)); bg.addColorStop(.45, css(A)); bg.addColorStop(1, css(DEEP));
+  c.fillStyle = bg; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.fill();
+  // dotted surface, rotating about a tilted axis
+  const ca = Math.cos(spin), sa = Math.sin(spin), tilt = .42, ct = Math.cos(tilt), st = Math.sin(tilt);
+  for (let i = 0; i < DOTS.length; i++){
+    const [x0, y0, z0] = DOTS[i];
+    const x1 = x0 * ca + z0 * sa, z1 = -x0 * sa + z0 * ca;
+    const x = x1 * ct - y0 * st, y = x1 * st + y0 * ct;
+    if (z1 < 0) continue;
+    const band = Math.abs(Math.sin(y0 * 5.5 + x0 * 1.3)) > .55; // continents of denser light
+    const light = clamp(.25 + .75 * (-x * .55 - y * .6 + z1 * .6));
+    c.fillStyle = `rgba(255,255,255,${(band ? .55 : .16) * light * z1 + .03})`;
+    c.beginPath(); c.arc(cx + x * R, cy + y * R, (band ? 1.5 : 1.1) * R / 120 * (.5 + z1 * .5), 0, 7); c.fill();
+  }
+  // terminator shade + rim
+  const sh = c.createRadialGradient(cx - R * .5, cy - R * .5, R * .6, cx - R * .2, cy - R * .2, R * 1.45);
+  sh.addColorStop(0, "rgba(5,6,20,0)"); sh.addColorStop(1, "rgba(5,6,20,.55)");
+  c.fillStyle = sh; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.fill();
+  // ring shadow on the planet
+  c.save(); c.beginPath(); c.arc(cx, cy, R, 0, 7); c.clip();
+  c.strokeStyle = "rgba(5,6,20,.22)"; c.lineWidth = R * .09;
+  c.beginPath(); c.ellipse(cx + R * .05, cy - R * .12, R * 1.45, R * 1.45 * ringK, ringRot, 0, Math.PI); c.stroke(); c.restore();
+  ring(0, Math.PI);
+  moonPos.filter(p => p.front).forEach(moon);
+  return moonPos;
+}
+
+// ---- one loop for everything ----
+const reveal = [...document.querySelectorAll("[data-r]")];
+let start = null;
+function frame(now){
+  if (start === null) start = now;
+  const t = (now - start) / 1000, vh = innerHeight, sy = scrollY;
+  // hero planet
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const wide = W > 600, R = wide ? W * .24 : Math.min(W * .2, 104);
+  const intro = ease(clamp(t / 1.4));
+  const cy = H * .52 + sy * .18 + (1 - intro) * 30;
+  drawPlanet(g, W, H, W / 2, cy, R * (.86 + .14 * intro), t, t * .32 + sy * .002, false);
+  cv.style.opacity = intro;
+  $("chip1").style.transform = `translate(${(1 - ease(clamp((t - .5) / .7))) * -40}px,${Math.sin(t * 1.3) * 5 + sy * .08}px)`;
+  $("chip1").style.opacity = ease(clamp((t - .5) / .7));
+  $("chip2").style.transform = `translate(${(1 - ease(clamp((t - .9) / .7))) * 40}px,${Math.sin(t * 1.1 + 2) * 5 + sy * .12}px)`;
+  $("chip2").style.opacity = ease(clamp((t - .9) / .7));
+  // mini planet in final CTA (only when visible)
+  const fr = $("final").getBoundingClientRect();
+  if (fr.top < vh && fr.bottom > 0){ gm.setTransform(DPR, 0, 0, DPR, 0, 0); drawPlanet(gm, MW, MW, MW / 2, MW / 2, MW * .22, t * 1.2, t * .4, true); }
+  // nav background
+  const nk = clamp(sy / 40);
+  $("nav").style.background = `rgba(243,241,236,${.92 * nk})`;
+  $("nav").style.borderBottomColor = `rgba(226,222,213,${nk})`;
+  $("nav").style.backdropFilter = nk > 0 ? "blur(12px)" : "none";
+  // logos marquee
+  const tr = $("track"); tr.style.transform = `translateX(${-(t * 38 % (tr.scrollWidth / 2))}px)`;
+  // scroll reveals
+  for (const el of reveal){
+    const top = el.getBoundingClientRect().top - (parseFloat(el.dataset.ty) || 0);
+    const k = ease(clamp((vh - top - 10) / (vh * .3)));
+    el.dataset.ty = (1 - k) * 28;
+    el.style.opacity = k; el.style.transform = `translateY(${(1 - k) * 28}px)`;
+  }
+  // week mock: events grow in, now-line ticks, forecast counts up
+  const app = document.querySelector(".app").getBoundingClientRect(), ak = clamp((vh - app.top) / (vh * .7));
+  evEls.forEach((el, i) => { const k = ease(clamp(ak * 2.2 - i * .06)); el.style.opacity = k; el.style.transform = `scaleY(${.6 + .4 * k})`; el.style.transformOrigin = "top"; });
+  const ch = colH(), nowH = 10.6 + (t % 20) * .02;
+  $("now").style.top = (app.height ? document.querySelector(".week .hd").offsetHeight : 0) + (nowH - H0) / (H1 - H0) * ch + "px";
+  $("fc").textContent = Math.round(18 * ease(clamp(ak * 1.6)));
+  $("meter").style.width = 72 * ease(clamp(ak * 1.6)) + "%";
+  // pricing toggle + price tween
+  const pk = ease2(clamp((now - swapAt) / 450)), pos = yearly ? pk : 1 - pk;
+  const bm = $("bm"), byb = $("by");
+  $("knob").style.left = bm.offsetLeft + (byb.offsetLeft - bm.offsetLeft) * pos + "px";
+  $("knob").style.width = bm.offsetWidth + (byb.offsetWidth - bm.offsetWidth) * pos + "px";
+  bm.style.color = pos < .5 ? "var(--paper)" : "var(--ink)"; byb.style.color = pos >= .5 ? "var(--paper)" : "var(--ink)";
+  byb.querySelector("em").style.color = pos >= .5 ? "#7BE3B9" : "";
+  priceEls.forEach((el, i) => { const p = CONFIG.plans[i], a = priceOf(p, !yearly), b = priceOf(p, yearly);
+    el.textContent = Math.round(a + (b - a) * (swapAt < 0 ? 1 : pk));
+    el.parentNode.style.transform = `translateY(${Math.sin(pk * Math.PI) * -4}px)`; });
+  // faq accordion
+  fqEls.forEach((el, i) => { const k = faqK(faqState[i], now), ans = el.querySelector(".ans");
+    ans.style.height = ans.firstChild.offsetHeight * k + "px"; ans.style.opacity = k;
+    el.querySelector(".pm").style.setProperty("--r", 90 * (1 - k) + "deg");
+    el.querySelector(".pm").style.background = k > .5 ? "var(--accent-soft)" : ""; });
+  // toast
+  const ta = (now - toastAt) / 1000, tk = ta < .3 ? ease(ta / .3) : ta < 2.4 ? 1 : clamp(1 - (ta - 2.4) / .3);
+  $("toast").style.opacity = tk; $("toast").style.transform = `translate(-50%,${(1 - tk) * 16}px)`;
+  requestAnimationFrame(frame);
+}
+size();
+document.fonts.ready.then(() => { size(); requestAnimationFrame(frame); });
+</script>
+</body>
+</html>

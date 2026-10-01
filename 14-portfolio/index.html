@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Delly — frontend engineer</title>
+<meta name="description" content="A full developer portfolio in one HTML file. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#0A0B0D;--bg2:#101215;--card:#13161A;--line:#22262C;--line2:#2E333B;--ink:#ECEEF0;--mute:#8A929C;--dim:#5A616B;--acc:#C8F542;--acc-ink:#0F1400;--warm:#FF8A4C}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--ink);font-family:"Geist",system-ui,sans-serif;font-size:16px;line-height:1.5;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button,input,textarea{font:inherit;color:inherit}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+.wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+.acc{color:var(--acc)}
+
+/* boot terminal */
+#boot{position:fixed;inset:0;z-index:40;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}
+.term{width:100%;max-width:520px;border:1px solid var(--line2);border-radius:12px;background:#0D0F12;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.term-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.term-bar i{width:10px;height:10px;border-radius:50%;background:#2A2F36}
+.term-bar span{margin-left:auto;margin-right:auto;font-size:12px;color:var(--dim);transform:translateX(-16px)}
+#tlines{padding:16px 16px 20px;font-size:13.5px;line-height:1.75;min-height:230px;white-space:pre}
+#tlines .p{color:var(--acc)}
+#tlines .o{color:var(--mute)}
+#tlines .ok{color:var(--acc)}
+#tlines .w{color:var(--ink)}
+.cur{display:inline-block;width:8px;height:16px;background:var(--acc);vertical-align:-3px;margin-left:2px}
+
+/* nav */
+nav{position:sticky;top:0;z-index:20;background:rgba(10,11,13,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:56px}
+.logo{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:16px;letter-spacing:-.02em}
+.logo b{color:var(--acc);font-weight:700}
+.navr{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--mute)}
+.live{display:inline-flex;align-items:center;gap:7px}
+.live s{width:7px;height:7px;border-radius:50%;background:var(--acc);display:inline-block}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:8px;padding:12px 18px;font-weight:600;font-size:15px;cursor:pointer;border:1px solid var(--line2);background:transparent;white-space:nowrap}
+.btn.pri{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+.btn.sm{padding:7px 12px;font-size:13px;border-radius:7px}
+
+/* hero */
+.hero{position:relative;padding:40px 0 36px;overflow:hidden;border-bottom:1px solid var(--line)}
+#grid{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hero .wrap{position:relative}
+.path{font-size:12.5px;color:var(--dim)}
+.path b{color:var(--acc);font-weight:500}
+h1{font-size:clamp(64px,19vw,150px);line-height:.9;letter-spacing:-.055em;margin:14px 0 0;font-weight:700}
+h1 em{font-style:normal;color:var(--acc)}
+.role{font-size:clamp(20px,5.2vw,30px);line-height:1.15;letter-spacing:-.02em;font-weight:500;margin:14px 0 0;max-width:20ch}
+.role span{color:var(--mute)}
+.lead{color:var(--mute);max-width:40ch;margin:14px 0 22px;font-size:15.5px}
+.ctas{display:flex;gap:10px;flex-wrap:wrap}
+.meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:26px;font-size:12px;color:var(--dim)}
+.meta b{color:var(--ink);font-weight:500}
+
+/* sections */
+section{padding:76px 0 8px}
+.kick{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--acc);letter-spacing:.02em}
+.kick span{color:var(--dim)}
+h2{font-size:clamp(34px,9vw,60px);line-height:1;letter-spacing:-.04em;margin:10px 0 18px;font-weight:700}
+h2 span{color:var(--dim)}
+.about p{color:var(--mute);font-size:16px;margin:0 0 22px;max-width:46ch}
+.about p b{color:var(--ink);font-weight:500}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stat{padding:16px 14px;border-right:1px solid var(--line)}
+.stat:last-child{border-right:0}
+.stat b{display:block;font-size:34px;line-height:1;letter-spacing:-.04em;font-weight:700}
+.stat span{display:block;margin-top:8px;color:var(--mute);font-size:12.5px;line-height:1.3}
+
+/* projects */
+.phead{display:flex;justify-content:space-between;align-items:end}
+.phead small{font-size:12px;color:var(--dim);margin-bottom:22px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;position:relative;will-change:transform}
+.card canvas{display:block;width:100%;aspect-ratio:16/10;background:#0D0F12;border-bottom:1px solid var(--line)}
+.card .bd{padding:12px 13px 13px}
+.card h3{margin:0;font-size:17px;letter-spacing:-.02em;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.card h3 i{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--dim);font-weight:400}
+.card p{margin:3px 0 10px;color:var(--mute);font-size:13px;line-height:1.35}
+.tags{display:flex;gap:5px;flex-wrap:wrap}
+.tags span{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--mute);border:1px solid var(--line2);border-radius:5px;padding:2px 6px}
+.open{position:absolute;left:10px;top:10px;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:700;background:var(--acc);color:var(--acc-ink);border-radius:5px;padding:4px 8px;opacity:0}
+
+/* stack */
+.stack{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.srow{display:grid;grid-template-columns:96px 1fr;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:0}
+.srow h4{margin:0;padding:14px;font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:500;color:var(--dim);border-right:1px solid var(--line)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:11px 12px}
+.chips span{font-size:13.5px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:4px 9px}
+.chips span.hot{border-color:rgba(200,245,66,.35);color:var(--acc)}
+.meters{display:grid;gap:12px;margin-top:20px}
+.meter{display:grid;grid-template-columns:110px 1fr 40px;align-items:center;gap:12px;font-size:13.5px}
+.meter .bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.meter .bar i{display:block;height:100%;background:var(--acc);width:0}
+.meter em{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--dim);text-align:right}
+
+/* timeline */
+.tl{position:relative;padding-left:28px}
+.tl .rail{position:absolute;left:5px;top:6px;bottom:6px;width:1px;background:var(--line)}
+.tl .fill{position:absolute;left:5px;top:6px;width:1px;background:var(--acc);height:0}
+.job{position:relative;padding-bottom:26px}
+.job:last-child{padding-bottom:4px}
+.job .dot{position:absolute;left:-28px;top:6px;width:11px;height:11px;border-radius:50%;border:1px solid var(--line2);background:var(--bg)}
+.job .yr{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--dim)}
+.job h3{margin:2px 0 0;font-size:19px;letter-spacing:-.02em;font-weight:600}
+.job h3 span{color:var(--mute);font-weight:400}
+.job p{margin:4px 0 0;color:var(--mute);font-size:14px;max-width:44ch}
+
+/* contact */
+.contact{padding-bottom:40px}
+.formbox{position:relative;border:1px solid var(--line);border-radius:14px;background:var(--card);padding:18px;overflow:hidden}
+label{display:block;font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--dim);margin:0 0 6px}
+.f{margin-bottom:14px}
+input,textarea{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:12px 13px;font-size:15px;outline:none;resize:none}
+input:focus,textarea:focus{border-color:var(--acc)}
+textarea{height:92px;line-height:1.45}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#send{width:100%;justify-content:center;position:relative;overflow:hidden;padding:14px}
+#send i{position:absolute;left:0;bottom:0;height:3px;background:var(--acc-ink);opacity:.35;width:0}
+#done{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:var(--card);opacity:0;pointer-events:none}
+#done h3{margin:16px 0 4px;font-size:26px;letter-spacing:-.03em}
+#done p{margin:0 0 18px;color:var(--mute);font-size:14.5px;max-width:30ch}
+#check{width:74px;height:74px}
+.direct{display:flex;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--mute)}
+.direct a{color:var(--ink);border-bottom:1px solid var(--line2)}
+
+/* footer */
+footer{border-top:1px solid var(--line);padding:34px 0 28px;background:var(--bg2)}
+.big{font-size:clamp(58px,17vw,150px);font-weight:700;letter-spacing:-.06em;line-height:.85}
+.big b{color:var(--acc);font-weight:700}
+.socials{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:24px 0 22px;border-top:1px solid var(--line)}
+.socials a{display:flex;justify-content:space-between;padding:13px 2px;border-bottom:1px solid var(--line);font-size:15px}
+.socials a:nth-child(odd){margin-right:14px}
+.socials a span{font-family:"JetBrains Mono",monospace;color:var(--dim);font-size:13px}
+.fbot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--dim)}
+.fbot a{color:var(--mute)}
+.fbot a:hover{color:var(--acc)}
+@media (min-width:860px){.grid{grid-template-columns:repeat(3,1fr)}.cols{display:grid;grid-template-columns:1fr 1fr;gap:40px}}
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <div class="term mono">
+    <div class="term-bar"><i></i><i></i><i></i><span id="tt">~/portfolio — zsh</span></div>
+    <div id="tlines"></div>
+  </div>
+</div>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#top" id="logo">delly<b>.</b>dev</a>
+    <div class="navr"><span class="live"><s id="ldot"></s><span id="avail">available</span></span><a class="btn sm" href="#contact">Hire me</a></div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <canvas id="grid"></canvas>
+  <div class="wrap">
+    <div class="path mono" data-h="0"><b>~/</b>portfolio <span class="acc">main</span> · v2026.10</div>
+    <h1 data-h="1"><span id="hname">Delly</span><em>.</em></h1>
+    <p class="role" data-h="2" id="hrole">Frontend engineer <span>&amp; creative coder.</span></p>
+    <p class="lead" data-h="3" id="lead">I build fast, careful interfaces and the small details people screenshot. Six years shipping product for teams that care how things feel.</p>
+    <div class="ctas" data-h="4">
+      <a class="btn pri" href="#work" id="cta1">View work <span class="mono">↓</span></a>
+      <a class="btn" href="#contact" id="cta2">Get in touch</a>
+    </div>
+    <div class="meta mono" data-h="5"><span>based <b id="city">Remote, UTC+5</b></span><span>stack <b>TS · React · Rust</b></span></div>
+  </div>
+</header>
+
+<section class="about wrap" id="about">
+  <div data-r><div class="kick">01 <span>/ about</span></div>
+  <h2>Code that feels <span>finished.</span></h2>
+  <p id="bio">I sit between design and engineering. I prototype in the browser, sweat the 16ms budget, and leave codebases <b>easier to work in than I found them</b>. Lately: realtime data, audio, and tools for other developers.</p></div>
+  <div class="stats" data-r>
+    <div class="stat"><b data-count="6">0</b><span>years shipping production</span></div>
+    <div class="stat"><b data-count="48">0</b><span>projects launched</span></div>
+    <div class="stat"><b data-count="1.2" data-unit="M">0</b><span>people use my work</span></div>
+  </div>
+</section>
+
+<section class="wrap" id="work">
+  <div class="phead" data-r><div><div class="kick">02 <span>/ selected work</span></div><h2>Projects</h2></div><small class="mono" id="pcount">06 items</small></div>
+  <div class="grid" id="cards"></div>
+</section>
+
+<section class="wrap" id="stack">
+  <div data-r><div class="kick">03 <span>/ stack</span></div><h2>Tools I reach for</h2></div>
+  <div class="stack" data-r>
+    <div class="srow"><h4>frontend</h4><div class="chips"><span class="hot">TypeScript</span><span class="hot">React</span><span>Next.js</span><span>WebGL</span><span>Canvas</span></div></div>
+    <div class="srow"><h4>backend</h4><div class="chips"><span class="hot">Rust</span><span>Node</span><span>Go</span><span>Postgres</span></div></div>
+    <div class="srow"><h4>craft</h4><div class="chips"><span>Figma</span><span>Docker</span><span>Vitest</span><span>a11y</span></div></div>
+  </div>
+  <div class="meters" data-r id="meters"></div>
+</section>
+
+<section class="wrap" id="exp">
+  <div data-r><div class="kick">04 <span>/ experience</span></div><h2>Where I've been</h2></div>
+  <div class="tl" id="tl"><div class="rail"></div><div class="fill" id="tfill"></div></div>
+</section>
+
+<section class="wrap contact" id="contact">
+  <div data-r><div class="kick">05 <span>/ contact</span></div><h2>Let's build <span>something.</span></h2></div>
+  <form class="formbox" id="form" data-r onsubmit="return false">
+    <div class="two">
+      <div class="f"><label for="fn">name</label><input id="fn" autocomplete="name" placeholder="Your name"></div>
+      <div class="f"><label for="fe">email</label><input id="fe" type="email" autocomplete="email" placeholder="you@company.com"></div>
+    </div>
+    <div class="f"><label for="fm">message</label><textarea id="fm" placeholder="What are we making?"></textarea></div>
+    <button class="btn pri" id="send" type="button"><span id="sendt">Send message</span> <span class="mono">→</span><i id="sbar"></i></button>
+    <div id="done">
+      <canvas id="check" width="148" height="148"></canvas>
+      <h3>Message sent.</h3>
+      <p id="donep">Thanks. I usually reply within a day.</p>
+      <button class="btn sm" id="again" type="button">Send another</button>
+    </div>
+  </form>
+  <div class="direct mono" data-r><span>or email directly</span><a id="mail" href="mailto:hello@delly.dev">hello@delly.dev</a></div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="big" id="bigword">delly<b>.</b>dev</div>
+    <div class="socials" id="socials"></div>
+    <div class="fbot mono"><span>© <span id="yr">2026</span> <span id="fname">Delly</span> · built by hand</span><a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">free code by @sicscod.drops</a></div>
+  </div>
+</footer>
+
+<script>
+// ===== Delly.dev · free code by @sicscod.drops =====
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name:  P.get("name") || "Delly",                    // ?name=Delly
+  role:  P.get("role") || "Frontend engineer",        // ?role=Rust%20developer
+  role2: "& creative coder.",                         // grey tail of the role line
+  city:  P.get("city") || "Remote, UTC+5",
+  email: P.get("email") || "hello@delly.dev",
+  domain: "dev",                                      // logo: <name>.dev
+  accent: "#" + (P.get("accent") || "C8F542"),        // ?accent=FF8A4C
+  intro: P.get("intro") !== "0",                      // ?intro=0 skips the terminal boot
+  projects: [
+    { name: "Pulse",     year: "2026", desc: "Realtime analytics for 40k events/sec.", tags: ["React", "D3", "WS"],       thumb: "chart" },
+    { name: "Tidepool",  year: "2025", desc: "Browser synth with a live waveform.",     tags: ["WebAudio", "Canvas"],     thumb: "wave" },
+    { name: "Atlas",     year: "2025", desc: "Route planner for city cyclists.",        tags: ["MapLibre", "Go"],         thumb: "map" },
+    { name: "Ledger",    year: "2024", desc: "Money app, 4.8 on the App Store.",        tags: ["React Native", "TS"],     thumb: "phone" },
+    { name: "Glyph UI",  year: "2024", desc: "Design system used by 9 product teams.",  tags: ["TS", "Storybook"],        thumb: "ui" },
+    { name: "orbit-cli", year: "2023", desc: "Deploy previews from your terminal.",     tags: ["Rust", "CLI"],            thumb: "cli" },
+  ],
+  skills: [["TypeScript", 95], ["React", 92], ["Rust", 74], ["WebGL", 68]],
+  jobs: [
+    { yr: "2024 — now",  title: "Senior Frontend Engineer", at: "Northwind Labs", text: "Lead the realtime dashboard team. Cut p95 render time from 210ms to 38ms." },
+    { yr: "2022 — 2024", title: "Frontend Engineer",        at: "Fieldnote",      text: "Built the editor and the design system that now powers every surface." },
+    { yr: "2020 — 2022", title: "Creative Developer",       at: "Studio Kiln",    text: "Interactive launches for music and fashion brands. Two FWA wins." },
+    { yr: "2019",        title: "Freelance",                at: "Self",           text: "Landing pages, shaders and a lot of learning in public." },
+  ],
+  links: [
+    ["GitHub", "https://github.com/", "@delly"],
+    ["LinkedIn", "https://www.linkedin.com/", "/in/delly"],
+    ["X", "https://x.com/", "@delly"],
+    ["Read.cv", "https://read.cv/", "delly"],
+  ],
+  demo: P.get("demo") === "1",                        // ?demo=1 auto-fills the form (for videos)
+};
+
+// ---------------- fill the page from CONFIG ----------------
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const slug = CONFIG.name.toLowerCase().replace(/[^a-z0-9]+/g, "") || "dev";
+document.documentElement.style.setProperty("--acc", CONFIG.accent);
+$("hname").textContent = CONFIG.name;
+$("fname").textContent = CONFIG.name;
+$("hrole").innerHTML = `${esc(CONFIG.role)} <span>${esc(CONFIG.role2)}</span>`;
+$("city").textContent = CONFIG.city;
+$("mail").textContent = CONFIG.email; $("mail").href = "mailto:" + CONFIG.email;
+$("logo").innerHTML = `${esc(slug)}<b>.</b>${CONFIG.domain}`;
+$("bigword").innerHTML = `${esc(slug)}<b>.</b>${CONFIG.domain}`;
+$("tt").textContent = `~/${slug}.${CONFIG.domain} — zsh`;
+$("yr").textContent = new Date().getFullYear();
+document.title = `${CONFIG.name} — ${CONFIG.role.toLowerCase()}`;
+
+$("cards").innerHTML = CONFIG.projects.map((p, i) => `
+  <article class="card" data-i="${i}">
+    <canvas width="480" height="300"></canvas><span class="open">open case study ↗</span>
+    <div class="bd"><h3>${esc(p.name)} <i>${esc(p.year)}</i></h3><p>${esc(p.desc)}</p>
+    <div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join("")}</div></div>
+  </article>`).join("");
+$("pcount").textContent = String(CONFIG.projects.length).padStart(2, "0") + " items";
+$("meters").innerHTML = CONFIG.skills.map(([n, v]) => `<div class="meter"><span>${esc(n)}</span><div class="bar"><i data-v="${v}"></i></div><em>${v}%</em></div>`).join("");
+$("tl").insertAdjacentHTML("beforeend", CONFIG.jobs.map(j => `
+  <div class="job" data-r><span class="dot"></span><div class="yr">${esc(j.yr)}</div>
+  <h3>${esc(j.title)} <span>· ${esc(j.at)}</span></h3><p>${esc(j.text)}</p></div>`).join(""));
+$("socials").innerHTML = CONFIG.links.map(([n, u, h]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)} <span>${esc(h)} ↗</span></a>`).join("");
+
+// ---------------- boot script (typed by the rAF clock) ----------------
+const BOOT = [
+  { at: 0.15, cmd: `./boot --portfolio ${slug}`, speed: 0.022 },
+  { at: 0.95, out: [["o", "→ loading config"], ["ok", "ok"]] },
+  { at: 1.12, out: [["o", `→ fetching ${CONFIG.projects.length} projects`], ["ok", "ok"]] },
+  { at: 1.29, out: [["o", "→ compiling stack"], ["ok", "ok"]] },
+  { at: 1.46, out: [["o", "→ warming up shaders"], ["ok", "ok"]] },
+  { at: 1.66, out: [["ok", "✓ ready in 412ms"]] },
+  { at: 1.86, cmd: `open ${slug}.${CONFIG.domain}`, speed: 0.024 },
+];
+const BOOT_END = 2.45, LIFT = 0.55;
+const dots = (a, b) => a + " " + ".".repeat(Math.max(2, 27 - a.length - b.length)) + " ";
+function renderBoot(t){
+  let html = "", typing = false;
+  for (const l of BOOT){
+    if (t < l.at) break;
+    if (l.cmd){
+      const n = Math.min(l.cmd.length, Math.floor((t - l.at) / l.speed));
+      typing = n < l.cmd.length;
+      html += `<span class="p">${esc(slug)}@dev</span> <span class="o">~ %</span> <span class="w">${esc(l.cmd.slice(0, n))}</span>`;
+      html += "\n";
+    } else {
+      const [a, b] = l.out;
+      html += b ? `<span class="o">${esc(dots(a[1], b[1]))}</span><span class="ok">${b[1]}</span>\n` : `<span class="ok">${esc(a[1])}</span>\n`;
+    }
+  }
+  if (!html || !typing && t > BOOT[BOOT.length - 1].at + 0.3) html += `<span class="p">${esc(slug)}@dev</span> <span class="o">~ %</span> `;
+  html = html.replace(/\n$/, "");
+  const blink = typing || Math.floor(t * 2.4) % 2 === 0;
+  $("tlines").innerHTML = html + `<span class="cur" style="opacity:${blink ? 1 : 0}"></span>`;
+}
+
+// ---------------- project thumbnails, drawn every frame ----------------
+const cards = [...document.querySelectorAll(".card")];
+const thumbs = cards.map((el, i) => ({ el, cv: el.querySelector("canvas"), ctx: el.querySelector("canvas").getContext("2d"), kind: CONFIG.projects[i].thumb, hover: 0, h: 0, open: false, o: 0 }));
+const A = () => getComputedStyle(document.documentElement).getPropertyValue("--acc").trim() || "#C8F542";
+let ACC = "#C8F542";
+const LINE = "#262B32", MUTE = "#8A929C", INK = "#ECEEF0";
+function rr(c, x, y, w, h, r){ c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); }
+const DRAW = {
+  chart(c, t){
+    c.strokeStyle = LINE; c.lineWidth = 2;
+    for (let y = 60; y < 300; y += 60){ c.beginPath(); c.moveTo(30, y); c.lineTo(450, y); c.stroke(); }
+    for (let i = 0; i < 14; i++){
+      const v = 0.35 + 0.3 * Math.sin(i * 0.9 + t * 1.6) + 0.2 * Math.sin(i * 2.3 - t);
+      const h = 40 + v * 150;
+      c.fillStyle = i === 10 ? ACC : "#2C333B"; c.fillRect(36 + i * 30, 262 - h, 18, h);
+    }
+    c.beginPath();
+    for (let x = 0; x <= 420; x += 6){ const y = 120 - 40 * Math.sin(x * 0.018 + t * 1.2) - x * 0.12; x ? c.lineTo(36 + x, y) : c.moveTo(36, y); }
+    c.strokeStyle = ACC; c.lineWidth = 3; c.stroke();
+    c.fillStyle = INK; c.font = "600 26px Geist"; c.fillText((40.2 + Math.sin(t) * 0.8).toFixed(1) + "k/s", 36, 48);
+  },
+  wave(c, t){
+    c.strokeStyle = LINE; c.lineWidth = 2; c.beginPath(); c.moveTo(20, 150); c.lineTo(460, 150); c.stroke();
+    for (let k = 0; k < 3; k++){
+      c.beginPath();
+      for (let x = 0; x <= 440; x += 3){
+        const e = Math.sin((x / 440) * Math.PI);
+        const y = 150 + e * (70 - k * 20) * Math.sin(x * (0.045 + k * 0.02) - t * (4 + k)) * Math.sin(t * 1.3 + k);
+        x ? c.lineTo(20 + x, y) : c.moveTo(20, y);
+      }
+      c.strokeStyle = k ? `rgba(236,238,240,${0.22 - k * 0.06})` : ACC; c.lineWidth = k ? 2 : 3.5; c.stroke();
+    }
+    for (let i = 0; i < 8; i++){ rr(c, 30 + i * 54, 252, 44, 26, 6); c.fillStyle = i === Math.floor(t * 3) % 8 ? ACC : "#22272D"; c.fill(); }
+  },
+  map(c, t){
+    c.strokeStyle = "#1E2329"; c.lineWidth = 10;
+    for (let i = 0; i < 7; i++){ c.beginPath(); c.moveTo(-20, 30 + i * 46); c.lineTo(500, 10 + i * 46 + 30); c.stroke(); }
+    for (let i = 0; i < 9; i++){ c.beginPath(); c.moveTo(20 + i * 60, -10); c.lineTo(i * 60 - 30, 320); c.stroke(); }
+    c.fillStyle = "#16201A"; rr(c, 300, 40, 120, 80, 14); c.fill();
+    const pts = [[60, 250], [140, 200], [150, 140], [260, 120], [330, 70], [410, 60]];
+    c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+    c.strokeStyle = ACC; c.lineWidth = 5; c.lineJoin = "round"; c.setLineDash([12, 9]); c.lineDashOffset = -t * 30; c.stroke(); c.setLineDash([]);
+    const u = (t * 0.25) % 1, seg = u * (pts.length - 1), s = Math.floor(seg), f = seg - s;
+    const x = pts[s][0] + (pts[s + 1][0] - pts[s][0]) * f, y = pts[s][1] + (pts[s + 1][1] - pts[s][1]) * f;
+    c.fillStyle = "rgba(200,245,66,.2)"; c.beginPath(); c.arc(x, y, 18 + 4 * Math.sin(t * 5), 0, 7); c.fill();
+    c.fillStyle = ACC; c.beginPath(); c.arc(x, y, 8, 0, 7); c.fill();
+    c.fillStyle = INK; c.beginPath(); c.arc(410, 60, 9, 0, 7); c.fill();
+  },
+  phone(c, t){
+    rr(c, 150, 18, 180, 300, 28); c.fillStyle = "#1A1E23"; c.fill(); c.strokeStyle = "#323840"; c.lineWidth = 3; c.stroke();
+    const g = c.createLinearGradient(170, 60, 310, 150); g.addColorStop(0, ACC); g.addColorStop(1, "#7FA81E");
+    rr(c, 168, 54, 144, 88, 12); c.fillStyle = g; c.fill();
+    c.fillStyle = "#0F1400"; c.font = "700 24px Geist"; c.fillText("$" + (4280 + Math.floor((Math.sin(t * .7) * .5 + .5) * 140)).toLocaleString("en-US"), 182, 122);
+    c.font = "500 12px JetBrains Mono"; c.fillText("•••• 2041", 182, 78);
+    for (let i = 0; i < 4; i++){
+      const y = 162 + i * 34; c.fillStyle = "#262B32"; rr(c, 168, y, 24, 24, 6); c.fill();
+      c.fillRect(202, y + 4, 60 + (i * 23) % 40, 7); c.fillStyle = i % 2 ? MUTE : ACC; c.fillRect(272, y + 4, 30, 7);
+    }
+    c.fillStyle = "#30363E"; rr(c, 205, 300, 70, 5, 3); c.fill();
+  },
+  ui(c, t){
+    const on = (Math.sin(t * 1.4) > 0);
+    rr(c, 36, 40, 150, 48, 10); c.fillStyle = ACC; c.fill();
+    c.fillStyle = "#0F1400"; c.font = "600 18px Geist"; c.fillText("Primary", 76, 70);
+    rr(c, 206, 40, 150, 48, 10); c.strokeStyle = "#3A414A"; c.lineWidth = 2; c.stroke();
+    c.fillStyle = INK; c.fillText("Ghost", 254, 70);
+    const k = 0.5 + 0.5 * Math.sin(t * 1.4) ; const kk = Math.max(0, Math.min(1, k * 1.6 - .3));
+    rr(c, 376, 48, 64, 32, 16); c.fillStyle = kk > .5 ? ACC : "#2C333B"; c.fill();
+    c.fillStyle = kk > .5 ? "#0F1400" : INK; c.beginPath(); c.arc(392 + kk * 32, 64, 11, 0, 7); c.fill();
+    rr(c, 36, 112, 404, 46, 10); c.strokeStyle = on ? ACC : "#3A414A"; c.stroke();
+    c.fillStyle = MUTE; c.font = "400 16px JetBrains Mono"; c.fillText("search components" + (Math.floor(t * 2) % 2 ? "|" : ""), 54, 141);
+    const sw = [ACC, "#ECEEF0", "#8A929C", "#3A414A", "#FF8A4C"];
+    sw.forEach((s, i) => { rr(c, 36 + i * 84, 186, 70, 70, 12); c.fillStyle = s; c.fill(); });
+    c.fillStyle = "#5A616B"; c.font = "400 12px JetBrains Mono"; c.fillText("tokens / color", 36, 284);
+  },
+  cli(c, t){
+    const L = [["$ ", "orbit deploy --preview"], ["", "▲ building 214 modules"], ["", "✓ compiled in 1.4s"], ["", "✓ uploaded 3.1 MB"], ["→ ", "https://pr-82.orbit.sh"]];
+    const step = (t * 1.3) % (L.length + 2);
+    c.font = "500 17px JetBrains Mono";
+    L.forEach((l, i) => {
+      if (i > step) return;
+      const y = 50 + i * 40;
+      c.fillStyle = i === 0 || i === 4 ? ACC : MUTE; c.fillText(l[0], 30, y);
+      c.fillStyle = i === 0 ? INK : i === 4 ? INK : MUTE;
+      const s = i === Math.floor(step) ? l[1].slice(0, Math.floor((step % 1) * 40)) : l[1];
+      c.fillText(s, 30 + c.measureText(l[0]).width, y);
+    });
+    c.fillStyle = "#1E2329"; c.fillRect(30, 262, 420, 8); c.fillStyle = ACC; c.fillRect(30, 262, 420 * Math.min(1, step / L.length), 8);
+  },
+};
+function drawThumbs(t, vh){
+  for (const th of thumbs){
+    const r = th.cv.getBoundingClientRect();
+    if (r.bottom < -20 || r.top > vh + 20) continue;
+    const c = th.ctx; c.clearRect(0, 0, 480, 300);
+    c.save(); (DRAW[th.kind] || DRAW.chart)(c, t + th.el.dataset.i * 0.7); c.restore();
+  }
+}
+cards.forEach((el, i) => {
+  const th = thumbs[i];
+  el.addEventListener("pointerenter", e => { if (e.pointerType === "mouse") th.hover = 1; });
+  el.addEventListener("pointerleave", () => th.hover = 0);
+  el.addEventListener("click", () => {
+    const was = th.open; thumbs.forEach(o => o.open = false); th.open = !was;
+  });
+});
+
+// ---------------- hero dot grid ----------------
+const grid = $("grid"), g = grid.getContext("2d");
+let gw = 0, gh = 0, mx = -999, my = -999;
+function sizeGrid(){ const r = grid.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1); gw = r.width; gh = r.height; grid.width = gw * d; grid.height = gh * d; g.setTransform(d, 0, 0, d, 0, 0); }
+addEventListener("resize", sizeGrid);
+$("top").addEventListener("pointermove", e => { const r = grid.getBoundingClientRect(); mx = e.clientX - r.left; my = e.clientY - r.top; });
+$("top").addEventListener("pointerleave", () => { mx = my = -999; });
+function drawGrid(t, k){
+  g.clearRect(0, 0, gw, gh);
+  const s = 24, cx = mx > -900 ? mx : gw * (0.72 + 0.12 * Math.sin(t * 0.4)), cy = my > -900 ? my : gh * (0.38 + 0.18 * Math.cos(t * 0.33));
+  for (let y = s / 2; y < gh; y += s) for (let x = s / 2; x < gw; x += s){
+    const d = Math.hypot(x - cx, y - cy), w = Math.max(0, 1 - d / 190);
+    const a = (0.09 + w * 0.55) * k;
+    g.fillStyle = w > 0.35 ? `rgba(200,245,66,${a})` : `rgba(236,238,240,${a * 0.9})`;
+    const r = 1 + w * 1.4; g.fillRect(x - r / 2, y - r / 2, r, r);
+  }
+}
+
+// ---------------- contact: fake send ----------------
+let sendAt = -1, doneAt = -1, typedAt = -1;
+const DEMO = [["fn", "Northwind"], ["fe", "hello@northwind.io"], ["fm", "Hey Delly, loved Pulse. Want to build our new dashboard together?"]];
+$("send").addEventListener("click", () => { if (sendAt < 0) sendAt = performance.now(); });
+$("again").addEventListener("click", () => { sendAt = doneAt = -1; $("form").reset(); });
+const ckc = $("check").getContext("2d");
+function drawCheck(k){
+  ckc.clearRect(0, 0, 148, 148); ckc.lineCap = "round"; ckc.lineJoin = "round";
+  ckc.strokeStyle = "#262B32"; ckc.lineWidth = 4; ckc.beginPath(); ckc.arc(74, 74, 64, 0, 7); ckc.stroke();
+  const a = Math.min(1, k * 1.6);
+  ckc.strokeStyle = ACC; ckc.beginPath(); ckc.arc(74, 74, 64, -Math.PI / 2, -Math.PI / 2 + a * Math.PI * 2); ckc.stroke();
+  const m = Math.max(0, Math.min(1, (k - 0.45) / 0.55)); if (!m) return;
+  const P2 = [[48, 76], [66, 94], [102, 56]], L1 = Math.hypot(18, 18), L2 = Math.hypot(36, 38), d = m * (L1 + L2);
+  ckc.lineWidth = 8; ckc.beginPath(); ckc.moveTo(...P2[0]);
+  if (d <= L1) ckc.lineTo(48 + 18 * d / L1, 76 + 18 * d / L1);
+  else { ckc.lineTo(...P2[1]); const u = (d - L1) / L2; ckc.lineTo(66 + 36 * u, 94 - 38 * u); }
+  ckc.stroke();
+}
+
+// ---------------- one loop drives everything ----------------
+const reveal = [...document.querySelectorAll("[data-r]")];
+const heroEls = [...document.querySelectorAll("[data-h]")];
+const ease = x => 1 - Math.pow(1 - x, 3);
+const clamp = x => Math.max(0, Math.min(1, x));
+let t0 = null, last = 0, bootGone = !CONFIG.intro;
+if (bootGone) $("boot").style.display = "none";
+function frame(now){
+  if (t0 === null){ t0 = now; ACC = A(); sizeGrid(); }
+  const t = (now - t0) / 1000, dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
+  const vh = innerHeight;
+
+  // boot terminal, then lift away
+  const heroStart = CONFIG.intro ? BOOT_END + 0.15 : 0;
+  if (!bootGone){
+    renderBoot(t);
+    const k = clamp((t - BOOT_END) / LIFT);
+    const e = k * k * (3 - 2 * k);
+    $("boot").style.transform = `translateY(${-e * 100}%)`;
+    $("boot").style.opacity = 1 - e * 0.4;
+    if (k >= 1){ bootGone = true; $("boot").style.display = "none"; }
+  }
+  // hero stagger
+  heroEls.forEach(el => {
+    const k = ease(clamp((t - heroStart - el.dataset.h * 0.09) / 0.6));
+    el.style.opacity = k; el.style.transform = `translateY(${(1 - k) * 26}px)`;
+  });
+  drawGrid(t, ease(clamp((t - heroStart) / 0.8)));
+  $("ldot").style.opacity = 0.35 + 0.65 * Math.abs(Math.sin(t * 2));
+
+  // scroll reveals + counters + meters
+  for (const el of reveal){
+    const top = el.getBoundingClientRect().top;
+    const k = ease(clamp((vh - top - 10) / (vh * 0.3)));
+    el.style.opacity = k; el.style.transform = `translateY(${(1 - k) * 28}px)`;
+    el.querySelectorAll("[data-count]").forEach(n => {
+      const v = parseFloat(n.dataset.count), u = n.dataset.unit || "";
+      n.textContent = (v % 1 ? (v * k).toFixed(1) : Math.round(v * k)) + u + (k > 0.98 && !u ? "+" : "");
+    });
+    el.querySelectorAll(".bar i").forEach((b, i) => b.style.width = clamp(k * 1.15 - i * 0.05) * b.dataset.v + "%");
+  }
+  // timeline rail fills as you scroll, dots light up
+  const tl = $("tl"), tr = tl.getBoundingClientRect();
+  const fillH = Math.max(0, Math.min(tr.height - 12, vh * 0.62 - tr.top));
+  $("tfill").style.height = fillH + "px";
+  tl.querySelectorAll(".job").forEach(j => {
+    const on = j.offsetTop + 6 <= fillH + 6;
+    const d = j.querySelector(".dot");
+    d.style.background = on ? ACC : "var(--bg)"; d.style.borderColor = on ? ACC : "";
+    d.style.boxShadow = on ? `0 0 0 4px rgba(200,245,66,.12)` : "none";
+  });
+
+  // project cards: thumbnails + lift
+  drawThumbs(t, vh);
+  for (const th of thumbs){
+    const target = Math.max(th.hover, th.open ? 1 : 0);
+    th.h += (target - th.h) * (1 - Math.exp(-dt * 14));
+    th.o += ((th.open ? 1 : 0) - th.o) * (1 - Math.exp(-dt * 12));
+    th.el.style.transform = `translateY(${-th.h * 7}px)`;
+    th.el.style.boxShadow = `0 ${th.h * 18}px ${th.h * 40}px rgba(0,0,0,${th.h * 0.55})`;
+    th.el.style.borderColor = th.o > 0.02 ? `rgba(200,245,66,${0.15 + th.o * 0.6})` : "";
+    const tag = th.el.querySelector(".open"); tag.style.opacity = th.o; tag.style.transform = `translateY(${(1 - th.o) * -8}px)`;
+  }
+
+  // demo typing into the form once it is on screen
+  const fr = $("form").getBoundingClientRect();
+  if (CONFIG.demo && typedAt < 0 && fr.top < vh * 0.8) typedAt = now;
+  if (typedAt >= 0 && sendAt < 0){
+    let tt = (now - typedAt) / 1000;
+    for (const [id, s] of DEMO){
+      const n = Math.max(0, Math.min(s.length, Math.floor(tt / 0.012)));
+      $(id).value = s.slice(0, n); tt -= s.length * 0.012 + 0.08;
+    }
+  }
+  // sending → success
+  if (sendAt >= 0){
+    const s = (now - sendAt) / 1000;
+    $("sbar").style.width = clamp(s / 0.75) * 100 + "%";
+    $("sendt").textContent = s < 0.75 ? "Sending" + ".".repeat(1 + Math.floor(s * 6) % 3) : "Sent";
+    if (s >= 0.75 && doneAt < 0){ doneAt = now; const nm = $("fn").value.trim().split(" ")[0]; $("donep").textContent = `Thanks${nm ? ", " + nm : ""}. ${CONFIG.name} usually replies within a day.`; }
+  } else { $("sbar").style.width = "0"; $("sendt").textContent = "Send message"; }
+  const dk = doneAt >= 0 ? clamp((now - doneAt) / 1000 / 0.9) : 0;
+  $("done").style.opacity = ease(clamp(dk * 2.5)); $("done").style.pointerEvents = dk > 0 ? "auto" : "none";
+  $("done").style.transform = `scale(${0.97 + 0.03 * ease(clamp(dk * 2.5))})`;
+  drawCheck(dk);
+
+  requestAnimationFrame(frame);
+}
+document.fonts.ready.then(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>

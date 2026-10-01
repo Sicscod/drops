@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Liquid Cursor</title>
+<meta name="description" content="Glowing liquid ink that follows your finger, merges and splits like mercury. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=block">
+<style>
+html,body{height:100%;margin:0;background:#070708;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.ui{position:fixed;left:0;right:0;pointer-events:none;font:400 11px/1 "DM Mono",ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:#8d8a86}
+.top{top:0;display:flex;justify-content:space-between;padding:max(18px,env(safe-area-inset-top)) 20px 0}
+.top b{font-weight:500;color:#e9e6e1}
+.hint{bottom:46px;text-align:center;font-size:12px;letter-spacing:.2em;color:#b5b1ab}
+.credit{bottom:max(16px,env(safe-area-inset-bottom));text-align:center;font-size:10px;letter-spacing:.12em;text-transform:none;color:#6b6864;pointer-events:auto}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="ui top"><span><b>Liquid</b> cursor</span><span id="pal"></span></div>
+<div class="ui hint" id="hint"></div>
+<div class="ui credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Liquid Cursor · free code by @sicscod.drops =====
+// Your own colours: yoursite/?colors=ff2a00,ff8a00,fff1c4  (deep, mid, highlight)
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  palettes: [                    // [deep, mid, highlight] · tap cycles through them
+    { name: "molten",   c: ["#ff2200", "#ff8c1a", "#fff3cf"] },
+    { name: "mercury",  c: ["#4a5566", "#c3ccd8", "#ffffff"] },
+    { name: "acid",     c: ["#00a651", "#8cff3f", "#f6ffd9"] },
+    { name: "deep sea", c: ["#0037ff", "#12c8ff", "#e6fcff"] },
+    { name: "cherry",   c: ["#c4002f", "#ff4f7b", "#ffe6ee"] }
+  ],
+  colors: url.get("colors"),     // ?colors=hex,hex,hex adds your palette first
+  blobs: +(url.get("blobs") || 16),     // length of the trailing chain
+  trail: 4,                      // frames of lag per blob: longer = longer tail
+  stickiness: +(url.get("sticky") || 0.22), // 0.05 runny wobble .. 0.5 tight
+  size: 0.07,                    // blob size, share of the short screen side
+  splash: 12,                    // droplets thrown out on tap
+  glow: 0.55,
+  hint: url.get("hint") || "drag · tap to change colour"
+};
+if (CONFIG.colors) {
+  const c = CONFIG.colors.split(",").map(s => "#" + s.replace(/[^0-9a-f]/gi, ""));
+  if (c.length === 1) c.push(c[0]);
+  if (c.length === 2) c.push("#ffffff");
+  CONFIG.palettes.unshift({ name: "yours", c: c.slice(0, 3) });
+}
+
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+const fieldCv = document.createElement("canvas"), fg = fieldCv.getContext("2d");
+const bloomCv = document.createElement("canvas"), bg = bloomCv.getContext("2d");
+document.getElementById("hint").textContent = CONFIG.hint;
+const palEl = document.getElementById("pal"), hintEl = document.getElementById("hint");
+const hex = h => { h = h.replace("#", ""); if (h.length === 3) h = h.replace(/./g, "$&$&"); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) || 0); };
+const PALS = CONFIG.palettes.map(p => ({ name: p.name, c: p.c.map(hex) }));
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const sstep = (a, b, x) => { x = clamp((x - a) / (b - a)); return x * x * (3 - 2 * x); };
+
+let W, H, DPR, CELL, GW, GH, field, img, R;
+function resize(){
+  DPR = Math.min(2, devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  CELL = Math.max(2.5, Math.min(W, H) / 190);           // field resolution (CSS px per cell)
+  GW = Math.ceil(W / CELL) + 2; GH = Math.ceil(H / CELL) + 2;
+  fieldCv.width = GW; fieldCv.height = GH;
+  bloomCv.width = Math.ceil(GW / 4); bloomCv.height = Math.ceil(GH / 4);
+  field = new Float32Array(GW * GH); img = fg.createImageData(GW, GH);
+  R = Math.min(W, H) * CONFIG.size;
+}
+resize(); addEventListener("resize", resize);
+
+// ---- the liquid: a springy chain + droplets that split off and merge back ----
+const chain = [];
+for (let i = 0; i < CONFIG.blobs; i++) chain.push({ x: W / 2, y: H / 2, vx: 0, vy: 0, k: i / Math.max(1, CONFIG.blobs - 1) });
+const drops = [], path = [];
+let target = { x: W / 2, y: H / 2 }, lastInput = -1e9, wander = 1;
+let pal = 0, prevPal = 0, wipe = null;           // colour splash: { x, y, t }
+const rings = [];
+
+function tap(x, y, now){
+  prevPal = pal; pal = (pal + 1) % PALS.length;
+  wipe = { x, y, t: now };
+  rings.push({ x, y, t: now });
+  for (let i = 0; i < CONFIG.splash; i++){
+    const a = i / CONFIG.splash * Math.PI * 2 + Math.random() * .4, s = 9 + Math.random() * 9;
+    drops.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: R * (.28 + Math.random() * .3), age: 0, life: 1 });
+  }
+}
+
+let down = null;
+const setT = e => { target.x = e.clientX; target.y = e.clientY; lastInput = now0; };
+let now0 = 0;
+addEventListener("pointerdown", e => { setT(e); down = { x: e.clientX, y: e.clientY, t: now0 }; });
+addEventListener("pointermove", e => setT(e));
+addEventListener("pointerup", e => {
+  if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 14 && now0 - down.t < 400) tap(e.clientX, e.clientY, now0);
+  down = null;
+});
+
+function step(t){                                      // fixed 60 Hz physics step
+  // no input for a while → the ink draws a slow figure-eight on its own
+  const idle = t - lastInput > 2200;
+  wander += ((idle ? 1 : 0) - wander) * .02;
+  const s = t / 1000;
+  const wx = W / 2 + Math.sin(s * 1.4) * W * .3, wy = H * .47 + Math.sin(s * 2.8) * H * .2;
+  const tx = target.x + (wx - target.x) * wander, ty = target.y + (wy - target.y) * wander;
+
+  // head chases the finger; every next blob chases where the head was a few frames ago
+  const st = CONFIG.stickiness, h0 = chain[0];
+  h0.vx += (tx - h0.x) * .12; h0.vy += (ty - h0.y) * .12;
+  h0.vx *= .72; h0.vy *= .72; h0.x += h0.vx; h0.y += h0.vy;
+  path.unshift(h0.x, h0.y); if (path.length > chain.length * CONFIG.trail * 2 + 2) path.length = chain.length * CONFIG.trail * 2 + 2;
+  for (let i = 1; i < chain.length; i++){
+    const b = chain[i], j = Math.min(path.length / 2 - 1, i * CONFIG.trail) * 2;
+    b.vx += (path[j] - b.x) * st; b.vy += (path[j + 1] - b.y) * st;
+    b.vx *= .7; b.vy *= .7; b.x += b.vx; b.y += b.vy;
+  }
+  // fast moves tear droplets off the tail
+  const h = chain[0], sp = Math.hypot(h.vx, h.vy);
+  if (sp > 7 && drops.length < 40 && Math.random() < (sp - 7) * .03){
+    const src = chain[2 + (Math.random() * (chain.length - 3) | 0)];
+    drops.push({ x: src.x, y: src.y, vx: src.vx * 1.3 + (Math.random() - .5) * 6, vy: src.vy * 1.3 + (Math.random() - .5) * 6,
+      r: R * (.22 + Math.random() * .22), age: 0, life: 1 });
+  }
+  for (let i = drops.length - 1; i >= 0; i--){
+    const d = drops[i]; d.age += 1 / 60;
+    let best = chain[0], bd = 1e9;                       // pulled back to the nearest part of the chain
+    for (const b of chain){ const q = (b.x - d.x) ** 2 + (b.y - d.y) ** 2; if (q < bd){ bd = q; best = b; } }
+    const pull = Math.min(.012, d.age * d.age * .01);
+    d.vx += (best.x - d.x) * pull; d.vy += (best.y - d.y) * pull;
+    d.vx *= .93; d.vy *= .93; d.x += d.vx; d.y += d.vy;
+    if (Math.sqrt(bd) < R * .5 || d.age > 4) d.life -= .06;  // merged: melt into the body
+    if (d.life <= 0) drops.splice(i, 1);
+  }
+}
+
+// ---- metaball field on a small grid, shaded like wet glossy ink ----
+function blobs(s){
+  const out = [];
+  chain.forEach((b, i) => {
+    const r = R * (1 - .62 * b.k) * (1 + .06 * Math.sin(s * 3 + i * .9));
+    out.push(b.x, b.y, r, 1 - .45 * b.k);
+  });
+  const h = chain[0];
+  for (let j = 0; j < 3; j++){                           // lazy satellites: lava-lamp breathing
+    const a = s * (.9 + j * .45) + j * 2.1, d = R * (1.5 + 1.1 * Math.sin(s * (1.3 + j * .5) + j));
+    out.push(h.x + Math.cos(a) * d, h.y + Math.sin(a) * d, R * (.42 - j * .06), 1);
+  }
+  for (const d of drops) out.push(d.x, d.y, d.r * Math.sqrt(Math.max(0, d.life)), 1);
+  return out;
+}
+
+function render(s){
+  field.fill(0);
+  const B = blobs(s);
+  for (let n = 0; n < B.length; n += 4){
+    // soft-edged kernel (1 - d²/s²)³, s = 2.5 r; a lone blob crosses 1.0 exactly at radius r
+    const bx = B[n] / CELL, by = B[n + 1] / CELL, r = B[n + 2] / CELL, w = B[n + 3] / .593, s2 = r * r * 6.25, reach = r * 2.5;
+    if (r < .3) continue;
+    const x0 = Math.max(0, Math.ceil(bx - reach)), x1 = Math.min(GW - 1, bx + reach | 0);
+    const y0 = Math.max(0, Math.ceil(by - reach)), y1 = Math.min(GH - 1, by + reach | 0);
+    for (let y = y0; y <= y1; y++){
+      const dy = (y - by) * (y - by), row = y * GW;
+      for (let x = x0; x <= x1; x++){ const dx = x - bx, q = 1 - (dx * dx + dy) / s2; if (q > 0) field[row + x] += w * q * q * q; }
+    }
+  }
+  // colours: old palette outside the splash ring, new one inside
+  const A = PALS[pal].c, O = PALS[prevPal].c;
+  let wr = 1e9, wx = 0, wy = 0;
+  if (wipe){ const e = (s * 1000 - wipe.t) / 900; wr = (1 - Math.pow(1 - clamp(e), 3)) * Math.hypot(W, H) / CELL * 1.1; wx = wipe.x / CELL; wy = wipe.y / CELL; if (e > 1) wipe = null; }
+  const P = img.data, LX = -.45, LY = -.62, LZ = .64, glow = CONFIG.glow;
+  const HX = LX, HY = LY, HZ = LZ + 1, HN = Math.hypot(HX, HY, HZ);
+  for (let y = 1; y < GH - 1; y++){
+    for (let x = 1; x < GW - 1; x++){
+      const i = y * GW + x, f = field[i], o = i * 4;
+      if (f < .12){ P[o + 3] = 0; continue; }
+      let k = 0;
+      if (wipe){ const d = Math.hypot(x - wx, y - wy); k = sstep(wr - 14, wr, d); }   // 1 = still old colour
+      const d0 = A[0][0] + (O[0][0] - A[0][0]) * k, d1 = A[0][1] + (O[0][1] - A[0][1]) * k, d2 = A[0][2] + (O[0][2] - A[0][2]) * k;
+      const m0 = A[1][0] + (O[1][0] - A[1][0]) * k, m1 = A[1][1] + (O[1][1] - A[1][1]) * k, m2 = A[1][2] + (O[1][2] - A[1][2]) * k;
+      const h0 = A[2][0] + (O[2][0] - A[2][0]) * k, h1 = A[2][1] + (O[2][1] - A[2][1]) * k, h2 = A[2][2] + (O[2][2] - A[2][2]) * k;
+      const body = sstep(.94, 1.06, f);
+      // surface = dome height 1 - 1/f; its slope gives a normal for light
+      const gx = (field[i + 1] - field[i - 1]) / (f * f), gy = (field[i + GW] - field[i - GW]) / (f * f);
+      let nx = -gx * 2.4, ny = -gy * 2.4, nz = 1; const nl = Math.hypot(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
+      const dif = Math.max(0, nx * LX + ny * LY + nz * LZ);
+      const spec = Math.pow(Math.max(0, (nx * HX + ny * HY + nz * HZ) / HN), 38);
+      const rim = Math.pow(1 - nz, 2.2);
+      const depth = clamp((f - 1) / 3);
+      let r = d0 + (m0 - d0) * depth, gg = d1 + (m1 - d1) * depth, b = d2 + (m2 - d2) * depth;
+      const lit = .25 + .95 * dif;
+      r = r * lit + m0 * rim * .7 + h0 * spec * 1.6;
+      gg = gg * lit + m1 * rim * .7 + h1 * spec * 1.6;
+      b = b * lit + m2 * rim * .7 + h2 * spec * 1.6;
+      const gl = Math.pow(Math.min(1, f), 3) * glow * (1 - body);
+      P[o] = d0 + (r - d0) * body; P[o + 1] = d1 + (gg - d1) * body; P[o + 2] = d2 + (b - d2) * body;
+      P[o + 3] = 255 * (body + gl);
+    }
+  }
+  fg.putImageData(img, 0, 0);
+
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.globalCompositeOperation = "source-over";
+  g.fillStyle = "#070708"; g.fillRect(0, 0, W, H);
+  // soft bloom: the same image, tiny and blurred, added on top
+  bg.clearRect(0, 0, bloomCv.width, bloomCv.height);
+  bg.filter = "blur(2px)"; bg.drawImage(fieldCv, 0, 0, bloomCv.width, bloomCv.height); bg.filter = "none";
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  g.globalAlpha = .55; g.drawImage(bloomCv, -CELL * 6, -CELL * 6, W + CELL * 8, H + CELL * 8);
+  g.globalAlpha = 1; g.drawImage(fieldCv, -CELL, -CELL, GW * CELL, GH * CELL);
+  g.globalCompositeOperation = "lighter";
+  g.globalAlpha = .35; g.drawImage(bloomCv, -CELL * 6, -CELL * 6, W + CELL * 8, H + CELL * 8);
+  // splash ring in the new colour
+  for (let i = rings.length - 1; i >= 0; i--){
+    const q = rings[i], e = (s * 1000 - q.t) / 1100;
+    if (e > 1){ rings.splice(i, 1); continue; }
+    const c = PALS[pal].c[1];
+    g.globalAlpha = (1 - e) * .7; g.strokeStyle = `rgb(${c})`; g.lineWidth = 1.5 + 6 * (1 - e);
+    g.beginPath(); g.arc(q.x, q.y, 10 + (1 - Math.pow(1 - e, 3)) * Math.min(W, H) * .55, 0, Math.PI * 2); g.stroke();
+  }
+  g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+}
+
+let last = -1, acc = 0, shownPal = -1;
+function frame(now){
+  now0 = now;
+  if (last < 0) last = now;
+  acc = Math.min(acc + now - last, 100); last = now;
+  while (acc >= 1000 / 60){ step(now - acc); acc -= 1000 / 60; }
+  render(now / 1000);
+  if (shownPal !== pal){ shownPal = pal; palEl.textContent = `${PALS[pal].name} · ${String(pal + 1).padStart(2, "0")}/${String(PALS.length).padStart(2, "0")}`; }
+  hintEl.style.opacity = now - lastInput < 4000 ? .45 : .85;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

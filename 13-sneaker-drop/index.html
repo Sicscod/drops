@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HALFTONE Volta 01 — release</title>
+<meta name="description" content="A full sneaker release store page in one HTML file. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{--bg:#EEEAE2;--paper:#F7F4EE;--ink:#121212;--mute:#6F6A62;--line:#D6D0C4;--acc:#FF4D2E}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--ink);background:var(--bg);font-family:"Manrope",system-ui,sans-serif;font-size:15px;line-height:1.5;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;cursor:pointer}
+.wrap{max-width:1120px;margin:0 auto;padding:0 18px}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.anton{font-family:"Anton",Impact,sans-serif;font-weight:400;text-transform:uppercase}
+
+/* nav */
+nav{position:sticky;top:0;z-index:30;background:var(--bg);border-bottom:1.5px solid var(--ink)}
+nav .wrap{height:54px;display:flex;align-items:center;justify-content:space-between}
+.logo{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:.14em;font-size:15px}
+.logo svg{width:24px;height:24px}
+.links{display:none;gap:26px;font-weight:600;font-size:14px}
+.bag{display:flex;align-items:center;gap:8px;border:1.5px solid var(--ink);border-radius:999px;height:36px;padding:0 6px 0 14px;font-weight:700;font-size:13px;background:transparent}
+.bag b{min-width:24px;height:24px;border-radius:12px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-size:12px;padding:0 6px}
+
+/* hero */
+.hero{position:relative;padding:14px 0 0;overflow:hidden}
+.toprow{display:flex;justify-content:space-between;color:var(--mute)}
+.toprow .live{color:var(--ink)}
+.toprow .live i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--acc);margin-right:7px;vertical-align:1px}
+h1{margin:6px 0 0;font-size:clamp(96px,29vw,300px);line-height:.86;letter-spacing:-.01em;white-space:nowrap;position:relative;z-index:1}
+h1 .o{color:transparent;-webkit-text-stroke:2px var(--ink)}
+.stage{position:relative;z-index:2;margin:-92px -8px 0;height:250px}
+#shoeSvg{width:100%;height:100%;display:block;overflow:visible}
+.disc{position:absolute;right:10px;top:4px;width:84px;height:84px;border-radius:50%;background:var(--acc);display:grid;place-items:center;text-align:center;line-height:1.05;z-index:3}
+.disc span{font-family:"Anton",sans-serif;font-size:24px;color:var(--ink)}
+.disc small{display:block;font-family:"JetBrains Mono",monospace;font-size:8.5px;letter-spacing:.1em}
+.pick{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:2px}
+.cwname{font-weight:800;font-size:17px;line-height:1.2}
+.cwname small{display:block;color:var(--mute);font-weight:500;font-size:12px;margin-bottom:2px}
+.swatches{display:flex;gap:8px}
+.sw{width:42px;height:42px;border-radius:50%;border:1.5px solid var(--line);padding:4px;background:transparent;position:relative}
+.sw span{display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;position:relative}
+.sw span::after{content:"";position:absolute;left:0;right:0;bottom:0;height:42%;background:var(--b)}
+.sw.on{border-color:var(--ink);border-width:2px}
+
+/* countdown */
+.count{margin:18px 0 0;border-top:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink);display:grid;grid-template-columns:repeat(4,1fr)}
+.count div{padding:10px 0 8px;text-align:center;border-right:1px solid var(--line)}
+.count div:last-child{border-right:0}
+.count b{display:block;font-family:"Anton",sans-serif;font-weight:400;font-size:40px;line-height:1;font-variant-numeric:tabular-nums}
+.count span{color:var(--mute)}
+.countcap{display:flex;justify-content:space-between;color:var(--mute);margin-top:8px}
+
+/* buy */
+section{padding:42px 0 6px}
+.kick{color:var(--mute);display:flex;align-items:center;gap:10px}
+.kick::before{content:"";width:18px;height:1.5px;background:var(--ink)}
+h2{font-family:"Anton",Impact,sans-serif;font-weight:400;text-transform:uppercase;font-size:clamp(46px,12vw,96px);line-height:.92;margin:10px 0 18px;letter-spacing:-.005em}
+.pricerow{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:12px}
+.price{font-family:"Anton",sans-serif;font-size:44px;line-height:1}
+.price s{color:var(--mute);font-size:20px;margin-left:8px;text-decoration-thickness:2px}
+.stock{font-weight:700;font-size:13px}
+.stock i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2DBE6C;margin-right:7px}
+.sizehead{display:flex;justify-content:space-between;margin:16px 0 10px}
+.sizehead u{text-underline-offset:3px;color:var(--ink)}
+.sizes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.size{height:52px;border:1.5px solid var(--line);border-radius:12px;background:var(--paper);font-weight:700;font-size:15px}
+.size.sold{color:#B5AEA2;text-decoration:line-through;background:transparent}
+.size.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.addrow{display:grid;grid-template-columns:1fr 56px;gap:8px;margin-top:14px}
+.add{height:58px;border:0;border-radius:14px;background:var(--ink);color:var(--bg);font-weight:800;font-size:16px;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;gap:10px;position:relative;overflow:hidden}
+.add em{font-style:normal;background:var(--acc);color:var(--ink);border-radius:999px;padding:3px 10px;font-size:13px}
+.fav{height:58px;border:1.5px solid var(--ink);border-radius:14px;background:transparent;display:grid;place-items:center}
+.perks{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.perks div{border-top:1px solid var(--line);padding-top:9px;font-size:12.5px;color:var(--mute);line-height:1.35}
+.perks b{display:block;color:var(--ink);font-size:13px}
+
+/* lookbook */
+.look{padding:46px 0 0}
+.marq{border-block:1.5px solid var(--ink);overflow:hidden;white-space:nowrap;padding:8px 0 4px;background:var(--acc)}
+.marq div{display:inline-block;font-family:"Anton",sans-serif;font-size:46px;line-height:1.05;text-transform:uppercase;will-change:transform}
+.marq em{font-style:normal;margin:0 18px;-webkit-text-stroke:1.5px var(--ink);color:transparent}
+.tiles{overflow:hidden;padding:14px 0 0}
+.track{display:flex;gap:12px;will-change:transform;width:max-content}
+.tile{width:230px;height:270px;border-radius:20px;position:relative;overflow:hidden;flex:none;color:var(--ink)}
+.tile svg{position:absolute;left:4px;top:70px;width:222px;height:124px;overflow:visible}
+.tile .tn{position:absolute;left:14px;top:12px}
+.tile .tc{position:absolute;left:14px;bottom:12px;right:14px;display:flex;justify-content:space-between;align-items:flex-end}
+.tile .tc b{font-family:"Anton",sans-serif;font-weight:400;font-size:26px;line-height:1;text-transform:uppercase}
+
+/* details */
+.feat{display:grid;gap:10px}
+.fcard{background:var(--paper);border:1.5px solid var(--ink);border-radius:18px;padding:16px;display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:start}
+.fcard .n{font-family:"Anton",sans-serif;font-size:40px;line-height:.9;color:var(--acc);-webkit-text-stroke:1.5px var(--ink)}
+.fcard h3{margin:0 0 3px;font-size:17px;font-weight:800}
+.fcard p{margin:0;color:var(--mute);font-size:14px}
+.specs{margin-top:16px;border-top:1.5px solid var(--ink)}
+.spec{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid var(--line);padding:11px 0;font-size:14px}
+.spec span{color:var(--mute)}
+.spec b{font-weight:700;text-align:right}
+
+/* reviews */
+.score{display:flex;align-items:flex-end;gap:14px;margin-bottom:14px}
+.score b{font-family:"Anton",sans-serif;font-size:70px;line-height:.85;font-weight:400}
+.score div{color:var(--mute);font-size:13px;line-height:1.35}
+.stars{color:var(--ink);letter-spacing:2px;font-size:15px}
+.revs{display:grid;gap:10px}
+.rev{background:var(--paper);border-radius:18px;padding:16px;border:1px solid var(--line)}
+.rev p{margin:6px 0 12px;font-size:15px;line-height:1.45;font-weight:500}
+.who{display:flex;align-items:center;gap:10px;font-size:13px}
+.who i{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:13px;background:var(--ink);color:var(--bg)}
+.who span{color:var(--mute);display:block;font-size:12px}
+.fit{margin-left:auto}
+
+/* footer */
+footer{background:var(--ink);color:var(--bg);margin-top:46px;padding:34px 0 26px;overflow:hidden}
+.alert h3{font-family:"Anton",sans-serif;font-weight:400;text-transform:uppercase;font-size:34px;line-height:1;margin:0 0 6px}
+.alert p{margin:0 0 14px;color:#A39D93;font-size:14px}
+.form{display:flex;border:1.5px solid var(--bg);border-radius:14px;overflow:hidden;height:52px}
+.form input{flex:1;min-width:0;background:transparent;border:0;color:var(--bg);font:inherit;padding:0 14px;outline:0}
+.form input::placeholder{color:#8A847A}
+.form button{border:0;background:var(--acc);color:var(--ink);font-weight:800;padding:0 18px}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:28px 0 8px;font-size:13.5px}
+.cols div{display:flex;flex-direction:column;gap:5px}
+.cols .mono{color:#8A847A;margin-bottom:4px}
+.bigword{font-family:"Anton",sans-serif;font-size:clamp(80px,25vw,260px);line-height:.85;letter-spacing:-.01em;margin:20px 0 14px;white-space:nowrap}
+.credit{display:flex;justify-content:space-between;gap:10px;color:#8A847A;font-size:12.5px;border-top:1px solid #2E2C29;padding-top:14px}
+.credit a{color:var(--bg);font-weight:700}
+
+/* toast */
+#toast{position:fixed;left:50%;bottom:18px;z-index:60;background:var(--ink);color:var(--bg);border-radius:14px;padding:12px 14px 12px 12px;display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;white-space:nowrap;opacity:0;pointer-events:none;box-shadow:0 14px 40px rgba(0,0,0,.25)}
+#toast svg{width:44px;height:26px;flex:none}
+
+@media (min-width:900px){
+  .links{display:flex}
+  .herogrid{display:grid;grid-template-columns:1.25fr 1fr;gap:40px;align-items:end}
+  .stage{height:420px;margin-top:-170px}
+  .feat{grid-template-columns:repeat(3,1fr)}
+  .revs{grid-template-columns:repeat(3,1fr)}
+  .buygrid{display:grid;grid-template-columns:1fr 1fr;gap:40px}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".28"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".16"/>
+    </linearGradient>
+    <linearGradient id="shadeX" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#000" stop-opacity=".12"/>
+      <stop offset=".35" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".06"/>
+    </linearGradient>
+  </defs>
+  <!-- the shoe: one drawing, coloured by CSS variables (--up --ov --mg --ms --os --la --lg --ln) -->
+  <symbol id="shoe" viewBox="0 0 600 300">
+    <g stroke="#121212" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <!-- outsole -->
+      <path fill="var(--os)" d="M50,238 L570,236 C578,242 576,256 562,260 C540,265 500,265 470,263 L84,263 C62,263 48,257 48,248 Z"/>
+      <!-- midsole -->
+      <path fill="var(--ms)" d="M44,214 C44,200 54,193 72,195 C140,201 220,203 300,203 C380,203 470,199 530,196 C562,195 582,206 580,222 C578,237 566,245 548,245 L68,245 C52,245 44,235 44,224 Z"/>
+      <!-- upper -->
+      <path fill="var(--up)" d="M58,200 C48,170 46,128 56,102 C62,86 76,78 92,82 C112,88 140,96 168,92 C180,90 190,82 198,70 L208,56 C214,48 230,46 238,54 L250,70 C300,96 370,122 430,142 C488,160 540,168 562,184 C578,196 574,204 556,204 L60,204 Z"/>
+      <!-- collar lining -->
+      <path fill="var(--ln)" d="M68,92 C86,90 120,102 168,98 C182,97 192,88 200,76 L203,71 C192,95 172,108 140,109 C110,110 84,104 68,92 Z"/>
+      <!-- tongue -->
+      <path fill="var(--up)" d="M198,72 L207,52 C213,41 232,39 240,49 L254,72 C238,77 214,78 198,72 Z"/>
+      <rect x="214" y="52" width="20" height="10" rx="2" fill="var(--lg)" stroke-width="1.6" transform="rotate(4 224 57)"/>
+      <!-- mudguard -->
+      <path fill="var(--mg)" d="M112,204 L118,180 C210,176 330,173 448,174 C496,176 532,182 562,191 C568,197 566,204 556,204 Z"/>
+      <!-- heel counter -->
+      <path fill="var(--ov)" d="M58,204 C48,170 46,128 56,102 C60,92 66,86 74,84 C98,100 118,126 124,160 C128,182 126,196 122,204 Z"/>
+      <!-- toe cap -->
+      <path fill="var(--ov)" d="M446,148 C500,162 544,170 562,184 C578,196 574,204 556,204 L478,204 C476,184 466,164 446,148 Z"/>
+      <!-- pull tab -->
+      <path fill="var(--lg)" d="M57,106 C49,96 50,78 58,68 L74,70 C76,80 74,92 69,100 Z"/>
+    </g>
+    <!-- halftone brand mark: dots that shrink toward the toe -->
+    <g id="dots" fill="var(--lg)"></g>
+    <!-- volume shading -->
+    <path fill="url(#shade)" d="M58,200 C48,170 46,128 56,102 C62,86 76,78 92,82 C112,88 140,96 168,92 C180,90 190,82 198,70 L208,56 C214,48 230,46 238,54 L250,70 C300,96 370,122 430,142 C488,160 540,168 562,184 C578,196 574,204 556,204 L60,204 Z"/>
+    <path fill="url(#shadeX)" d="M44,214 C44,200 54,193 72,195 C140,201 220,203 300,203 C380,203 470,199 530,196 C562,195 582,206 580,222 C578,237 566,245 548,245 L68,245 C52,245 44,235 44,224 Z"/>
+    <!-- stitching -->
+    <g fill="none" stroke="#121212" stroke-opacity=".35" stroke-width="1.4" stroke-dasharray="4 4">
+      <path d="M118,186 C210,182 330,180 448,181 C494,182 530,188 556,196"/>
+      <path d="M64,104 C92,118 112,136 117,166 C119,182 118,194 116,200"/>
+      <path d="M452,156 C500,168 536,176 552,188"/>
+    </g>
+    <!-- midsole sculpt lines + tread -->
+    <g fill="none" stroke="#121212" stroke-width="1.6" stroke-linecap="round">
+      <path stroke-opacity=".22" d="M66,228 C200,232 400,231 566,222"/>
+      <path stroke-opacity=".12" d="M150,212 C220,216 300,216 360,214"/>
+      <path id="tread" stroke-opacity=".55" d=""/>
+    </g>
+    <!-- laces + eyelets (filled by script) -->
+    <g id="laces"></g>
+    <!-- heel wordmark -->
+    <text x="78" y="166" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" fill="#121212" fill-opacity=".55" transform="rotate(-72 78 166)" letter-spacing="2" id="heelWord">HT—01</text>
+  </symbol>
+</svg>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#top"><svg viewBox="0 0 24 24"><g fill="#121212"><circle cx="5" cy="12" r="4.2"/><circle cx="13" cy="12" r="3"/><circle cx="19.5" cy="12" r="1.8"/></g></svg><span id="brandName">HALFTONE</span></a>
+    <div class="links"><a href="#buy">Release</a><a href="#look">Lookbook</a><a href="#details">Details</a><a href="#reviews">Reviews</a></div>
+    <button class="bag" id="bagBtn" aria-label="Bag">Bag <b id="count">0</b></button>
+  </div>
+</nav>
+
+<main id="top">
+<header class="hero">
+  <div class="wrap">
+    <div class="herogrid">
+      <div>
+        <div class="toprow mono"><span class="live"><i id="dot"></i><span id="dropNo">Drop 013</span></span><span id="relShort">Release 10.10 · 10:00</span></div>
+        <h1 class="anton" id="model"><span id="m1">Volta</span> <span class="o" id="m2">01</span></h1>
+        <div class="stage">
+          <svg id="shoeSvg" viewBox="0 0 600 300" aria-label="Sneaker">
+            <ellipse id="shadow" cx="310" cy="282" rx="230" ry="12" fill="#121212" opacity=".16"/>
+            <g id="shoeG"><use href="#shoe" width="600" height="300" id="heroShoe"/></g>
+          </svg>
+          <div class="disc" id="disc"><div><small>retail</small><span id="discPrice">$180</span></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="pick">
+          <div class="cwname"><small>Colourway</small><span id="cwName">Infrared</span></div>
+          <div class="swatches" id="swatches"></div>
+        </div>
+        <div class="count" id="countdown">
+          <div><b id="cd0">00</b><span class="mono">days</span></div>
+          <div><b id="cd1">00</b><span class="mono">hrs</span></div>
+          <div><b id="cd2">00</b><span class="mono">min</span></div>
+          <div><b id="cd3">00</b><span class="mono">sec</span></div>
+        </div>
+        <div class="countcap mono"><span id="relLong">Online raffle · 10 Oct</span><span>Limited pairs</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="buy">
+  <div class="wrap buygrid">
+    <div data-r>
+      <div class="kick mono">Reserve your pair</div>
+      <h2 id="buyTitle">Pick it.<br>Lace it.</h2>
+    </div>
+    <div>
+      <div class="pricerow" data-r>
+        <div class="price" id="price">$180<s>$210</s></div>
+        <div class="stock"><i></i><span id="stock">412 pairs left</span></div>
+      </div>
+      <div class="sizehead mono" data-r><span>Select size · US men</span><u>Size guide</u></div>
+      <div class="sizes" id="sizes" data-r></div>
+      <div class="addrow" data-r>
+        <button class="add" id="addBtn"><span id="addLabel">Add to bag</span><em id="addPrice">$180</em></button>
+        <button class="fav" id="favBtn" aria-label="Save"><svg width="22" height="22" viewBox="0 0 24 24"><path id="heart" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="none" stroke="#121212" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      </div>
+      <div class="perks" data-r>
+        <div><b>Free shipping</b>on release day</div>
+        <div><b>30-day returns</b>unworn, in box</div>
+        <div><b>1 pair</b>per customer</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="look" id="look">
+  <div class="marq"><div id="marq"></div></div>
+  <div class="tiles"><div class="track" id="track"></div></div>
+</div>
+
+<section id="details">
+  <div class="wrap">
+    <div data-r>
+      <div class="kick mono">Details</div>
+      <h2>Built for<br>the long way home.</h2>
+    </div>
+    <div class="feat" id="feat"></div>
+    <div class="specs" id="specs"></div>
+  </div>
+</section>
+
+<section id="reviews">
+  <div class="wrap">
+    <div data-r>
+      <div class="kick mono">Reviews</div>
+      <h2>People who<br>got a pair.</h2>
+    </div>
+    <div class="score" data-r><b>4.9</b><div><div class="stars">★★★★★</div>1,284 verified reviews<br>94% say true to size</div></div>
+    <div class="revs" id="revs"></div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="alert" data-r>
+      <h3>Don't miss the drop.</h3>
+      <p>One email when the raffle opens. Nothing else, ever.</p>
+      <div class="form"><input placeholder="your@email.com" aria-label="Email"><button id="notify">Notify me</button></div>
+    </div>
+    <div class="cols">
+      <div><span class="mono">Shop</span><a href="#buy">Release</a><a href="#look">Lookbook</a><a href="#details">Archive</a></div>
+      <div><span class="mono">Help</span><a href="#buy">Sizing</a><a href="#buy">Shipping</a><a href="#buy">Returns</a></div>
+      <div><span class="mono">Follow</span><a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">Instagram</a><a href="#top">TikTok</a><a href="#top">Journal</a></div>
+    </div>
+    <div class="bigword" id="bigword">HALFTONE</div>
+    <div class="credit"><span id="copy">© 2026 Halftone Supply Co.</span><span>free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></span></div>
+  </div>
+</footer>
+
+<div id="toast"><svg viewBox="40 40 545 230"><use href="#shoe" width="600" height="300" id="toastShoe"/></svg><span id="toastText"></span></div>
+
+<script>
+// ===== Sneaker Drop · free code by @sicscod.drops =====
+// Change brand / model in the link: ?brand=KORE&model=Drift%2007&price=160&date=2026-12-24T10:00
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  brand: P.get("brand") || "HALFTONE",
+  model: P.get("model") || "Volta 01",           // last word gets the outline style
+  price: +(P.get("price") || 180),
+  oldPrice: 210,                                    // crossed-out price (0 to hide)
+  currency: "$",
+  release: P.get("date") || "2026-10-10T10:00:00",  // local time; if it's in the past the timer restarts as a demo
+  pairsLeft: 412,
+  sizes: ["6", "6.5", "7", "7.5", "8", "8.5", "9", "9.5", "10", "10.5", "11", "12"],
+  soldOut: ["6.5", "11"],
+  // up: upper · ov: toe + heel overlays · mg: mudguard · ms: midsole · os: outsole · la: laces · lg: logo dots · ln: lining · bg: lookbook tile
+  colourways: [
+    { name: "Infrared",   up: "#F3F1EC", ov: "#FF4D2E", mg: "#2A2826", ms: "#F6F2E9", os: "#FF4D2E", la: "#F6F2E9", lg: "#FF4D2E", ln: "#2A2826", bg: "#FFD9CF" },
+    { name: "Bone / Volt", up: "#E7DFCF", ov: "#C9BDA5", mg: "#B3A68C", ms: "#F8F4EA", os: "#1B1B1B", la: "#F8F4EA", lg: "#D5FF3A", ln: "#D5FF3A", bg: "#ECF7B8" },
+    { name: "Midnight",   up: "#1F2638", ov: "#0F131D", mg: "#363F57", ms: "#ECE7DC", os: "#6FB1FF", la: "#ECE7DC", lg: "#6FB1FF", ln: "#6FB1FF", bg: "#CFE2FF" },
+    { name: "Moss / Gum", up: "#6E7653", ov: "#454B33", mg: "#8B9168", ms: "#EFE6D0", os: "#B9813F", la: "#EFE6D0", lg: "#F2A541", ln: "#F2A541", bg: "#E4E6CF" }
+  ],
+  marquee: ["Volta 01", "Out 10.10", "Raffle only", "Limited pairs"],
+  features: [
+    ["Split-density foam", "Soft under the heel, snappy under the toes. 38 mm stack that doesn't feel like a brick."],
+    ["Ripstop + suede", "Recycled ripstop upper with suede overlays that age the way they should."],
+    ["Hex-waffle rubber", "Full-length outsole that grips wet city stone and still lasts a year of daily wear."]
+  ],
+  specs: [["Upper", "Recycled ripstop, suede"], ["Midsole", "Split-density EVA"], ["Stack / drop", "38 mm / 8 mm"], ["Weight", "312 g · US 9"], ["Outsole", "Hex-waffle rubber"], ["Style code", "HT-01-013"]],
+  reviews: [
+    ["Delly", "US 7 · Infrared", "Wore them all weekend straight out of the box, zero break-in. The orange is louder in person, in the best way. Got stopped twice on the metro.", "True to size"],
+    ["@lowtop.club", "US 10 · Midnight", "That midsole is the real deal. Soft but not mushy, and the suede toe cap already has that nice worn look after a week.", "True to size"],
+    ["Verified buyer", "US 9 · Moss / Gum", "Gum sole with the olive upper is exactly what I wanted for autumn. Runs a touch narrow, I'd go half up if you have wide feet.", "Half size up"]
+  ]
+};
+
+// ---------- setup ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const money = n => CONFIG.currency + n;
+const words = CONFIG.model.trim().split(/\s+/);
+$("m1").textContent = words.length > 1 ? words.slice(0, -1).join(" ") : words[0];
+$("m2").textContent = words.length > 1 ? words[words.length - 1] : "";
+$("brandName").textContent = CONFIG.brand.toUpperCase();
+$("bigword").textContent = CONFIG.brand.toUpperCase();
+$("copy").textContent = `© ${new Date().getFullYear()} ${CONFIG.brand[0].toUpperCase() + CONFIG.brand.slice(1).toLowerCase()} Supply Co.`;
+document.title = `${CONFIG.brand} ${CONFIG.model} — release`;
+$("discPrice").textContent = money(CONFIG.price);
+$("price").innerHTML = money(CONFIG.price) + (CONFIG.oldPrice ? `<s>${money(CONFIG.oldPrice)}</s>` : "");
+$("addPrice").textContent = money(CONFIG.price);
+$("heelWord").textContent = CONFIG.brand.slice(0, 2).toUpperCase() + "—01";
+
+// release date (if it already passed, run a demo timer 3d 7h ahead so the page always looks live)
+const t0Wall = Date.now();
+let release = new Date(CONFIG.release).getTime();
+if (!(release > t0Wall)) release = t0Wall + (3 * 24 + 7) * 3600e3 + 42 * 60e3 + 18e3;
+const rd = new Date(release), pad = n => String(n).padStart(2, "0");
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+$("relShort").textContent = `Release ${pad(rd.getDate())}.${pad(rd.getMonth() + 1)} · ${pad(rd.getHours())}:${pad(rd.getMinutes())}`;
+$("relLong").textContent = `Online raffle · ${rd.getDate()} ${MON[rd.getMonth()]}`;
+CONFIG.marquee[0] = CONFIG.model;
+CONFIG.marquee[1] = `Out ${pad(rd.getDate())}.${pad(rd.getMonth() + 1)}`;
+
+// halftone dots + laces + tread drawn into the shoe symbol once
+const NS = "http://www.w3.org/2000/svg";
+const mk = (tag, a, parent) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); parent.appendChild(e); return e; };
+for (let i = 0; i < 12; i++) for (let j = 0; j < 5; j++) {
+  const x = 146 + i * 17 + (j % 2) * 8.5, y = 120 + j * 13 + i * 2.6;
+  const r = 5.6 * (1 - i / 12) * (1 - Math.abs(j - 2) * .16);
+  if (r > .9 && y < 172) mk("circle", { cx: x, cy: y, r: r.toFixed(2) }, $("dots"));
+}
+const L = $("laces");
+for (let i = 0; i < 6; i++) {
+  const k = i / 5, x = 252 + k * 160, y = 76 + k * 60;
+  mk("path", { d: `M${x - 10},${y - 9} L${x + 14},${y + 2}`, stroke: "#121212", "stroke-width": 9.5, "stroke-linecap": "round" }, L);
+  mk("path", { d: `M${x - 10},${y - 9} L${x + 14},${y + 2}`, stroke: "var(--la)", "stroke-width": 6, "stroke-linecap": "round" }, L);
+  mk("circle", { cx: x - 2, cy: y + 9, r: 3.2, fill: "#121212" }, L);
+}
+let tr = ""; for (let x = 70; x < 556; x += 13) tr += `M${x},257 L${x + 5},263 `;
+$("tread").setAttribute("d", tr);
+
+// colourways
+const cw = CONFIG.colourways, KEYS = ["up", "ov", "mg", "ms", "os", "la", "lg", "ln"];
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+let cur = 0, shown = 0, from = KEYS.map(k => hex(cw[0][k])), switchAt = -1e9;
+$("swatches").innerHTML = cw.map((c, i) => `<button class="sw${i ? "" : " on"}" data-i="${i}" aria-label="${esc(c.name)}"><span style="background:${c.up};--b:${c.ov}"></span></button>`).join("");
+const applyVars = (el, c) => KEYS.forEach(k => el.style.setProperty("--" + k, c[k]));
+applyVars($("shoeG"), cw[0]); applyVars($("toastShoe"), cw[0]);
+document.documentElement.style.setProperty("--acc", cw[0].lg);
+document.querySelectorAll(".sw").forEach(b => b.addEventListener("click", () => {
+  const i = +b.dataset.i; if (i === cur) return;
+  document.querySelectorAll(".sw").forEach(s => s.classList.toggle("on", s === b));
+  from = KEYS.map(k => hex(cw[cur][k]));          // spin-flip: colours swap while the shoe is edge-on
+  cur = i; switchAt = performance.now();
+  $("cwName").textContent = cw[i].name;
+}));
+
+// sizes
+$("sizes").innerHTML = CONFIG.sizes.map(s => `<button class="size${CONFIG.soldOut.includes(s) ? " sold" : ""}" data-s="${s}">${s}</button>`).join("");
+let size = null, shakeAt = -1e9;
+document.querySelectorAll(".size").forEach(b => b.addEventListener("click", () => {
+  if (b.classList.contains("sold")) return toast(`US ${b.dataset.s} is gone. Try another size`);
+  document.querySelectorAll(".size").forEach(s => s.classList.toggle("on", s === b));
+  size = b.dataset.s;
+}));
+
+// bag
+let bag = 0, bumpAt = -1e9, addedAt = -1e9, toastAt = -1e9, pairs = CONFIG.pairsLeft, faved = false;
+$("stock").textContent = `${pairs} pairs left`;
+$("addBtn").addEventListener("click", () => {
+  if (!size) { shakeAt = performance.now(); return toast("Pick your size first"); }
+  bag++; pairs--; $("count").textContent = bag; $("stock").textContent = `${pairs} pairs left`;
+  bumpAt = addedAt = performance.now();
+  toast(`${CONFIG.model} · ${cw[cur].name} · US ${size}`);
+});
+$("bagBtn").addEventListener("click", () => toast(bag ? `${bag} pair${bag > 1 ? "s" : ""} reserved · ${money(bag * CONFIG.price)}` : "Your bag is empty"));
+$("favBtn").addEventListener("click", () => { faved = !faved; $("heart").setAttribute("fill", faved ? "#121212" : "none"); toast(faved ? "Saved to your wishlist" : "Removed from wishlist"); });
+$("notify").addEventListener("click", () => toast("You're on the list. See you on drop day"));
+function toast(t) { $("toastText").textContent = t; applyVars($("toastShoe"), cw[cur]); toastAt = performance.now(); }
+
+// lookbook, details, reviews
+const mw = CONFIG.marquee.map(w => `${esc(w)}<em>✶</em>`).join("");
+$("marq").innerHTML = mw.repeat(6);
+const LOOKS = [["Look 01", "Rooftop, 7 am"], ["Look 02", "Night bus"], ["Look 03", "Rain test"], ["Look 04", "Studio"]];
+const tileHTML = cw.map((c, i) => {
+  const vars = KEYS.map(k => `--${k}:${c[k]}`).join(";");
+  return `<div class="tile" style="background:${c.bg}"><span class="tn mono">${LOOKS[i % 4][0]} · ${LOOKS[i % 4][1]}</span>
+    <svg viewBox="0 0 600 300" style="${vars};transform:rotate(${[-8, 6, -4, 9][i % 4]}deg)${i % 2 ? " scaleX(-1)" : ""}"><use href="#shoe" width="600" height="300"/></svg>
+    <div class="tc"><b>${esc(c.name)}</b><span class="mono">${money(CONFIG.price)}</span></div></div>`;
+}).join("");
+$("track").innerHTML = tileHTML + tileHTML + tileHTML;
+$("feat").innerHTML = CONFIG.features.map(([h, p], i) => `<div class="fcard" data-r><div class="n">0${i + 1}</div><div><h3>${esc(h)}</h3><p>${esc(p)}</p></div></div>`).join("");
+$("specs").innerHTML = CONFIG.specs.map(([a, b]) => `<div class="spec" data-r><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join("");
+$("revs").innerHTML = CONFIG.reviews.map(([n, m, t, f]) => `<div class="rev" data-r><div class="stars">★★★★★</div><p>“${esc(t)}”</p>
+  <div class="who"><i>${esc(n.replace("@", "")[0].toUpperCase())}</i><div><b>${esc(n)}</b><span>${esc(m)}</span></div><span class="fit mono">${esc(f)}</span></div></div>`).join("");
+
+// ---------- one loop for every bit of motion ----------
+const reveal = [...document.querySelectorAll("[data-r]")];
+const clamp = x => Math.max(0, Math.min(1, x));
+const ease = x => 1 - Math.pow(1 - x, 3);
+const mix = (a, b, k) => "#" + a.map((v, i) => Math.round(v + (b[i] - v) * k).toString(16).padStart(2, "0")).join("");
+let start = null;
+function frame(now) {
+  if (start === null) start = now;
+  const t = (now - start) / 1000, vh = innerHeight;
+
+  // shoe: drop-in, float, tilt, slow yaw; colour change = a quick flip
+  const intro = ease(clamp(t / 1.1));
+  const sk = (now - switchAt) / 560, flip = sk < 1 ? Math.sin(sk * Math.PI) : 0;
+  const yaw = Math.cos(t * .9) * .07 + flip * .86;
+  const sx = 1 - yaw;
+  const y = Math.sin(t * 1.6) * 8 - (1 - intro) * 120;
+  const rot = -7 + Math.sin(t * 1.1) * 3.2 - (1 - intro) * 18 + flip * 6;
+  $("shoeG").setAttribute("transform", `translate(300 ${150 + y}) rotate(${rot}) scale(${sx.toFixed(3)} 1) skewY(${(Math.sin(t * .9) * 1.5).toFixed(2)}) translate(-300 -150)`);
+  $("shadow").setAttribute("rx", (215 - y * 1.6) * (1 - yaw * .5));
+  $("shadow").setAttribute("opacity", (.18 - y * .004) * intro);
+  const ck = sk < 0 ? 1 : clamp((sk - .3) / .4);        // recolour while edge-on
+  const target = cw[cur], cv = {};
+  KEYS.forEach((k, i) => cv[k] = ck >= 1 ? target[k] : mix(from[i], hex(target[k]), ck));
+  applyVars($("shoeG"), cv);
+  document.documentElement.style.setProperty("--acc", cv.lg);   // accent follows the logo colour
+  $("disc").style.transform = `rotate(${(t * 22) % 360}deg) scale(${intro})`;
+  $("dot").style.opacity = .35 + .65 * Math.abs(Math.sin(t * 2.4));
+
+  // countdown (virtual-time safe: wall clock at load + performance.now)
+  const left = Math.max(0, release - (t0Wall + (now - start)));
+  const d = Math.floor(left / 864e5), h = Math.floor(left / 36e5) % 24, m = Math.floor(left / 6e4) % 60, s = Math.floor(left / 1e3) % 60;
+  [d, h, m, s].forEach((v, i) => { const e = $("cd" + i), str = pad(v); if (e.textContent !== str) e.textContent = str; });
+
+  // marquee + lookbook rail
+  const mq = $("marq"); mq.style.transform = `translateX(${-(t * 70 % (mq.scrollWidth / 6))}px)`;
+  const tw = $("track").scrollWidth / 3; $("track").style.transform = `translateX(${-tw + (t * 45 % tw)}px)`;
+
+  // scroll reveals
+  for (const el of reveal) {
+    const top = el.getBoundingClientRect().top, k = ease(clamp((vh - top - 8) / (vh * .3)));
+    el.style.opacity = k; el.style.transform = `translateY(${(1 - k) * 30}px)`;
+  }
+
+  // size grid shake, bag bump, add button flash, toast
+  const sh = (now - shakeAt) / 450;
+  if (sh < 1) $("sizes").style.transform = `translateX(${Math.sin(sh * 28) * 7 * (1 - sh)}px)`;
+  const b = clamp(1 - (now - bumpAt) / 380);
+  $("count").style.transform = `scale(${1 + Math.sin(b * Math.PI) * .7})`;
+  $("count").style.background = b > 0 ? "var(--acc)" : "";
+  $("count").style.color = b > 0 ? "#121212" : "";
+  const ad = (now - addedAt) / 1000;
+  const lab = ad < 1.8 ? "Added to bag ✓" : "Add to bag";
+  if ($("addLabel").textContent !== lab) $("addLabel").textContent = lab;
+  $("addBtn").style.transform = `scale(${1 - .04 * Math.sin(clamp(ad / .25) * Math.PI)})`;
+  const ta = (now - toastAt) / 1000, tk = ta < .3 ? ease(ta / .3) : ta < 2.4 ? 1 : clamp(1 - (ta - 2.4) / .3);
+  $("toast").style.opacity = tk; $("toast").style.transform = `translate(-50%,${(1 - tk) * 24}px)`;
+
+  requestAnimationFrame(frame);
+}
+document.fonts.ready.then(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>
