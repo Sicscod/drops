@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ripples</title>
+<meta name="description" content="A dark glossy water surface over glowing neon. Drag to make real ripples, tap to drop a droplet. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=block">
+<style>
+html,body{height:100%;margin:0;background:#020407;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.ui{position:fixed;left:0;right:0;pointer-events:none;font:400 10.5px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;color:#7f8c93}
+.top{top:0;display:flex;justify-content:space-between;padding:max(18px,env(safe-area-inset-top)) 20px 0}
+.top b{font-weight:500;color:#e6eef0}
+.hint{bottom:48px;text-align:center;font-size:11.5px;letter-spacing:.22em;color:#b9c6cb}
+.credit{bottom:max(16px,env(safe-area-inset-bottom));text-align:center;font-size:10px;letter-spacing:.1em;text-transform:none;color:#5f6b71;pointer-events:auto}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="ui top"><span><b>Ripples</b> &nbsp;/ surface</span><span id="read">hue 190°</span></div>
+<div class="ui hint" id="hint"></div>
+<div class="ui credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Ripples · free code by @sicscod.drops =====
+// Change it from the link: yoursite/?text=hello%20Delly&hue=330   (?hue=cycle slowly shifts the colour)
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  text: url.get("text") || "touch the water",   // the neon word under the water
+  floor: url.get("floor") || "lane 15 · deep end", // small print on the pool floor ("" to hide)
+  hue: url.get("hue") || "cycle",   // 0..360 for a fixed colour, or "cycle"
+  cycleSpeed: 6,                    // degrees per second when cycling
+  startHue: 188,                    // aqua
+  cell: 4,                          // simulation cell size in CSS px (bigger = faster, blurrier)
+  damping: 0.988,                   // 0.97 thick syrup .. 0.995 rings travel forever
+  refraction: 34,                   // how much the waves bend the light (px)
+  gloss: 1.0,                       // specular highlights
+  dropSize: 9,                      // tap droplet radius in cells
+  hint: url.get("hint") || "drag · tap to drop"
+};
+
+const cv = document.getElementById("c");
+const gl = cv.getContext("webgl2", { antialias: false, alpha: false, premultipliedAlpha: false });
+const hintEl = document.getElementById("hint"), readEl = document.getElementById("read");
+hintEl.textContent = CONFIG.hint;
+if (!gl) { hintEl.textContent = "this browser has no WebGL2"; throw new Error("no webgl2"); }
+
+/* ---------- shaders ---------- */
+const VS = `#version 300 es
+in vec2 p; out vec2 uv;
+void main(){ uv = vec2(p.x*.5+.5, .5-p.y*.5); gl_Position = vec4(p,0.,1.); }`;
+const FS = `#version 300 es
+precision highp float;
+in vec2 uv; out vec4 o;
+uniform sampler2D uBase, uH;
+uniform vec2 uRes, uHScale, uHTexel, uHOff;
+uniform float uT, uHue, uRefr, uGloss;
+vec3 hsv(float h, float s, float v){ vec3 k = clamp(abs(mod(h*6.+vec3(0.,4.,2.),6.)-3.)-1.,0.,1.); return v*mix(vec3(1.),k,s); }
+float H(vec2 q){ return texture(uH, q*uHScale + uHOff).r; }
+float caust(vec2 p, float t){
+  vec2 q = p;
+  for (int k = 0; k < 3; k++){
+    float f = float(k);
+    q += .55*vec2(sin(q.y*1.6 + t*.7 + f*1.3), cos(q.x*1.8 - t*.6 + f*2.1));
+  }
+  float w = sin(q.x*1.7)*sin(q.y*1.7);
+  return pow(1. - abs(w), 9.);
+}
+void main(){
+  vec2 px = uHTexel / uHScale;                 // one sim cell in screen uv
+  float h = H(uv);
+  vec2 g = vec2(H(uv+vec2(px.x,0.)) - H(uv-vec2(px.x,0.)), H(uv+vec2(0.,px.y)) - H(uv-vec2(0.,px.y)));
+  vec2 s = uv*uRes/min(uRes.x,uRes.y);         // aspect-correct coords
+  g += .010*vec2(sin(s.y*21.+uT*1.3) + .6*sin((s.x+s.y)*33.-uT*1.7), cos(s.x*25.-uT*1.1) + .6*cos((s.x-s.y)*29.+uT*1.4));
+  vec3 n = normalize(vec3(-g*2.2, 1.));
+  vec2 ruv = clamp(uv + n.xy*uRefr/uRes, 0., 1.);
+  vec4 b = texture(uBase, ruv);
+  vec3 c1 = hsv(uHue, .78, 1.), c2 = hsv(uHue + .09, .55, 1.), deep = hsv(uHue + .03, .7, .05);
+  vec3 col = deep*(1.1 - .5*length(uv-.5));
+  col += c2*b.g*.42;                            // pool tiles
+  col += c1*b.r*1.25;                           // neon glow
+  col += mix(c1, vec3(1.), .55)*b.b*1.05;       // neon core
+  vec2 cs = (ruv*uRes/min(uRes.x,uRes.y))*7.;
+  float ca = caust(cs, uT*.9) + .6*caust(cs*1.6+3.1, uT*1.1);
+  col += c2*ca*.075*(1. + 2.5*b.r);
+  col *= vec3(.86,.95,1.);                      // water absorbs a little red
+  vec3 R = reflect(vec3(0.,0.,-1.), n);
+  vec3 L1 = normalize(vec3(-.42,-.62,1.)), L2 = normalize(vec3(.5,.35,1.));
+  float sp = pow(max(dot(R,L1),0.), 220.)*1.6 + pow(max(dot(R,L2),0.), 260.)*.7;
+  float sheen = pow(max(dot(R,L1),0.), 14.)*.10;
+  float slope = clamp(length(g)*2.5, 0., 1.);
+  vec3 sky = mix(vec3(.05,.07,.09), mix(c1, vec3(1.), .7)*.35, clamp(R.y*-.8+.5,0.,1.));
+  col += sky*slope*.55 + vec3(.9,.97,1.)*sp*uGloss + mix(c2,vec3(1.),.5)*sheen*uGloss;
+  col += c1*max(-h,0.)*.04;                     // tiny glow in the troughs
+  col *= 1. - .55*pow(length((uv-.5)*vec2(1.,1.15)), 2.4);
+  o = vec4(pow(col, vec3(.95)), 1.);
+}`;
+function sh(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog); gl.useProgram(prog);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const ap = gl.getAttribLocation(prog, "p"); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
+const U = {}; ["uBase", "uH", "uRes", "uHScale", "uHTexel", "uHOff", "uT", "uHue", "uRefr", "uGloss"].forEach(k => U[k] = gl.getUniformLocation(prog, k));
+function tex(unit) { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; }
+const baseTex = tex(0), hTex = tex(1);
+gl.uniform1i(U.uBase, 0); gl.uniform1i(U.uH, 1);
+
+/* ---------- the neon floor (drawn once into a canvas: R = glow, G = tiles, B = core) ---------- */
+const base = document.createElement("canvas"), bx = base.getContext("2d");
+let W = 0, Hh = 0, dpr = 1, baseDirty = true;
+function drawBase() {
+  base.width = cv.width; base.height = cv.height;
+  bx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  bx.fillStyle = "#000"; bx.fillRect(0, 0, W, Hh);
+  bx.globalCompositeOperation = "lighter";
+  // pool tiles
+  const t = Math.max(34, Math.min(W, Hh) / 11), ox = (W % t) / 2, oy = (Hh % t) / 2;
+  bx.strokeStyle = "rgba(0,255,0,.55)"; bx.lineWidth = 1.1;
+  bx.beginPath();
+  for (let x = ox; x <= W; x += t) { bx.moveTo(x, 0); bx.lineTo(x, Hh); }
+  for (let y = oy; y <= Hh; y += t) { bx.moveTo(0, y); bx.lineTo(W, y); }
+  bx.stroke();
+  bx.fillStyle = "rgba(0,255,0,.05)";                 // a few lighter tiles, like real grout
+  for (let i = 0; i < 26; i++) { const a = Math.sin(i * 91.7) * 43758.5, b = Math.sin(i * 47.3) * 12543.1;
+    bx.fillRect(ox + Math.floor((a - Math.floor(a)) * W / t) * t + 1, oy + Math.floor((b - Math.floor(b)) * Hh / t) * t + 1, t - 2, t - 2); }
+  // the word, auto-fitted into balanced lines
+  const words = CONFIG.text.trim().split(/\s+/);
+  const font = s => `italic 400 ${s}px "Instrument Serif", Georgia, serif`;
+  bx.font = font(100);
+  let best = null;
+  for (let n = 1; n <= Math.min(4, words.length); n++) {
+    const lines = []; let rest = words.slice();
+    for (let l = n; l > 0; l--) { const target = rest.join(" ").length / l; let line = [];
+      while (rest.length > l - 1 && (line.length === 0 || (line.join(" ").length + rest[0].length / 2) < target)) line.push(rest.shift());
+      lines.push(line.join(" ")); }
+    const wMax = Math.max(...lines.map(s => bx.measureText(s).width));
+    const size = Math.min(100 * W * .84 / wMax, Hh * .5 / (n * .92));
+    if (!best || size > best.size * 1.04) best = { lines, size };
+  }
+  const fs = Math.min(best.size, 230), lh = fs * .9, y0 = Hh * .47 - (best.lines.length - 1) * lh / 2;
+  bx.font = font(fs); bx.textAlign = "center"; bx.textBaseline = "middle";
+  const words2 = (col, blur, alpha, lw) => { bx.shadowColor = col; bx.shadowBlur = blur; bx.globalAlpha = alpha;
+    best.lines.forEach((s, i) => { if (lw) { bx.lineWidth = lw; bx.strokeStyle = col; bx.strokeText(s, W / 2, y0 + i * lh); } bx.fillStyle = col; bx.fillText(s, W / 2, y0 + i * lh); }); };
+  words2("#f00", fs * .55, .55, 0); words2("#f00", fs * .18, .8, 0); words2("#f00", 4, 1, fs * .02);
+  words2("#00f", 2, .95, 0);
+  bx.globalAlpha = 1; bx.shadowBlur = 0;
+  if (CONFIG.floor) {                                  // small print on the pool floor
+    const fy = y0 + (best.lines.length - 1) * lh + fs * .78;
+    bx.font = `500 ${Math.max(10, t * .26)}px "JetBrains Mono", monospace`; bx.fillStyle = "rgba(255,0,255,.55)"; bx.shadowColor = "#f00"; bx.shadowBlur = 10;
+    bx.fillText(CONFIG.floor.toUpperCase().split("").join("\u200a"), W / 2, Math.min(fy, Hh - t * 2.4));
+    bx.shadowBlur = 0;
+  }
+  bx.globalCompositeOperation = "source-over";
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, baseTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, base);
+}
+document.fonts && document.fonts.load('italic 100px "Instrument Serif"').then(() => baseDirty = true, () => {});
+
+/* ---------- the water: 2D wave equation on a downscaled height field ---------- */
+let gw = 0, gh = 0, cell = CONFIG.cell, A, B;
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; Hh = innerHeight;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
+  cell = Math.max(CONFIG.cell, Math.ceil(Math.min(W, Hh) / 160));
+  gw = Math.ceil(W / cell) + 2; gh = Math.ceil(Hh / cell) + 2;
+  A = new Float32Array(gw * gh); B = new Float32Array(gw * gh);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, hTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, gw, gh, 0, gl.RED, gl.FLOAT, A);
+  gl.viewport(0, 0, cv.width, cv.height);
+  baseDirty = true;
+}
+function step() {
+  const d = CONFIG.damping;
+  for (let y = 1; y < gh - 1; y++) for (let x = 1, i = y * gw + 1; x < gw - 1; x++, i++)
+    B[i] = ((A[i - 1] + A[i + 1] + A[i - gw] + A[i + gw]) * .5 - B[i]) * d;
+  const t = A; A = B; B = t;
+}
+function poke(px, py, r, amp) {                       // px,py in CSS px; r in cells
+  const cx = px / cell + 1, cy = py / cell + 1, R = Math.ceil(r);
+  for (let y = Math.max(1, Math.floor(cy - R)); y <= Math.min(gh - 2, Math.ceil(cy + R)); y++)
+    for (let x = Math.max(1, Math.floor(cx - R)); x <= Math.min(gw - 2, Math.ceil(cx + R)); x++) {
+      const d = Math.hypot(x - cx, y - cy) / r; if (d >= 1) continue;
+      A[y * gw + x] += amp * (.5 + .5 * Math.cos(d * Math.PI));
+    }
+}
+const later = [];                                     // scheduled pokes, run from the rAF loop
+function droplet(x, y, now) {
+  poke(x, y, CONFIG.dropSize, -2.6);
+  later.push({ t: now + 170, x, y, r: CONFIG.dropSize * .45, a: 1.6 });      // the rebound jet
+  for (let k = 0; k < 5; k++) { const a = Math.random() * 6.283, d = 26 + Math.random() * 40;
+    later.push({ t: now + 300 + Math.random() * 380, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, r: 2.2, a: -.7 }); }
+  hueKick += .07;
+}
+
+/* ---------- input ---------- */
+let down = null, last = null, touched = false;
+function at(e) { return { x: e.clientX, y: e.clientY, t: performance.now() }; }
+cv.addEventListener("pointerdown", e => { down = at(e); last = down; down.moved = 0; touched = true; poke(down.x, down.y, 3, -.5); });
+addEventListener("pointermove", e => {
+  if (!down) return;
+  const p = at(e), dx = p.x - last.x, dy = p.y - last.y, dist = Math.hypot(dx, dy);
+  down.moved += dist;
+  const n = Math.max(1, Math.ceil(dist / (cell * 1.5)));
+  const amp = -Math.min(.9, .18 + dist * .012);
+  for (let k = 1; k <= n; k++) poke(last.x + dx * k / n, last.y + dy * k / n, 3.2, amp / Math.sqrt(n) * 1.05);
+  last = p;
+});
+const up = e => { if (!down) return; const p = at(e); if (down.moved < 12 && p.t - down.t < 350) droplet(p.x, p.y, p.t); down = null; };
+addEventListener("pointerup", up); addEventListener("pointercancel", () => down = null);
+
+/* ---------- one loop ---------- */
+let prev = performance.now(), acc = 0, hintA = 0, hueKick = 0, hueOff = 0;
+const t0 = prev, STEP = 1000 / 100;
+resize(); addEventListener("resize", resize);
+later.push({ t: t0 + 500, x: innerWidth * .5, y: innerHeight * .62, r: 6, a: -1.6 });   // a first drip so it's alive
+function frame(now) {
+  const dt = Math.min(100, now - prev); prev = now;
+  if (baseDirty) { baseDirty = false; drawBase(); }
+  for (let i = later.length - 1; i >= 0; i--) if (now >= later[i].t) { const q = later[i]; poke(q.x, q.y, q.r, q.a); later.splice(i, 1); }
+  acc += dt; let n = 0;
+  while (acc >= STEP && n < 4) { step(); acc -= STEP; n++; }
+  if (n === 4) acc = 0;
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, hTex);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gw, gh, gl.RED, gl.FLOAT, A);
+  const sec = (now - t0) / 1000;
+  hueOff += (hueKick - hueOff) * Math.min(1, dt / 400);
+  let hue = CONFIG.hue === "cycle" ? CONFIG.startHue + sec * CONFIG.cycleSpeed : (+CONFIG.hue || 0);
+  hue = ((hue / 360 + hueOff) % 1 + 1) % 1;
+  gl.uniform2f(U.uRes, cv.width, cv.height);
+  gl.uniform2f(U.uHScale, (W / cell) / gw, (Hh / cell) / gh);
+  gl.uniform2f(U.uHOff, 1.5 / gw, 1.5 / gh);
+  gl.uniform2f(U.uHTexel, 1 / gw, 1 / gh);
+  gl.uniform1f(U.uT, sec); gl.uniform1f(U.uHue, hue);
+  gl.uniform1f(U.uRefr, CONFIG.refraction * dpr); gl.uniform1f(U.uGloss, CONFIG.gloss);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  readEl.textContent = "hue " + String(Math.round(hue * 360)).padStart(3, "0") + "°";
+  hintA += ((touched ? 0 : 1) - hintA) * Math.min(1, dt / 500);
+  hintEl.style.opacity = (Math.min(1, sec / .8) * hintA).toFixed(3);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
