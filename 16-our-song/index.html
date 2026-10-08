@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>our song</title>
+<meta name="description" content="A tiny music player made for one person. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=block">
+<style>
+:root{--ink:#f4ece6;--dim:#8f8079;--line:#2a2220;--bg:#0b0807;--acc:#ff6f86}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{font:400 14px "Geist",system-ui,sans-serif}
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+.app{position:relative;height:100%;max-width:400px;margin:0 auto;padding:16px 22px 12px;display:flex;flex-direction:column;opacity:0}
+.top{display:flex;justify-content:space-between;align-items:center;font:500 10.5px "Geist",sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+.top b{font-weight:500;color:var(--ink);letter-spacing:.18em}
+.disc{position:relative;flex:1 1 auto;min-height:170px;max-height:300px}
+#vinyl{position:absolute;inset:0;width:100%;height:100%}
+.meta{display:flex;justify-content:space-between;align-items:flex-end;margin-top:2px}
+h1{margin:0;font:400 italic 38px/1 "Instrument Serif",serif;letter-spacing:-.01em}
+.by{margin:6px 0 0;color:var(--dim);font-size:13px}
+.by span{color:var(--ink)}
+.lyrics{position:relative;height:78px;margin:14px 0 6px;overflow:hidden;
+  -webkit-mask:linear-gradient(transparent,#000 22%,#000 78%,transparent);mask:linear-gradient(transparent,#000 22%,#000 78%,transparent)}
+.rail{position:absolute;left:0;right:0;top:0}
+.ln{height:26px;line-height:26px;font:400 19px "Instrument Serif",serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#5c504b;
+  -webkit-background-clip:text;background-clip:text}
+.bar{position:relative;height:3px;background:var(--line);border-radius:2px;margin-top:8px}
+.fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--ink);border-radius:2px}
+.knob{position:absolute;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;background:var(--ink)}
+.times{display:flex;justify-content:space-between;margin-top:8px;font:400 11px "Geist Mono",monospace;color:var(--dim)}
+.ctrl{display:flex;align-items:center;justify-content:space-between;margin:8px 4px 0}
+button{appearance:none;border:0;background:none;color:var(--ink);padding:0;cursor:pointer;display:grid;place-items:center}
+.sm{width:40px;height:40px;color:var(--dim)}
+.sm svg{width:20px;height:20px}
+#play{width:64px;height:64px;border-radius:50%;background:var(--ink);color:var(--bg)}
+#play svg{width:24px;height:24px}
+#heart svg{width:23px;height:23px}
+.credit{margin-top:auto;padding-top:10px;text-align:center;font-size:11px;color:#5e524d}
+.credit a{color:inherit}
+.card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 34px;
+  background:rgba(11,8,7,.965);opacity:0;pointer-events:none;z-index:4}
+.card small{font:500 10.5px "Geist",sans-serif;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+.card p{margin:16px 0 14px;max-width:290px;text-wrap:balance;font:400 italic 40px/1.05 "Instrument Serif",serif}
+.card .to{color:var(--dim);font-size:13px}
+.card .to span{color:var(--ink)}
+.card button{margin-top:26px;font:500 12px "Geist",sans-serif;letter-spacing:.06em;color:var(--ink);border:1px solid #3a302d;border-radius:99px;padding:10px 18px}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="top"><span>now playing</span><b id="side">side a · 01</b></div>
+  <div class="disc"><canvas id="vinyl"></canvas></div>
+  <div class="meta">
+    <div><h1 id="title"></h1><p class="by">for <span id="who"></span></p></div>
+  </div>
+  <div class="lyrics"><div class="rail" id="rail"></div></div>
+  <div class="bar"><div class="fill" id="fill"></div><div class="knob" id="knob"></div></div>
+  <div class="times"><span id="cur">0:00</span><span id="tot">0:00</span></div>
+  <div class="ctrl">
+    <button class="sm" aria-label="repeat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
+    <button class="sm" id="back" aria-label="restart"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg></button>
+    <button id="play" aria-label="play"><svg viewBox="0 0 24 24" fill="currentColor"><path id="pp" d="M8 5v14l11-7z"/></svg></button>
+    <button class="sm" aria-label="next"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg></button>
+    <button class="sm" id="heart" aria-label="love"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path id="hp" d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"/></svg></button>
+  </div>
+  <div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+  <div class="card" id="card">
+    <small>track 01 · on repeat</small>
+    <p id="end"></p>
+    <div class="to">for <span id="who2"></span>, always</div>
+    <button id="again">play it again</button>
+  </div>
+</div>
+<canvas id="fx"></canvas>
+<script>
+// ===== Our Song · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&song=our%20song&lines=line%20one|line%20two&hue=350
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "Delly",
+  song: url.get("song") || "our song",
+  lines: (url.get("lines") || [
+    "the first time you laughed at my joke",
+    "I knew I'd keep it on repeat",
+    "your name is the chorus in my head",
+    "every street feels like a slow song",
+    "you're the melody, I'm just the hum",
+    "stay, I'm not done listening"
+  ].join("|")).split("|").map(s => s.trim()).filter(Boolean),
+  ending: url.get("end") || "every song sounds like you",
+  hue: +(url.get("hue") || 350),   // accent colour, 0..360 (350 rose, 25 amber, 200 blue)
+  lineSec: 1.45,                   // seconds per lyric line
+  bpm: 102                         // how fast the light pulses
+};
+const $ = id => document.getElementById(id);
+const acc = (l, a = 1) => `hsla(${CONFIG.hue},85%,${l}%,${a})`;
+$("title").textContent = CONFIG.song; $("who").textContent = $("who2").textContent = CONFIG.name;
+$("end").textContent = CONFIG.ending; document.title = CONFIG.song + " · for " + CONFIG.name;
+CONFIG.lines.forEach(s => { const d = document.createElement("div"); d.className = "ln"; d.textContent = s; $("rail").appendChild(d); });
+const rows = [...$("rail").children];
+const TOTAL = CONFIG.lines.length * CONFIG.lineSec + .7;
+const mmss = s => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+$("tot").textContent = mmss(TOTAL);
+
+const clamp = x => Math.max(0, Math.min(1, x));
+const ease = x => 1 - Math.pow(1 - clamp(x), 3);
+const PLAY = "M8 5v14l11-7z", PAUSE = "M6.5 5h4v14h-4zM13.5 5h4v14h-4z";
+
+// ---- state ----
+let playing = false, pos = 0, spin = 0, speed = 0, rot = 0, arm = 0, liked = 0, ended = 0, scroll = 0, t0 = null, last = 0;
+const hearts = [];
+$("play").onclick = () => { if (pos >= TOTAL) restart(); playing = !playing; };
+$("back").onclick = () => restart();
+$("again").onclick = () => { restart(); playing = true; };
+$("heart").onclick = () => {
+  liked = 1;
+  const r = $("heart").getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2);
+};
+function restart(){ pos = 0; ended = 0; scroll = 0; }
+function burst(x, y){
+  for (let i = 0; i < 26; i++){
+    const a = -Math.PI / 2 + (Math.random() - .5) * 2.2, v = 90 + Math.random() * 230;
+    hearts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, s: 5 + Math.random() * 8, r: (Math.random() - .5) * .8, life: 0, max: 1.1 + Math.random() * .9, l: 60 + Math.random() * 20 });
+  }
+}
+
+// ---- canvases ----
+const cv = $("vinyl"), g = cv.getContext("2d"), fx = $("fx"), f = fx.getContext("2d");
+let D = 1, CW = 0, CH = 0;
+function resize(){
+  D = Math.min(2, devicePixelRatio || 1);
+  const r = cv.getBoundingClientRect(); CW = r.width; CH = r.height;
+  cv.width = CW * D; cv.height = CH * D;
+  fx.width = innerWidth * D; fx.height = innerHeight * D;
+}
+// soft pseudo-random spectrum: a few sines per bar, pumped on the beat
+function level(i, n, t){
+  const beat = Math.pow(1 - ((t * CONFIG.bpm / 60) % 1), 3);
+  const k = i / n;
+  return .35 + .3 * Math.sin(t * 3.1 + k * 19) * Math.sin(t * 1.7 + k * 7) + .25 * Math.sin(t * 5.3 + k * 41) ** 2 + .35 * beat * (1 - Math.abs(k - .5));
+}
+
+function drawVinyl(t, glow){
+  g.setTransform(D, 0, 0, D, 0, 0); g.clearRect(0, 0, CW, CH);
+  const cx = CW / 2 - 8, cy = CH / 2 + 4, R = Math.min(CW * .36, CH * .42);
+  // glow behind the record
+  const beat = Math.pow(1 - ((t * CONFIG.bpm / 60) % 1), 2.5);
+  const gr = g.createRadialGradient(cx, cy, R * .6, cx, cy, Math.min(R * 1.9, cy, CH - cy, cx));
+  gr.addColorStop(0, acc(55, .26 * glow + .06 + .1 * beat * glow)); gr.addColorStop(1, acc(40, 0));
+  g.fillStyle = gr; g.fillRect(0, 0, CW, CH);
+  // equalizer ring
+  const n = 72;
+  for (let i = 0; i < n; i++){
+    const a = i / n * Math.PI * 2 - Math.PI / 2;
+    const h = 2 + glow * 16 * level(i < n / 2 ? i : n - i, n / 2, t);
+    const r0 = R + 9, r1 = r0 + h;
+    g.strokeStyle = acc(72, .25 + .5 * glow); g.lineWidth = 2; g.lineCap = "round";
+    g.beginPath(); g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); g.stroke();
+  }
+  // the record
+  g.save(); g.translate(cx, cy); g.rotate(rot);
+  g.beginPath(); g.arc(0, 0, R, 0, Math.PI * 2); g.fillStyle = "#0d0b0b"; g.fill();
+  for (let r = R * .38; r < R * .97; r += 2.2){
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2);
+    g.strokeStyle = `rgba(255,240,230,${.025 + .02 * Math.sin(r * .9)})`; g.lineWidth = 1; g.stroke();
+  }
+  g.beginPath(); g.arc(0, 0, R * .66, 0, Math.PI * 2); g.strokeStyle = "rgba(0,0,0,.6)"; g.lineWidth = 2; g.stroke(); // track gap
+  // label
+  const lr = R * .32, lab = g.createRadialGradient(-lr * .3, -lr * .3, 0, 0, 0, lr);
+  lab.addColorStop(0, acc(70)); lab.addColorStop(1, acc(46));
+  g.beginPath(); g.arc(0, 0, lr, 0, Math.PI * 2); g.fillStyle = lab; g.fill();
+  g.fillStyle = "rgba(20,8,10,.85)"; g.textAlign = "center";
+  g.font = `italic ${lr * .36}px "Instrument Serif"`; g.fillText(CONFIG.song, 0, -lr * .22);
+  g.font = `500 ${lr * .14}px "Geist"`; g.fillText(("for " + CONFIG.name).toUpperCase().split("").join(String.fromCharCode(8202)), 0, lr * .42);
+  g.beginPath(); g.arc(0, 0, lr * .09, 0, Math.PI * 2); g.fillStyle = "#0b0807"; g.fill();
+  g.restore();
+  // fixed sheen (light does not spin with the record)
+  g.save(); g.translate(cx, cy);
+  g.beginPath(); g.arc(0, 0, R, 0, Math.PI * 2); g.clip();
+  const sh = g.createConicGradient(-.6, 0, 0);
+  sh.addColorStop(0, "rgba(255,255,255,0)"); sh.addColorStop(.08, "rgba(255,245,240,.13)"); sh.addColorStop(.16, "rgba(255,255,255,0)");
+  sh.addColorStop(.5, "rgba(255,255,255,0)"); sh.addColorStop(.58, "rgba(255,245,240,.08)"); sh.addColorStop(.66, "rgba(255,255,255,0)");
+  g.fillStyle = sh; g.fillRect(-R, -R, R * 2, R * 2);
+  g.restore();
+  // tonearm: rests outside, swings onto the record while playing
+  const px = cx + R * 1.12, py = cy - R * .92, ang = .16 + arm * .36, L = R * 1.32;
+  g.save(); g.translate(px, py); g.rotate(ang);
+  g.strokeStyle = "#cfc4bc"; g.lineWidth = 3; g.lineCap = "round";
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(0, L * .82); g.lineTo(-R * .1, L); g.stroke();
+  g.fillStyle = "#cfc4bc"; g.save(); g.translate(-R * .1, L); g.rotate(.5); g.fillRect(-5, -3, 10, 13); g.restore();
+  g.beginPath(); g.arc(0, 0, 9, 0, Math.PI * 2); g.fillStyle = "#1c1715"; g.fill(); g.strokeStyle = "#3b322e"; g.lineWidth = 1.5; g.stroke();
+  g.beginPath(); g.arc(0, 0, 3.5, 0, Math.PI * 2); g.fillStyle = "#cfc4bc"; g.fill();
+  g.restore();
+}
+
+function heartPath(c, s){
+  c.beginPath(); c.moveTo(0, s * .35);
+  c.bezierCurveTo(-s * 1.1, -s * .35, -s * .45, -s * 1.05, 0, -s * .45);
+  c.bezierCurveTo(s * .45, -s * 1.05, s * 1.1, -s * .35, 0, s * .35); c.fill();
+}
+
+function frame(){
+  const now = performance.now();
+  if (t0 === null){ t0 = now; last = now; }
+  const t = (now - t0) / 1000, dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (Math.abs(innerWidth * D - fx.width) > 1 || Math.abs(cv.getBoundingClientRect().width - CW) > 1) resize();
+
+  if (playing){ pos += dt; if (pos >= TOTAL){ pos = TOTAL; playing = false; } }
+  if (pos >= TOTAL) ended = Math.min(1, ended + dt / .9); else ended = Math.max(0, ended - dt / .4);
+  speed += ((playing ? 1 : 0) - speed) * Math.min(1, dt * (playing ? 2.2 : 1.4));
+  arm += ((playing || pos > 0 && pos < TOTAL ? 1 : 0) - arm) * Math.min(1, dt * 3);
+  rot += speed * dt * Math.PI * 2 * .55;
+
+  $("app").style.opacity = ease(t / .7);
+  drawVinyl(t, speed);
+  $("pp").setAttribute("d", playing ? PAUSE : PLAY);
+  $("play").setAttribute("aria-label", playing ? "pause" : "play");
+  const p = pos / TOTAL;
+  $("fill").style.width = p * 100 + "%"; $("knob").style.left = p * 100 + "%";
+  $("cur").textContent = mmss(pos);
+
+  // lyrics: current line bright with a karaoke wipe, the rest dim
+  const li = Math.min(CONFIG.lines.length - 1, Math.floor(pos / CONFIG.lineSec));
+  const target = pos > 0 ? li : -1;
+  scroll += (target - scroll) * Math.min(1, dt * 7);
+  $("rail").style.transform = `translateY(${26 - scroll * 26}px)`;
+  rows.forEach((el, i) => {
+    const d = Math.abs(i - scroll);
+    const k = pos > 0 && i === li ? clamp((pos - i * CONFIG.lineSec) / (CONFIG.lineSec * .8)) : i < li ? 1 : 0;
+    const on = i === li && pos > 0;
+    el.style.opacity = on ? 1 : clamp(.85 - d * .3);
+    el.style.backgroundImage = on
+      ? `linear-gradient(90deg,#f4ece6 ${k * 100}%,${acc(78)} ${k * 100}%,${acc(78)} ${k * 100 + 6}%,#6d605a ${k * 100 + 6}%)`
+      : "none";
+    el.style.color = on ? "transparent" : i < li ? "#7a6d67" : "#4f4440";
+  });
+
+  // heart button
+  $("hp").setAttribute("fill", liked ? acc(66) : "none");
+  $("hp").setAttribute("stroke", liked ? acc(66) : "currentColor");
+  $("heart").style.color = liked ? acc(66) : "";
+
+  // end card
+  $("card").style.opacity = ease(ended);
+  $("card").style.pointerEvents = ended > .5 ? "auto" : "none";
+  $("card").querySelector("p").style.transform = `translateY(${(1 - ease(ended)) * 14}px)`;
+
+  // heart particles
+  f.setTransform(D, 0, 0, D, 0, 0); f.clearRect(0, 0, innerWidth, innerHeight);
+  for (let i = hearts.length - 1; i >= 0; i--){
+    const h = hearts[i]; h.life += dt;
+    if (h.life > h.max){ hearts.splice(i, 1); continue; }
+    h.vy += 260 * dt; h.vx *= .985; h.x += h.vx * dt; h.y += h.vy * dt;
+    f.save(); f.translate(h.x, h.y); f.rotate(h.r + Math.sin(h.life * 6) * .2);
+    f.globalAlpha = 1 - clamp((h.life - h.max * .5) / (h.max * .5));
+    f.fillStyle = acc(h.l); heartPath(f, h.s); f.restore();
+  }
+  requestAnimationFrame(frame);
+}
+addEventListener("resize", resize);
+resize();
+document.fonts.ready.finally(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>
