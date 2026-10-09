@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Afterglow — one night, sunset to sunrise</title>
+<meta name="description" content="A full one-night festival / event landing page in one HTML file. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Archivo:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+<style>
+:root{--ink:#110C0A;--ink2:#1C1512;--cream:#F4ECDD;--mute:#8C7F74;--sun:#FF5A1F;--yolk:#FFC23A;--rose:#FF6F8E;--line:rgba(244,236,221,.16)}
+*{box-sizing:border-box}
+html{background:var(--ink)}
+body{margin:0;background:var(--ink);color:var(--cream);font-family:"Archivo",system-ui,sans-serif;font-size:15px;line-height:1.5;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+.wrap{max-width:1080px;margin:0 auto;padding:0 18px}
+.mono{font-family:"Space Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.big{font-family:"Big Shoulders Display",Impact,sans-serif;font-weight:900;text-transform:uppercase;line-height:.84;letter-spacing:-.005em}
+
+/* nav */
+nav{position:sticky;top:0;z-index:40;background:var(--ink);border-bottom:1px solid var(--line)}
+nav .wrap{height:52px;display:flex;align-items:center;justify-content:space-between}
+.logo{display:flex;align-items:center;gap:9px;font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:21px;letter-spacing:.06em;text-transform:uppercase}
+.logo i{width:18px;height:18px;border-radius:50%;background:var(--sun);box-shadow:0 0 0 3px var(--ink),0 0 0 4.5px var(--sun)}
+.navcta{height:34px;padding:0 15px;background:var(--cream);color:var(--ink);font-weight:700;font-size:13px;border-radius:2px}
+
+/* hero */
+.hero{position:relative;overflow:hidden;min-height:508px;padding:18px 0 22px}
+#glow{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hero .wrap{position:relative;z-index:2}
+.meta{display:flex;justify-content:space-between;color:var(--cream);opacity:.85}
+h1{margin:10px 0 0;font-size:clamp(108px,31.5vw,330px);color:var(--cream)}
+h1 span{display:block}
+h1 .l2{color:transparent;-webkit-text-stroke:2px var(--cream)}
+.where{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:14px}
+.where .big{font-size:44px;color:var(--yolk)}
+.where .mono{text-align:right;line-height:1.6}
+.count{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:16px}
+.count div{background:var(--cream);color:var(--ink);padding:8px 8px 7px;border-radius:2px}
+.count div:first-child{background:var(--sun);color:var(--ink)}
+.count b{display:block;font-family:"Big Shoulders Display",sans-serif;font-weight:900;font-size:40px;line-height:.9;font-variant-numeric:tabular-nums}
+.count small{font-family:"Space Mono",monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase}
+.ctas{display:flex;gap:8px;margin-top:10px}
+.btn{flex:1;height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-weight:700;font-size:15px;border-radius:2px}
+.btn.solid{background:var(--yolk);color:var(--ink)}
+.btn.ghost{border:1.5px solid var(--cream);flex:.7}
+
+/* ticker */
+.ticker{background:var(--sun);color:var(--ink);overflow:hidden;white-space:nowrap;height:46px;display:flex;align-items:center;border-top:2px solid var(--ink);border-bottom:2px solid var(--ink)}
+.ticker .row{display:inline-block;font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:25px;text-transform:uppercase;letter-spacing:.02em;will-change:transform}
+.ticker .row em{font-style:normal;display:inline-block;margin:0 14px;transform:translateY(-2px)}
+
+/* sections */
+section{position:relative}
+.head{display:flex;justify-content:space-between;align-items:baseline;padding-top:34px;margin-bottom:16px}
+.head h2{margin:0;font-size:62px}
+.lineup{background:var(--yolk);color:var(--ink);padding-bottom:36px}
+.lineup .head .mono{color:var(--ink);opacity:.7}
+.poster{text-align:center;border-top:2px solid var(--ink)}
+.tier{padding:12px 0 13px;border-bottom:2px solid var(--ink)}
+.tier .day{display:block;margin-bottom:6px;opacity:.7}
+.acts{font-family:"Big Shoulders Display",sans-serif;font-weight:900;text-transform:uppercase;line-height:.92}
+.acts span{display:inline;white-space:nowrap}
+.acts i{font-style:normal;display:inline-block;width:.32em;height:.32em;background:var(--sun);border-radius:50%;margin:0 .2em;vertical-align:.18em}
+.t1 .acts{font-size:68px}.t2 .acts{font-size:40px}.t3 .acts{font-size:27px;font-weight:800}
+.t1 .acts .out{color:transparent;-webkit-text-stroke:2px var(--ink)}
+.plus{margin-top:12px;text-align:center}
+
+/* timetable */
+.times{background:var(--ink);padding-bottom:36px}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);border:1.5px solid var(--cream);border-radius:2px;margin-bottom:6px}
+.tab{height:46px;font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:19px;text-transform:uppercase;letter-spacing:.03em;position:relative}
+.tab+.tab{border-left:1.5px solid var(--cream)}
+.tab.on{background:var(--cream);color:var(--ink)}
+.stageinfo{display:flex;justify-content:space-between;color:var(--mute);margin:12px 0 4px}
+.slot{display:grid;grid-template-columns:62px 1fr auto;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.slot .tm{font-family:"Space Mono",monospace;font-size:13px;color:var(--mute)}
+.slot .nm{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:27px;text-transform:uppercase;line-height:1}
+.slot .gn{font-size:12px;color:var(--mute);border:1px solid var(--line);padding:3px 8px;border-radius:99px;white-space:nowrap}
+.slot.live .tm{color:var(--yolk)}
+.slot.live .gn{background:var(--sun);border-color:var(--sun);color:var(--ink);font-weight:700}
+.bar{height:3px;background:var(--line);margin-top:6px;position:relative;grid-column:2/4}
+.bar b{position:absolute;left:0;top:0;bottom:0;background:var(--yolk)}
+
+/* tickets */
+.tickets{background:var(--sun);color:var(--ink);padding-bottom:36px}
+.tickets .head .mono{opacity:.75}
+.tt{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;background:var(--ink);color:var(--cream);padding:15px 16px;border-radius:2px;margin-bottom:7px;text-align:left;width:100%;position:relative;border:2px solid transparent}
+.tt.on{background:var(--cream);color:var(--ink);border-color:var(--ink)}
+.tt h3{margin:0;font-family:"Big Shoulders Display",sans-serif;font-weight:900;font-size:30px;text-transform:uppercase;line-height:.95}
+.tt p{margin:0;font-size:13px;opacity:.75;grid-column:1}
+.tt .pr{grid-row:1/3;grid-column:2;font-family:"Big Shoulders Display",sans-serif;font-weight:900;font-size:42px}
+.tt.sold{opacity:.55}
+.tt.sold h3{text-decoration:line-through;text-decoration-thickness:3px}
+.tt .tag{position:absolute;right:14px;top:-9px;background:var(--yolk);color:var(--ink);padding:2px 7px;font-family:"Space Mono",monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.buy{display:flex;gap:8px;margin-top:12px}
+.step{display:flex;align-items:center;background:var(--ink);color:var(--cream);border-radius:2px;height:56px}
+.step button{width:46px;height:56px;font-size:26px;font-weight:500;color:var(--cream)}
+.step output{min-width:30px;text-align:center;font-family:"Big Shoulders Display",sans-serif;font-weight:900;font-size:30px}
+#getBtn{flex:1;height:56px;background:var(--yolk);color:var(--ink);font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-radius:2px;border:2px solid var(--ink)}
+#getBtn b{font-family:"Big Shoulders Display",sans-serif;font-weight:900;font-size:27px}
+.fine{margin-top:10px;font-size:12px;opacity:.75}
+
+/* modal ticket */
+#modal{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;padding:18px}
+#modal .shade{position:absolute;inset:0;background:rgba(17,12,10,.82)}
+.ticket{position:relative;width:100%;max-width:360px;background:var(--cream);color:var(--ink);border-radius:4px;overflow:hidden}
+.ticket .top{background:var(--ink);color:var(--cream);padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:flex-end}
+.ticket .top .big{font-size:40px;color:var(--yolk)}
+.ticket .mid{display:grid;grid-template-columns:1fr 118px;gap:12px;padding:14px 16px 12px;align-items:center}
+.ticket dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:13px}
+.ticket dt{font-family:"Space Mono",monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;padding-top:2px}
+.ticket dd{margin:0;font-weight:700}
+#qr{width:118px;height:118px;display:block}
+.ticket .perf{height:0;border-top:2px dashed rgba(17,12,10,.35);margin:0 14px;position:relative}
+.ticket .perf:before,.ticket .perf:after{content:"";position:absolute;top:-11px;width:20px;height:20px;border-radius:50%;background:#2a201b}
+.ticket .perf:before{left:-25px}.ticket .perf:after{right:-25px}
+.ticket .stub{display:flex;justify-content:space-between;align-items:center;padding:11px 16px 14px}
+.ticket .stub .big{font-size:34px;color:var(--sun)}
+#doneBtn{height:40px;padding:0 16px;background:var(--ink);color:var(--cream);font-weight:700;font-size:13px;border-radius:2px}
+
+/* faq */
+.faq{background:var(--cream);color:var(--ink);padding-bottom:30px}
+.faq .head .mono{opacity:.6}
+.q{border-top:2px solid var(--ink)}
+.q:last-child{border-bottom:2px solid var(--ink)}
+.q button{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 0;text-align:left;font-weight:700;font-size:17px;color:var(--ink)}
+.q button span:last-child{font-family:"Big Shoulders Display",sans-serif;font-weight:900;font-size:30px;line-height:.6;width:22px;text-align:center}
+.q .a{overflow:hidden;height:0}
+.q .a p{margin:0 0 16px;color:#4b423b;max-width:560px}
+
+/* venue */
+.venue{background:var(--ink);padding-bottom:30px}
+.vcard{display:grid;gap:12px}
+#map{width:100%;height:210px;display:block;background:var(--ink2);border-radius:2px}
+.vrow{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.vrow .mono{color:var(--mute);padding-top:3px}
+.vrow b{font-weight:600;text-align:right}
+
+/* footer */
+footer{background:var(--sun);color:var(--ink);padding:26px 0 22px;overflow:hidden}
+footer .huge{font-size:clamp(60px,20.5vw,230px);white-space:nowrap;margin-left:-4px}
+footer .fr{display:flex;justify-content:space-between;align-items:flex-end;margin-top:16px;gap:12px}
+footer .credit{font-weight:700;border-bottom:2px solid var(--ink)}
+
+@media (min-width:820px){
+  .hero{min-height:620px}
+  .count{max-width:520px}.ctas{max-width:520px}
+  .t1 .acts{font-size:120px}.t2 .acts{font-size:70px}.t3 .acts{font-size:42px}
+  .tlist{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .vcard{grid-template-columns:1.2fr 1fr;gap:28px}#map{height:300px}
+}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="logo" href="#top"><i></i><span id="logoName">Afterglow</span></a>
+  <button class="navcta" id="navBuy">Tickets</button>
+</div></nav>
+
+<header class="hero" id="top">
+  <canvas id="glow"></canvas>
+  <div class="wrap">
+    <div class="meta mono"><span>One night only</span><span id="metaHours">18:00 → 06:00</span></div>
+    <h1 class="big rv"><span id="n1">After</span><span class="l2" id="n2">glow</span></h1>
+    <div class="where rv">
+      <div class="big" id="city">Lisbon</div>
+      <div class="mono" id="dateLine">Sat · 14 Nov 2026<br>Sunset to sunrise</div>
+    </div>
+    <div class="count rv" id="count">
+      <div><b id="cD">00</b><small>days</small></div>
+      <div><b id="cH">00</b><small>hours</small></div>
+      <div><b id="cM">00</b><small>min</small></div>
+      <div><b id="cS">00</b><small>sec</small></div>
+    </div>
+    <div class="ctas rv">
+      <button class="btn solid" id="heroBuy"><span>Get tickets</span><span>→</span></button>
+      <a class="btn ghost" href="#lineup"><span>Lineup</span><span>↓</span></a>
+    </div>
+  </div>
+</header>
+
+<div class="ticker"><div class="row" id="tick"></div></div>
+
+<section class="lineup" id="lineup"><div class="wrap">
+  <div class="head"><h2 class="big rv">Lineup</h2><span class="mono">A–Z by night</span></div>
+  <div class="poster" id="poster"></div>
+  <p class="plus mono rv">+ 9 more acts, a silent disco and a sunrise set</p>
+</div></section>
+
+<section class="times" id="times"><div class="wrap">
+  <div class="head"><h2 class="big rv">Timetable</h2><span class="mono" style="color:var(--mute)">tap a stage</span></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="stageinfo mono" id="stageInfo"></div>
+  <div id="slots"></div>
+</div></section>
+
+<section class="tickets" id="tickets"><div class="wrap">
+  <div class="head"><h2 class="big rv">Tickets</h2><span class="mono">all-night entry</span></div>
+  <div class="tlist" id="tiers"></div>
+  <div class="buy rv">
+    <div class="step"><button id="minus" aria-label="fewer">−</button><output id="qty">1</output><button id="plus" aria-label="more">+</button></div>
+    <button id="getBtn"><span>Get tickets</span><b id="total">€49</b></button>
+  </div>
+  <p class="fine">Prices include fees. Max 6 per order. Refundable until 7 days before.</p>
+</div></section>
+
+<section class="faq" id="faq"><div class="wrap">
+  <div class="head"><h2 class="big rv">FAQ</h2><span class="mono">good to know</span></div>
+  <div id="faqList"></div>
+</div></section>
+
+<section class="venue" id="venue"><div class="wrap">
+  <div class="head"><h2 class="big rv">Venue</h2><span class="mono" style="color:var(--mute)">getting there</span></div>
+  <div class="vcard">
+    <canvas id="map"></canvas>
+    <div>
+      <div class="vrow"><span class="mono">Where</span><b id="vName">Old Gasworks, Riverside</b></div>
+      <div class="vrow"><span class="mono">Doors</span><b>18:00 · last entry 01:00</b></div>
+      <div class="vrow"><span class="mono">Metro</span><b>Green line · Cais stop, 4 min walk</b></div>
+      <div class="vrow"><span class="mono">Night bus</span><b>Every 20 min until 07:00</b></div>
+    </div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="big huge" id="footName">Afterglow</div>
+  <div class="fr">
+    <span class="mono" id="footLine">14.11.2026 · Lisbon</span>
+    <a class="credit" href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">free code by @sicscod.drops</a>
+  </div>
+</div></footer>
+
+<div id="modal">
+  <div class="shade" id="shade"></div>
+  <div class="ticket" id="ticket">
+    <div class="top"><div><div class="mono" style="opacity:.7">You're in</div><div class="big" id="tkName">Afterglow</div></div><div class="mono" style="text-align:right" id="tkWhen">14 Nov<br>18:00</div></div>
+    <div class="mid">
+      <dl>
+        <dt>Pass</dt><dd id="tkTier">General</dd>
+        <dt>Admit</dt><dd id="tkQty">2 people</dd>
+        <dt>Where</dt><dd id="tkCity">Lisbon</dd>
+        <dt>Order</dt><dd id="tkId">AG-0000</dd>
+      </dl>
+      <canvas id="qr" width="236" height="236"></canvas>
+    </div>
+    <div class="perf"></div>
+    <div class="stub"><div class="big" id="tkTotal">€98</div><button id="doneBtn">Done</button></div>
+  </div>
+</div>
+
+<script>
+// ===== Afterglow · free code by @sicscod.drops =====
+// Change it in the link: ?name=Afterglow&date=2026-11-14T18:00&city=Lisbon&hue=18
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name: P.get("name") || "Afterglow",                 // event name (split in two lines in the hero)
+  date: P.get("date") || "2026-11-14T18:00",          // doors open (ISO); in the past -> demo countdown
+  city: P.get("city") || "Lisbon",
+  hue: +(P.get("hue") ?? 18),                          // sun colour: 18 orange, 0 red, 330 pink, 190 teal
+  hours: "18:00 → 06:00",
+  venue: "Old Gasworks, Riverside",
+  currency: "€",
+  lineup: [                                            // poster tiers, biggest first
+    { day: "Headliners", acts: ["Solar Choir", "Night Taxi"] },
+    { day: "Main stage", acts: ["Velvet Engine", "Palm Static", "Low Tide Club", "Mirrorball"] },
+    { day: "All night", acts: ["Saltwater", "Neon Parish", "Paper Moons", "Halcyon FM", "Glasshouse", "Rooftop Radio"] },
+  ],
+  stages: [
+    { name: "Sun", info: "Main stage · open air", slots: [
+      ["18:30", "Rooftop Radio", "disco"], ["20:00", "Low Tide Club", "house"], ["21:30", "Palm Static", "indie"],
+      ["23:00", "Night Taxi", "electro"], ["00:30", "Solar Choir", "live"], ["02:30", "Velvet Engine", "techno"]] },
+    { name: "Dusk", info: "The tent · 2,000 cap", slots: [
+      ["19:00", "Paper Moons", "dream pop"], ["20:30", "Saltwater", "breaks"], ["22:00", "Neon Parish", "synth"],
+      ["23:30", "Mirrorball", "nu-disco"], ["01:00", "Glasshouse", "garage"], ["03:00", "Halcyon FM", "ambient"]] },
+    { name: "Glow", info: "Warehouse · until sunrise", slots: [
+      ["22:00", "Halcyon FM", "b2b"], ["23:30", "Glasshouse", "house"], ["01:00", "Saltwater", "jungle"],
+      ["02:30", "Low Tide Club", "acid"], ["04:00", "Mirrorball", "edits"], ["05:15", "Sunrise set", "secret"]] },
+  ],
+  tiers: [
+    { name: "Early glow", note: "First 500 tickets", price: 39, sold: true },
+    { name: "General", note: "All stages, all night", price: 49, tag: "selling fast" },
+    { name: "Sunrise pass", note: "Fast lane + breakfast at 06:00", price: 79 },
+  ],
+  faq: [
+    ["What time does it end?", "Music runs until 06:00. The Glow warehouse closes with a sunrise set on the roof."],
+    ["Is there an age limit?", "18+ with a valid photo ID. No exceptions at the door."],
+    ["Can I leave and come back?", "Yes, once. Your wristband gets scanned on the way out."],
+    ["Are tickets refundable?", "Full refund up to 7 days before the night, after that you can resell them in your account."],
+  ],
+};
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = x => 1 - Math.pow(1 - clamp(x), 3);
+const money = n => CONFIG.currency + n;
+const pad = n => String(n).padStart(2, "0");
+
+// colours from hue
+const H = ((CONFIG.hue % 360) + 360) % 360;
+const sun = `hsl(${H} 100% 56%)`, yolk = `hsl(${(H + 24) % 360} 100% 61%)`, rose = `hsl(${(H + 330) % 360} 100% 70%)`;
+document.documentElement.style.setProperty("--sun", sun);
+document.documentElement.style.setProperty("--yolk", yolk);
+document.documentElement.style.setProperty("--rose", rose);
+
+// ---------- text ----------
+const nm = CONFIG.name.trim();
+const cut = nm.length > 5 ? Math.ceil(nm.length * (nm.toLowerCase().startsWith("after") ? 5 / 9 : .5)) : nm.length;
+const sp = nm.indexOf(" ");
+$("n1").textContent = sp > 0 ? nm.slice(0, sp) : nm.slice(0, cut);
+$("n2").textContent = sp > 0 ? nm.slice(sp + 1) : nm.slice(cut);
+const longest = Math.max($("n1").textContent.length, $("n2").textContent.length);
+if (longest > 5) document.querySelector("h1").style.fontSize = `min(${31.5 * 5 / longest}vw, ${330 * 5 / longest}px)`;
+const D0 = new Date(CONFIG.date);
+const valid = !isNaN(D0);
+const dLong = valid ? D0.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }).replace(",", " ·") : "Soon";
+["logoName", "footName", "tkName"].forEach(id => $(id).textContent = nm);
+if (nm.length > 9) $("footName").style.fontSize = `min(${20.5 * 9 / nm.length}vw, ${230 * 9 / nm.length}px)`;
+$("city").textContent = $("tkCity").textContent = CONFIG.city;
+$("dateLine").innerHTML = `${esc(dLong)}<br>Sunset to sunrise`;
+$("metaHours").textContent = CONFIG.hours;
+$("vName").textContent = CONFIG.venue;
+$("footLine").textContent = `${valid ? `${pad(D0.getDate())}.${pad(D0.getMonth() + 1)}.${D0.getFullYear()}` : "soon"} · ${CONFIG.city}`;
+$("tkWhen").innerHTML = valid ? `${D0.getDate()} ${D0.toLocaleDateString("en-GB", { month: "short" })}<br>${pad(D0.getHours())}:${pad(D0.getMinutes())}` : "soon";
+document.title = `${nm} — ${CONFIG.city}, one night`;
+
+const tickTxt = [CONFIG.hours, `${CONFIG.stages.length} stages`, `${CONFIG.lineup.reduce((a, t) => a + t.acts.length, 0) + 9} acts`, CONFIG.city, "sunset to sunrise", "one night only"];
+$("tick").innerHTML = Array(4).fill(tickTxt.map(esc).join("<em>✺</em>") + "<em>✺</em>").join("");
+
+$("poster").innerHTML = CONFIG.lineup.map((t, i) => `<div class="tier t${i + 1} rv"><span class="day mono">${esc(t.day)}</span><div class="acts">${
+  t.acts.map((a, j) => `<span class="${i === 0 && j % 2 ? "out" : ""}">${esc(a)}</span>`).join("<i></i>")}</div></div>`).join("");
+
+// ---------- timetable ----------
+let stage = 0, stageAt = -1;
+$("tabs").innerHTML = CONFIG.stages.map((s, i) => `<button class="tab" data-s="${i}">${esc(s.name)}</button>`).join("");
+function renderStage(i) {
+  stage = i; stageAt = -1;
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", +b.dataset.s === i));
+  const s = CONFIG.stages[i];
+  $("stageInfo").innerHTML = `<span>${esc(s.info)}</span><span>${s.slots.length} sets</span>`;
+  $("slots").innerHTML = s.slots.map(([t, n, g], j) => `<div class="slot${j === 3 ? " live" : ""}"><span class="tm">${t}</span><span class="nm">${esc(n)}</span><span class="gn">${j === 3 ? "on now" : esc(g)}</span></div>`).join("");
+}
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) renderStage(+b.dataset.s); });
+renderStage(0);
+
+// ---------- tickets ----------
+let tier = CONFIG.tiers.findIndex(t => !t.sold), qty = 1, bump = 0;
+$("tiers").innerHTML = CONFIG.tiers.map((t, i) => `<button class="tt rv${t.sold ? " sold" : ""}" data-t="${i}">${t.tag ? `<span class="tag">${esc(t.tag)}</span>` : ""}<h3>${esc(t.name)}</h3><p>${t.sold ? "Sold out" : esc(t.note)}</p><span class="pr">${money(t.price)}</span></button>`).join("");
+function updTickets() {
+  document.querySelectorAll(".tt").forEach(b => b.classList.toggle("on", +b.dataset.t === tier));
+  $("qty").textContent = qty; $("total").textContent = money(CONFIG.tiers[tier].price * qty);
+}
+$("tiers").addEventListener("click", e => { const b = e.target.closest(".tt"); if (b && !CONFIG.tiers[+b.dataset.t].sold) { tier = +b.dataset.t; updTickets(); } });
+$("plus").addEventListener("click", () => { qty = Math.min(6, qty + 1); bump = 1; updTickets(); });
+$("minus").addEventListener("click", () => { qty = Math.max(1, qty - 1); bump = 1; updTickets(); });
+updTickets();
+const goTickets = () => scrollTo({ top: $("tickets").offsetTop - 52, behavior: "smooth" });
+$("navBuy").addEventListener("click", goTickets); $("heroBuy").addEventListener("click", goTickets);
+
+// modal + QR
+let modalOpen = false, modalT = 0, modalTarget = 0, orderSeed = 1;
+$("getBtn").addEventListener("click", () => {
+  const t = CONFIG.tiers[tier];
+  orderSeed = (Date.now() ^ (qty * 7919) ^ (tier * 104729)) >>> 0;
+  $("tkTier").textContent = t.name; $("tkQty").textContent = `${qty} ${qty > 1 ? "people" : "person"}`;
+  $("tkTotal").textContent = money(t.price * qty);
+  $("tkId").textContent = "AG-" + String(orderSeed % 100000).padStart(5, "0");
+  modalTarget = 1; modalT = 0; $("modal").style.display = "flex"; makeQR(orderSeed);
+});
+const closeModal = () => modalTarget = 0;
+$("doneBtn").addEventListener("click", closeModal); $("shade").addEventListener("click", closeModal);
+
+let QR = [];
+function makeQR(seed) {
+  const n = 25; let s = seed || 7; const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  QR = [];
+  const finder = (x, y, ox, oy) => { const dx = x - ox, dy = y - oy; if (dx < 0 || dy < 0 || dx > 6 || dy > 6) return -1;
+    return (dx === 0 || dy === 0 || dx === 6 || dy === 6 || (dx > 1 && dx < 5 && dy > 1 && dy < 5)) ? 1 : 0; };
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    let v = Math.max(finder(x, y, 0, 0), finder(x, y, 18, 0), finder(x, y, 0, 18));
+    if (v < 0) { if ((x === 7 || y === 7) && (x < 8 && y < 8) || (x === 17 && y < 8) || (y === 17 && x < 8)) v = 0; else if (x === 6 || y === 6) v = (x + y) % 2 ? 0 : 1; else v = rnd() < .48 ? 1 : 0; }
+    if (v) QR.push([x, y]);
+  }
+}
+function drawQR(p) {
+  const c = $("qr"), g = c.getContext("2d"), n = 25, m = c.width / (n + 2);
+  g.fillStyle = "#F4ECDD"; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = "#110C0A";
+  for (const [x, y] of QR) {
+    const d = (x + y) / (2 * n), k = clamp((p * 1.6 - d) * 4);
+    if (k <= 0) continue;
+    const s = m * (.4 + .6 * k), o = (m - s) / 2;
+    g.fillRect((x + 1) * m + o, (y + 1) * m + o, s + .4, s + .4);
+  }
+}
+
+// ---------- FAQ ----------
+$("faqList").innerHTML = CONFIG.faq.map(([q, a], i) => `<div class="q rv"><button data-f="${i}"><span>${esc(q)}</span><span>+</span></button><div class="a"><p>${esc(a)}</p></div></div>`).join("");
+const faqOpen = CONFIG.faq.map((_, i) => i === 0 ? 1 : 0), faqV = faqOpen.slice();
+$("faqList").addEventListener("click", e => { const b = e.target.closest("button[data-f]"); if (!b) return; const i = +b.dataset.f; faqOpen[i] = faqOpen[i] ? 0 : 1; });
+
+// ---------- canvases ----------
+const glow = $("glow"), gx = glow.getContext("2d"), map = $("map"), mx = map.getContext("2d");
+let W = 0, Hh = 0, DPR = 1;
+function fit() {
+  DPR = Math.min(2, devicePixelRatio || 1);
+  const r = glow.getBoundingClientRect(); W = r.width; Hh = r.height;
+  glow.width = W * DPR; glow.height = Hh * DPR;
+  const q = map.getBoundingClientRect(); map.width = q.width * DPR; map.height = q.height * DPR;
+}
+addEventListener("resize", fit); fit();
+const dust = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), z: .3 + Math.random() * .7, p: Math.random() * 6.28 }));
+let px = .5, py = .4, tpx = .5, tpy = .4;
+document.querySelector(".hero").addEventListener("pointermove", e => { const r = glow.getBoundingClientRect(); tpx = (e.clientX - r.left) / r.width; tpy = (e.clientY - r.top) / r.height; });
+
+function drawGlow(t) {
+  const g = gx; g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  px += (tpx - px) * .04; py += (tpy - py) * .04;
+  const sky = g.createLinearGradient(0, 0, 0, Hh);
+  sky.addColorStop(0, "#110C0A"); sky.addColorStop(.55, `hsl(${H - 6} 60% 9%)`); sky.addColorStop(1, `hsl(${H} 80% 18%)`);
+  g.fillStyle = sky; g.fillRect(0, 0, W, Hh);
+  const cx = W * (.62 + (px - .5) * .08), cy = Hh * (.56 + Math.sin(t * .35) * .015), R = Math.min(W, Hh) * .36;
+  // rays
+  g.save(); g.translate(cx, cy); g.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 18; i++) {
+    const a = i / 18 * Math.PI * 2 + t * .05, w = .05 + .03 * Math.sin(t * .8 + i * 1.7);
+    const len = R * (2.2 + .6 * Math.sin(t * .6 + i));
+    g.fillStyle = `hsla(${H + 20} 100% 60% / ${.05 + .03 * Math.sin(t + i)})`;
+    g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, len, a - w, a + w); g.closePath(); g.fill();
+  }
+  // halo
+  const halo = g.createRadialGradient(0, 0, R * .5, 0, 0, R * 2.6);
+  halo.addColorStop(0, `hsla(${H + 10} 100% 60% / .55)`); halo.addColorStop(.4, `hsla(${H} 100% 50% / .18)`); halo.addColorStop(1, "hsla(0 0% 0% / 0)");
+  g.fillStyle = halo; g.beginPath(); g.arc(0, 0, R * 2.6, 0, 7); g.fill();
+  g.restore();
+  // striped sun
+  g.save(); g.beginPath(); g.arc(cx, cy, R, 0, 7); g.clip();
+  const sg = g.createLinearGradient(0, cy - R, 0, cy + R);
+  sg.addColorStop(0, `hsl(${H + 30} 100% 64%)`); sg.addColorStop(.55, `hsl(${H + 6} 100% 56%)`); sg.addColorStop(1, `hsl(${H - 14} 100% 52%)`);
+  g.fillStyle = sg; g.fillRect(cx - R, cy - R, R * 2, R * 2);
+  g.fillStyle = "#110C0A";
+  const off = (t * 14) % 22;
+  for (let k = 0; k < 14; k++) {
+    const y = cy - R * .05 + k * 22 - off; if (y < cy - R * .1) continue;
+    const th = 1 + (y - cy) / R * 9; g.fillRect(cx - R, y, R * 2, Math.max(0, th));
+  }
+  g.restore();
+  // dust
+  g.globalCompositeOperation = "lighter";
+  for (const d of dust) {
+    const y = ((d.y - t * .012 * d.z) % 1 + 1) % 1, x = d.x + Math.sin(t * .4 + d.p) * .01;
+    const a = (.25 + .35 * Math.sin(t * 1.3 + d.p)) * d.z;
+    g.fillStyle = `hsla(${H + 30} 100% 75% / ${Math.max(0, a)})`; g.beginPath(); g.arc(x * W, y * Hh, 1.2 * d.z + .3, 0, 7); g.fill();
+  }
+  g.globalCompositeOperation = "source-over";
+  // horizon fade for legibility
+  const fade = g.createLinearGradient(0, Hh * .7, 0, Hh);
+  fade.addColorStop(0, "rgba(17,12,10,0)"); fade.addColorStop(1, "rgba(17,12,10,.85)");
+  g.fillStyle = fade; g.fillRect(0, Hh * .7, W, Hh * .3);
+}
+
+function drawMap(t) {
+  const w = map.width / DPR, h = map.height / DPR, g = mx; if (!w) return;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.fillStyle = "#1C1512"; g.fillRect(0, 0, w, h);
+  // river
+  g.fillStyle = "#241B17"; g.beginPath(); g.moveTo(0, h * .72);
+  for (let x = 0; x <= w; x += 10) g.lineTo(x, h * .72 + Math.sin(x * .02) * 10);
+  g.lineTo(w, h); g.lineTo(0, h); g.fill();
+  g.strokeStyle = "rgba(244,236,221,.12)"; g.lineWidth = 1;
+  for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo(i * w / 8 - 20, 0); g.lineTo(i * w / 8 + 30, h * .7); g.stroke(); }
+  for (let j = 0; j < 5; j++) { g.beginPath(); g.moveTo(0, j * h * .16 + 10); g.lineTo(w, j * h * .16 - 6); g.stroke(); }
+  g.strokeStyle = "rgba(244,236,221,.35)"; g.lineWidth = 3; g.beginPath(); g.moveTo(0, h * .34); g.bezierCurveTo(w * .3, h * .3, w * .5, h * .5, w, h * .42); g.stroke();
+  // metro dotted route to venue
+  const vx = w * .64, vy = h * .5, sx = w * .18, sy = h * .2;
+  g.setLineDash([4, 6]); g.lineDashOffset = -t * 20; g.strokeStyle = yolk; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(sx, sy); g.quadraticCurveTo(w * .4, h * .2, vx, vy); g.stroke(); g.setLineDash([]);
+  g.fillStyle = "#F4ECDD"; g.fillRect(sx - 5, sy - 5, 10, 10);
+  g.font = "700 10px 'Space Mono', monospace"; g.fillText("METRO · CAIS", sx + 10, sy + 4);
+  // pulsing pin
+  for (let k = 0; k < 2; k++) { const ph = (t * .6 + k * .5) % 1; g.strokeStyle = `hsla(${H} 100% 56% / ${1 - ph})`; g.lineWidth = 2; g.beginPath(); g.arc(vx, vy, 8 + ph * 34, 0, 7); g.stroke(); }
+  g.fillStyle = sun; g.beginPath(); g.arc(vx, vy, 9, 0, 7); g.fill();
+  g.fillStyle = "#F4ECDD"; g.font = "800 20px 'Big Shoulders Display', sans-serif"; g.fillText(CONFIG.venue.split(",")[0].toUpperCase(), vx - 40, vy + 34);
+}
+
+// ---------- the one rAF loop ----------
+const rv = [...document.querySelectorAll(".rv")].map(el => ({ el, v: 0 }));
+const slotsRV = () => [...document.querySelectorAll(".slot")];
+const tickEl = $("tick"); let tickW = 0;
+let last = performance.now(), start = last;
+const demoEnd = performance.now() + ((((3 * 24 + 7) * 60 + 42) * 60 + 18) * 1000);
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000), t = (now - start) / 1000; last = now;
+  const vh = innerHeight;
+  if (glow.getBoundingClientRect().bottom > 0) drawGlow(t);
+  const mr = map.getBoundingClientRect(); if (mr.top < vh && mr.bottom > 0) drawMap(t);
+
+  // countdown
+  let ms = valid ? D0 - Date.now() : -1; if (ms <= 0) ms = Math.max(0, demoEnd - now);
+  const s = Math.floor(ms / 1000);
+  $("cD").textContent = pad(Math.floor(s / 86400)); $("cH").textContent = pad(Math.floor(s / 3600) % 24);
+  $("cM").textContent = pad(Math.floor(s / 60) % 60); $("cS").textContent = pad(s % 60);
+
+  // ticker
+  if (!tickW) tickW = tickEl.scrollWidth / 4;
+  if (tickW) tickEl.style.transform = `translateX(${-((t * 55) % tickW)}px)`;
+
+  // scroll reveals
+  for (const r of rv) {
+    const b = r.el.getBoundingClientRect(), target = b.top < vh * .92 ? 1 : 0;
+    r.v += (target - r.v) * (1 - Math.exp(-dt * 7));
+    if (r.v > .999) r.v = 1;
+    r.el.style.opacity = .02 + .98 * ease(r.v);
+    r.el.style.transform = r.v === 1 ? "" : `translateY(${(1 - ease(r.v)) * 34}px)`;
+  }
+  // stage switch: rows slide in one by one
+  if (stageAt < 0) stageAt = now;
+  const st = (now - stageAt) / 1000;
+  slotsRV().forEach((el, i) => { const k = ease((st - i * .06) / .45); el.style.opacity = k; el.style.transform = k >= 1 ? "" : `translateX(${(1 - k) * 40}px)`; });
+
+  // qty bump
+  bump = Math.max(0, bump - dt * 4);
+  $("qty").style.transform = `scale(${1 + .35 * Math.sin(bump * Math.PI)})`;
+
+  // faq accordion
+  document.querySelectorAll(".q").forEach((q, i) => {
+    faqV[i] += (faqOpen[i] - faqV[i]) * (1 - Math.exp(-dt * 10));
+    const a = q.querySelector(".a"); a.style.height = (a.firstElementChild.offsetHeight + 16) * faqV[i] + "px";
+    q.querySelector("button span:last-child").style.transform = `rotate(${faqV[i] * 45}deg)`;
+  });
+
+  // modal
+  modalT += (modalTarget - modalT) * (1 - Math.exp(-dt * 8));
+  if (modalTarget === 0 && modalT < .01 && $("modal").style.display !== "none") $("modal").style.display = "none";
+  if ($("modal").style.display === "flex") {
+    $("shade").style.opacity = modalT;
+    $("ticket").style.transform = `translateY(${(1 - modalT) * 140}px) rotate(${(1 - modalT) * -6}deg)`;
+    $("ticket").style.opacity = clamp(modalT * 1.5);
+    if (modalTarget) drawQR(clamp(modalT * 1.15 - .1));
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
