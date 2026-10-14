@@ -8,7 +8,6 @@ Saw a drop in a video? Its number is the folder.
 
 | # | Drop | What it is |
 |---|------|-----------|
-| 19 | [🎆 Fireworks](19-fireworks) | Fireworks that write her name, ?name=&msg= in the link |
 | 01 | [✨ Particle Portfolio](01-particle-portfolio) | Your name made of particles that scatter under your cursor |
 | 02 | [❤️ Terminal Heart](02-terminal-heart) | A beating heart made of a name, right in your terminal |
 | 03 | [🐉 Neon Dragon](03-neon-dragon) | A glowing dragon that follows your finger |
@@ -22,10 +21,11 @@ Saw a drop in a video? Its number is the folder.
 | 12 | [💗 Love Meter](12-love-meter) | A love meter that only goes up, ?name= in the link |
 | 13 | [👟 Sneaker Drop](13-sneaker-drop) | A full sneaker release store |
 | 14 | [💻 Delly.dev](14-portfolio) | A full developer portfolio |
-| 18 | [⏳ Sand](18-sand) | Satisfying falling-sand sim, pour striped dunes, ?hue=&grain= in the link |
-| 17 | [🎟️ Afterglow](17-afterglow) | Full event / festival website with countdown, lineup, timetable and tickets, ?name=&date=&city= in the link |
-| 16 | [🎧 Our Song](16-our-song) | A music player that only plays your song, ?name=&lines= in the link |
 | 15 | [🌊 Ripples](15-ripples) | Water ripples that bend a neon word, ?text= in the link |
+| 16 | [🎧 Our Song](16-our-song) | A music player that only plays your song, ?name=&lines= in the link |
+| 17 | [🎟️ Afterglow](17-afterglow) | Full event / festival website with countdown, lineup, timetable and tickets, ?name=&date=&city= in the link |
+| 18 | [⏳ Sand](18-sand) | Satisfying falling-sand sim, pour striped dunes, ?hue=&grain= in the link |
+| 19 | [🎆 Fireworks](19-fireworks) | Fireworks that write her name, ?name=&msg= in the link |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
