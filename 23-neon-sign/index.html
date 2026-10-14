@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Her name in neon</title>
+<meta name="description" content="A real-looking neon sign with her name on a brick wall. Tap to change colour, drag across the glass. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sacramento&family=Quicksand:wght@400&family=Figtree:wght@400;600&display=block">
+<style>
+html,body{height:100%;margin:0;background:#060506;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;cursor:pointer}
+.hint{position:fixed;left:0;right:0;bottom:40px;text-align:center;font:600 11px "Figtree",system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#b9aeb4;opacity:0;pointer-events:none}
+.credit{position:fixed;bottom:14px;left:0;right:0;text-align:center;font:12px "Figtree",system-ui,sans-serif;color:#7d7378;opacity:.7}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hint" id="hint">tap to change colour · drag across the glass</div>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Neon Sign · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&line=you%27re%20my%20favourite%20light&hue=320
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "Delly",                       // the big neon script
+  line: url.get("line") || "you're my favourite light",   // the small line underneath
+  hue: url.get("hue"),                                    // first colour as a hue 0..360 (optional)
+  colours: ["#ff3fa8", "#33e4ff", "#ffa630"],             // pink → cyan → amber, tap cycles
+  heart: "#ff2a4c",                                       // the little heart stays red
+  font: "Sacramento",                                     // any Google script font works
+  lineFont: "Quicksand",
+  strikeAt: 0.5,                                          // seconds before the first tube strikes
+  letterGap: 0.42,                                        // seconds between letters lighting up
+  faulty: 2                                               // this letter has a loose electrode (-1 = none)
+};
+
+// ---------- small helpers ----------
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+const hintEl = document.getElementById("hint");
+const mk = (w, h) => { const c = document.createElement("canvas"); c.width = Math.max(1, w | 0); c.height = Math.max(1, h | 0); return c; };
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
+const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const clamp = x => Math.max(0, Math.min(1, x));
+function hsl(h, s, l) { const f = n => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); }; return [f(0), f(8), f(4)]; }
+let seed = 23; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+
+const PALS = CONFIG.colours.map(hex);
+if (CONFIG.hue !== null && !isNaN(+CONFIG.hue)) PALS[0] = hsl(+CONFIG.hue, 1, .6);
+const HEART = hex(CONFIG.heart);
+const WHITE = [255, 255, 255];
+
+// shrink a canvas by halving steps (cheap, smooth blur when scaled back up)
+function shrinker(w, h, k) {
+  const chain = []; let cw = w, ch = h;
+  while (cw / 2 >= w / k && ch / 2 >= 2) { cw = Math.ceil(cw / 2); ch = Math.ceil(ch / 2); chain.push(mk(cw, ch)); }
+  if (!chain.length) chain.push(mk(w, h));
+  return src => { let s = src; for (const c of chain) { const x = c.getContext("2d"); x.clearRect(0, 0, c.width, c.height); x.drawImage(s, 0, 0, c.width, c.height); s = c; } return s; };
+}
+function blurCopy(src, k, alpha = 1, out) {
+  out = out || mk(src.width, src.height); const o = out.getContext("2d");
+  o.imageSmoothingQuality = "high"; o.globalAlpha = alpha; o.drawImage(shrinker(src.width, src.height, k)(src), 0, 0, out.width, out.height); o.globalAlpha = 1;
+  return out;
+}
+
+// Zhang-Suen thinning: turns a filled glyph into the 1px centre line a glass bender would follow
+function thin(m, w, h) {
+  let changed = true; const del = [];
+  const at = (x, y) => m[y * w + x];
+  while (changed) {
+    changed = false;
+    for (let pass = 0; pass < 2; pass++) {
+      del.length = 0;
+      for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+        if (!at(x, y)) continue;
+        const p2 = at(x, y - 1), p3 = at(x + 1, y - 1), p4 = at(x + 1, y), p5 = at(x + 1, y + 1),
+              p6 = at(x, y + 1), p7 = at(x - 1, y + 1), p8 = at(x - 1, y), p9 = at(x - 1, y - 1);
+        const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9; if (B < 2 || B > 6) continue;
+        const A = (!p2 && p3) + (!p3 && p4) + (!p4 && p5) + (!p5 && p6) + (!p6 && p7) + (!p7 && p8) + (!p8 && p9) + (!p9 && p2);
+        if (A !== 1) continue;
+        if (pass === 0 ? (p2 * p4 * p6 || p4 * p6 * p8) : (p2 * p4 * p8 || p2 * p6 * p8)) continue;
+        del.push(y * w + x);
+      }
+      if (del.length) { changed = true; for (const i of del) m[i] = 0; }
+    }
+  }
+}
+
+// draw something filled in white, get back the centre-line points (device px)
+function centreLine(x0, y0, w, h, paint, ss = 1) {
+  w = Math.ceil(w * ss); h = Math.ceil(h * ss); const c = mk(w, h), x = c.getContext("2d");
+  x.scale(ss, ss); x.translate(-x0, -y0); x.fillStyle = x.strokeStyle = "#fff"; paint(x);
+  const d = x.getImageData(0, 0, w, h).data, m = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) m[i] = d[i * 4 + 3] > 110 ? 1 : 0;
+  thin(m, w, h);
+  const pts = []; for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) if (m[yy * w + xx]) pts.push([xx / ss + x0, yy / ss + y0]);
+  return pts;
+}
+
+function dots(x, pts, r, style, dx = 0, dy = 0) {
+  x.fillStyle = style; x.beginPath();
+  for (const p of pts) { x.moveTo(p[0] + dx + r, p[1] + dy); x.arc(p[0] + dx, p[1] + dy, r, 0, 6.2832); }
+  x.fill();
+}
+
+// ---------- scene ----------
+let W, H, S, DPR, floorY, base, albedo, stat, clips, Lc, lcx, tmp, tx, rc, rc2, fc, puddle, shrinkR, shrinkS, els = [], unit;
+let pal = 0, nextPal = 0, swapT = -9, t0 = null, last = 0, built = false;
+const sparks = [];
+
+function build() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = cv.width = Math.round(innerWidth * DPR); H = cv.height = Math.round(innerHeight * DPR);
+  S = Math.min(W, H * .78); unit = S / 540; floorY = Math.round(Math.min(H * .7, H * .36 + S * .5));
+  seed = 23;
+
+  // ---- brick wall + wet concrete albedo (what light would reveal) ----
+  albedo = mk(W, H); const a = albedo.getContext("2d");
+  const bw = Math.round(S * .135), bh = Math.round(bw * .34), mo = Math.max(2, Math.round(bh * .13));
+  a.fillStyle = "#5d5650"; a.fillRect(0, 0, W, floorY);
+  for (let row = 0, y = floorY - bh; y > -bh; row++, y -= bh) {
+    for (let x = -(row % 2) * bw / 2 - rnd() * 4; x < W; x += bw) {
+      const v = .78 + rnd() * .3, burnt = rnd() < .12 ? .7 : 1;
+      const c = [168 * v * burnt, 78 * v * burnt + rnd() * 10, 58 * v * burnt].map(Math.round);
+      a.fillStyle = rgb(c); a.fillRect(x + mo / 2, y + mo / 2, bw - mo, bh - mo);
+      a.fillStyle = "rgba(255,230,210,.10)"; a.fillRect(x + mo / 2, y + mo / 2, bw - mo, Math.max(1, mo * .6));
+      a.fillStyle = "rgba(0,0,0,.18)"; a.fillRect(x + mo / 2, y + bh - mo / 2 - mo * .6, bw - mo, mo * .6);
+      for (let k = 0; k < 3; k++) { a.fillStyle = `rgba(0,0,0,${.08 + rnd() * .12})`; a.beginPath(); a.ellipse(x + rnd() * bw, y + rnd() * bh, 1 + rnd() * bw * .08, 1 + rnd() * bh * .12, 0, 0, 7); a.fill(); }
+    }
+  }
+  // floor: dark wet concrete
+  const fg = a.createLinearGradient(0, floorY, 0, H); fg.addColorStop(0, "#3c3b3e"); fg.addColorStop(1, "#2a292c");
+  a.fillStyle = fg; a.fillRect(0, floorY, W, H - floorY);
+  // grain
+  const id = a.getImageData(0, 0, W, H), dd = id.data;
+  for (let i = 0; i < dd.length; i += 4) { const n = .86 + Math.random() * .24; dd[i] *= n; dd[i + 1] *= n; dd[i + 2] *= n; }
+  a.putImageData(id, 0, 0);
+  // skirting shadow where wall meets floor
+  const sk = a.createLinearGradient(0, floorY - bh * .6, 0, floorY + bh * .5);
+  sk.addColorStop(0, "rgba(0,0,0,0)"); sk.addColorStop(.55, "rgba(0,0,0,.55)"); sk.addColorStop(1, "rgba(0,0,0,0)");
+  a.fillStyle = sk; a.fillRect(0, floorY - bh, W, bh * 2);
+
+  // base = albedo in near darkness, one weak streetlight from the top
+  base = mk(W, H); const b = base.getContext("2d");
+  b.drawImage(albedo, 0, 0); b.fillStyle = "rgba(6,5,9,.86)"; b.fillRect(0, 0, W, H);
+  const top = b.createRadialGradient(W * .3, -H * .1, 0, W * .3, -H * .1, H * .8);
+  top.addColorStop(0, "rgba(120,130,160,.10)"); top.addColorStop(1, "rgba(0,0,0,0)");
+  b.fillStyle = top; b.fillRect(0, 0, W, H);
+  const vg = b.createRadialGradient(W / 2, H * .45, S * .2, W / 2, H * .45, Math.max(W, H) * .8);
+  vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.7)");
+  b.fillStyle = vg; b.fillRect(0, 0, W, H);
+
+  // ---- the sign: one element per letter + heart + one per word of the small line ----
+  els = [];
+  const name = CONFIG.name, F = CONFIG.font;
+  g.font = `100px "${F}"`; const w100 = g.measureText(name).width;
+  const fs = Math.min(W * .68 / w100 * 100, H * .3, S * .52);
+  g.font = `${fs}px "${F}"`;
+  const nameW = g.measureText(name).width, nm = g.measureText(name);
+  const r = Math.max(1.5, fs * .019);
+  const lineFs = Math.min(fs * .17, W * .82 / Math.max(1, (CONFIG.line.length * .52)));
+  const baseY = H * .36 + (nm.actualBoundingBoxAscent - nm.actualBoundingBoxDescent) * .5 - lineFs * .9;
+  const left = (W - nameW) / 2 - fs * .13;
+  for (let i = 0; i < name.length; i++) {
+    if (name[i] === " ") continue;
+    g.font = `${fs}px "${F}"`;
+    const x = left + g.measureText(name.slice(0, i)).width;
+    const pts = centreLine(x - fs * .5, baseY - fs * 1.05, fs * 1.6, fs * 1.6, c => { c.font = `${fs}px "${F}"`; c.fillText(name[i], x, baseY); });
+    if (pts.length > 4) els.push({ pts, r, kind: "letter", i });
+  }
+  // heart, top right of the name
+  {
+    const hs = fs * .13, hx = left + nameW + fs * .16, hy = baseY - fs * .62;
+    const pts = centreLine(hx - hs * 1.6, hy - hs * 1.4, hs * 3.2, hs * 2.9, c => {
+      c.lineWidth = Math.max(2, r * .8); c.lineJoin = "round"; c.beginPath();
+      for (let k = 0; k <= 120; k++) { const t = k / 120 * Math.PI * 2, X = 16 * Math.sin(t) ** 3, Y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t); c.lineTo(hx + X * hs / 16, hy - Y * hs / 16); }
+      c.closePath(); c.stroke();
+    });
+    els.push({ pts, r: r * .9, kind: "heart" });
+  }
+  // small line, word by word
+  {
+    const LF = CONFIG.lineFont; g.font = `400 ${lineFs}px "${LF}"`;
+    const words = CONFIG.line.split(" "), lw = g.measureText(CONFIG.line).width, sp = g.measureText(" ").width;
+    let x = (W - lw) / 2; const y = baseY + Math.max(fs * .2, nm.actualBoundingBoxDescent) + lineFs * 1.15;
+    words.forEach((wd, k) => {
+      const ww = g.measureText(wd).width;
+      const pts = centreLine(x - lineFs * .3, y - lineFs * 1.2, ww + lineFs * .6, lineFs * 1.6, c => { c.font = `400 ${lineFs}px "${LF}"`; c.fillText(wd, x, y); }, 3);
+      if (pts.length > 2) els.push({ pts, r: Math.max(1.1, lineFs * .045), kind: "word", k });
+      x += ww + sp;
+    });
+  }
+  // bounds, timing, hit boxes
+  let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
+  const letters = els.filter(e => e.kind === "letter").length;
+  els.forEach((e, n) => {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const p of e.pts) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    e.box = [x0, y0, x1, y1]; bx0 = Math.min(bx0, x0); by0 = Math.min(by0, y0); bx1 = Math.max(bx1, x1); by1 = Math.max(by1, y1);
+    e.col = e.kind === "heart" ? null : (e.kind === "word" ? .35 : 0);
+    e.on = e.kind === "letter" ? CONFIG.strikeAt + n * CONFIG.letterGap
+         : e.kind === "heart" ? CONFIG.strikeAt + letters * CONFIG.letterGap + .35
+         : CONFIG.strikeAt + letters * CONFIG.letterGap + 1.3 + e.k * .16;
+    // each tube gets its own stutter while the gas catches
+    const ev = []; let tt = 0, n2 = e.kind === "word" ? 2 : 3 + (rnd() * 3 | 0);
+    for (let k = 0; k < n2; k++) { const on = .03 + rnd() * .07; ev.push([tt, tt + on, .35 + rnd() * .6]); tt += on + .04 + rnd() * .12; }
+    e.ev = ev; e.lit = tt; e.b = 0; e.buzz = -9;
+    e.sample = e.pts.filter((_, k) => k % 3 === 0);
+  });
+
+  // ---- static layer: cable, acrylic backer, tube shadows, unlit glass, black-painted jumpers ----
+  stat = mk(W, H); const s = stat.getContext("2d");
+  const pad = fs * .16, B = [bx0 - pad, by0 - pad, bx1 + pad, by1 + pad];
+  const first = els[0].pts.reduce((m, p) => p[0] < m[0] ? p : m);
+  s.lineCap = "round";
+  s.strokeStyle = "#060606"; s.lineWidth = Math.max(2, 4.5 * unit);
+  s.beginPath(); s.moveTo(first[0], first[1]); s.bezierCurveTo(B[0] - fs * .15, first[1] + fs * .3, B[0] - fs * .45, floorY - fs * .7, B[0] - fs * .25, floorY + 4); s.stroke();
+  s.strokeStyle = "rgba(255,255,255,.07)"; s.lineWidth = Math.max(1, 1.2 * unit);
+  s.beginPath(); s.moveTo(first[0] - 1, first[1] - 1); s.bezierCurveTo(B[0] - fs * .15 - 1, first[1] + fs * .3, B[0] - fs * .45 - 1, floorY - fs * .7, B[0] - fs * .25 - 1, floorY + 4); s.stroke();
+  // clear acrylic backer + standoffs
+  const rr = 10 * unit; s.beginPath(); s.roundRect(B[0], B[1], B[2] - B[0], B[3] - B[1], rr);
+  s.fillStyle = "rgba(200,215,230,.035)"; s.fill(); s.strokeStyle = "rgba(220,235,255,.12)"; s.lineWidth = Math.max(1, 1.2 * unit); s.stroke();
+  s.beginPath(); s.moveTo(B[0] + rr, B[1] + 1); s.lineTo(B[2] - rr, B[1] + 1); s.strokeStyle = "rgba(255,255,255,.16)"; s.stroke();
+  for (const [x, y] of [[B[0] + rr * 1.6, B[1] + rr * 1.6], [B[2] - rr * 1.6, B[1] + rr * 1.6], [B[0] + rr * 1.6, B[3] - rr * 1.6], [B[2] - rr * 1.6, B[3] - rr * 1.6]]) {
+    const sr = 4.2 * unit, gr = s.createRadialGradient(x - sr * .3, y - sr * .3, 0, x, y, sr);
+    gr.addColorStop(0, "#9a9aa0"); gr.addColorStop(1, "#2a2a2e");
+    s.fillStyle = "rgba(0,0,0,.5)"; s.beginPath(); s.arc(x + sr * .4, y + sr * .6, sr, 0, 7); s.fill();
+    s.fillStyle = gr; s.beginPath(); s.arc(x, y, sr, 0, 7); s.fill();
+  }
+  // black-painted jumpers between tubes (real signs hide the glass between letters like this)
+  const ends = e => [e.pts.reduce((m, p) => p[0] < m[0] ? p : m), e.pts.reduce((m, p) => p[0] > m[0] ? p : m)];
+  const jumps = [];
+  const hi = els.findIndex(e => e.kind === "heart");
+  if (hi > 0) jumps.push([ends(els[hi - 1])[1], ends(els[hi])[0], els[hi].r]);
+  for (const [p, q, jr] of jumps) {
+    const mx = (p[0] + q[0]) / 2, my = Math.max(p[1], q[1]) + Math.abs(q[0] - p[0]) * .25 + jr * 3;
+    for (const [col, lw] of [["#0b0b0c", jr * 2], ["rgba(255,255,255,.10)", jr * .5]]) {
+      s.strokeStyle = col; s.lineWidth = lw; s.beginPath(); s.moveTo(p[0], p[1]); s.quadraticCurveTo(mx, my, q[0], q[1]); s.stroke();
+    }
+  }
+  // soft shadows the glass throws on the backer, then the glass itself (unlit)
+  const sh = mk(W, H), shx = sh.getContext("2d");
+  for (const e of els) dots(shx, e.pts, e.r * 1.1, "#000", e.r * 1.4, e.r * 2.2);
+  s.globalAlpha = .55; s.drawImage(blurCopy(sh, Math.max(2, r * 1.6)), 0, 0); s.globalAlpha = 1;
+  for (const e of els) {
+    dots(s, e.pts, e.r, "rgba(150,160,175,.22)");
+    dots(s, e.pts, e.r * .55, "rgba(30,30,36,.55)");
+    dots(s, e.pts, e.r * .26, "rgba(235,240,255,.30)", -e.r * .38, -e.r * .45);
+  }
+
+  // ---- lit sprites per colour, cropped to each tube ----
+  for (const e of els) {
+    const P = Math.ceil(e.r * 9), [x0, y0, x1, y1] = e.box;
+    e.sx = Math.floor(x0 - P); e.sy = Math.floor(y0 - P);
+    const sw = Math.ceil(x1 - x0 + 2 * P), shh = Math.ceil(y1 - y0 + 2 * P);
+    const cols = e.kind === "heart" ? [HEART, HEART, HEART] : PALS.map(c => e.kind === "word" ? mix(c, WHITE, .18) : c);
+    e.spr = cols.map(c => {
+      const shape = mk(sw, shh), sx = shape.getContext("2d");
+      dots(sx, e.pts, e.r * 1.25, rgb(c), -e.sx, -e.sy);
+      const out = mk(sw, shh), o = out.getContext("2d");
+      blurCopy(shape, e.r * 5, .9, out);
+      o.globalCompositeOperation = "lighter"; blurCopy(shape, e.r * 1.8, .8, out);
+      o.globalCompositeOperation = "source-over";
+      dots(o, e.pts, e.r, rgb(mix(c, WHITE, .12)), -e.sx, -e.sy);
+      dots(o, e.pts, e.r * .66, rgb(mix(c, WHITE, .5)), -e.sx, -e.sy);
+      dots(o, e.pts, e.r * .34, rgb(mix(c, WHITE, .9)), -e.sx, -e.sy);
+      return out;
+    });
+    // big soft light it throws on the wall (quarter res)
+    const HP = fs * .55, q = 4;
+    e.hx = (x0 - HP) / q; e.hy = (y0 - HP) / q;
+    const hw = (x1 - x0 + 2 * HP) / q, hh = (y1 - y0 + 2 * HP) / q;
+    e.halo = cols.map(c => {
+      const shape = mk(hw, hh), sx = shape.getContext("2d");
+      sx.setTransform(1 / q, 0, 0, 1 / q, -e.hx, -e.hy);
+      dots(sx, e.pts.filter((_, k) => k % 2 === 0), e.r * 2.4, rgb(c));
+      const out = mk(hw, hh), o = out.getContext("2d");
+      blurCopy(shape, fs * .07 / q, .8, out); o.globalCompositeOperation = "lighter";
+      blurCopy(shape, fs * .22 / q, 1, out); blurCopy(shape, fs * .5 / q, 1, out);
+      return out;
+    });
+  }
+
+  // ---- clips that hold the glass ----
+  clips = mk(W, H); const cx = clips.getContext("2d");
+  for (const e of els) {
+    if (e.kind === "word" && e.k % 2) continue;
+    const chosen = [], gap = e.kind === "word" ? 1e9 : fs * .42, max = e.kind === "letter" ? 2 : 1;
+    const cand = e.pts.filter((_, k) => k % 7 === 3).sort((p, q) => hash(p[0] * 3 + p[1]) - hash(q[0] * 3 + q[1]));
+    for (const p of cand) {
+      if (chosen.length >= max) break;
+      if (chosen.every(c => Math.hypot(c[0] - p[0], c[1] - p[1]) > gap)) {
+        // local tube direction from nearby centre-line points
+        let sxx = 0, syy = 0, sxy = 0, n = 0;
+        for (const o of e.pts) { const dx = o[0] - p[0], dy = o[1] - p[1]; if (dx * dx + dy * dy < (e.r * 4) ** 2) { sxx += dx * dx; syy += dy * dy; sxy += dx * dy; n++; } }
+        if (n < 6) continue;
+        const ang = .5 * Math.atan2(2 * sxy, sxx - syy);
+        if (Math.abs(sxx - syy) + Math.abs(sxy) < 1) continue;
+        chosen.push([p[0], p[1], ang]);
+      }
+    }
+    for (const [x, y, ang] of chosen) {
+      cx.save(); cx.translate(x, y); cx.rotate(ang);
+      const cw = e.r * 1.3, chh = e.r * 2.7;
+      cx.fillStyle = "rgba(0,0,0,.45)"; cx.fillRect(-cw / 2 + e.r * .5, -chh / 2 + e.r * .8, cw, chh);
+      const gr = cx.createLinearGradient(0, -chh / 2, 0, chh / 2);
+      gr.addColorStop(0, "#cfd2d8"); gr.addColorStop(.5, "#6b6e75"); gr.addColorStop(1, "#2b2c30");
+      cx.fillStyle = gr; cx.beginPath(); cx.roundRect(-cw / 2, -chh / 2, cw, chh, cw * .3); cx.fill();
+      cx.fillStyle = "rgba(255,255,255,.35)"; cx.fillRect(-cw / 2 + cw * .2, -chh / 2 + 1, cw * .18, chh - 2);
+      cx.restore();
+    }
+  }
+
+  // ---- buffers for light + wet floor reflection ----
+  Lc = mk(W / 4, H / 4); lcx = Lc.getContext("2d");
+  tmp = mk(W, H); tx = tmp.getContext("2d");
+  const fh = H - floorY;
+  rc = mk(W / 2, fh / 2); rc2 = mk(W / 2, fh / 2); fc = mk(W / 2, fh / 2);
+  shrinkR = shrinker(rc2.width, rc2.height, 7);
+  shrinkS = (() => { const c = mk(W / 2 / 10, fh / 2 / 40); return src => { const x = c.getContext("2d"); x.clearRect(0, 0, c.width, c.height); x.drawImage(shrinkR(src), 0, 0, c.width, c.height); return c; }; })();
+  puddle = mk(W / 2, fh / 2); const px = puddle.getContext("2d");
+  px.fillStyle = "rgba(255,255,255,.28)"; px.fillRect(0, 0, puddle.width, puddle.height);
+  for (let k = 0; k < 14; k++) {
+    px.fillStyle = `rgba(255,255,255,${.4 + rnd() * .6})`; px.beginPath();
+    px.ellipse(rnd() * puddle.width, rnd() * puddle.height * 1.1, puddle.width * (.08 + rnd() * .25), puddle.height * (.05 + rnd() * .12), 0, 0, 7); px.fill();
+  }
+  px.fillStyle = "#fff"; px.beginPath(); px.ellipse(puddle.width * .5, puddle.height * .3, puddle.width * .36, puddle.height * .26, 0, 0, 7); px.fill();
+  const pb = blurCopy(puddle, 10); px.clearRect(0, 0, puddle.width, puddle.height); px.drawImage(pb, 0, 0);
+  built = true;
+}
+
+// brightness of one tube at time t
+function level(e, t) {
+  const s = t - e.on; if (s < 0) return 0;
+  let v = 0;
+  if (s < e.lit) { for (const [a, b, l] of e.ev) if (s >= a && s < b) v = l; }
+  else v = .965 + .035 * hash(Math.floor(t * 30) + e.on * 7);
+  if (e.kind === "letter" && e.i === CONFIG.faulty && s > e.lit + 1) {          // the loose one
+    const ph = (t * .23 + .4) % 1; if (ph < .045) v *= hash(Math.floor(t * 30)) < .5 ? .15 : .7;
+  }
+  if (t - e.buzz < .55) v *= .25 + .75 * hash(Math.floor(t * 30) * 1.7 + e.box[0]);
+  // colour change: the whole sign stutters, colour swaps while it is dark
+  const k = t - swapT;
+  if (k >= 0 && k < .5) v *= k < .06 ? .5 : k < .16 ? .04 : k < .2 ? .6 : k < .26 ? .1 : .3 + .7 * clamp((k - .26) / .1);
+  return v;
+}
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (!built) return;
+  if (t0 === null) t0 = now;
+  const t = (now - t0) / 1000, dt = Math.min(.1, t - last); last = t;
+  if (swapT > -9 && t - swapT >= .16 && pal !== nextPal) pal = nextPal;
+  let avg = 0;
+  for (const e of els) { const v = level(e, t); e.b += (v - e.b) * Math.min(1, dt * 28); avg += e.b; }
+  avg /= els.length;
+
+  g.globalCompositeOperation = "source-over"; g.globalAlpha = 1;
+  g.drawImage(base, 0, 0);
+  // light from the tubes falling on the bricks and the floor
+  lcx.globalCompositeOperation = "source-over"; lcx.clearRect(0, 0, Lc.width, Lc.height);
+  lcx.globalCompositeOperation = "lighter";
+  for (const e of els) if (e.b > .01) { lcx.globalAlpha = e.b * (e.kind === "word" ? .55 : 1); lcx.drawImage(e.halo[pal], e.hx, e.hy); }
+  lcx.globalAlpha = 1;
+  tx.globalCompositeOperation = "source-over"; tx.fillStyle = "#000"; tx.fillRect(0, 0, W, H);
+  tx.globalCompositeOperation = "lighter"; tx.drawImage(Lc, 0, 0, W, H); tx.drawImage(Lc, 0, 0, W, H);
+  tx.globalCompositeOperation = "multiply"; tx.drawImage(albedo, 0, 0);
+  g.globalCompositeOperation = "lighter"; g.drawImage(tmp, 0, 0);
+  g.globalAlpha = .28; g.drawImage(Lc, 0, 0, W, H); g.globalAlpha = 1;
+  // glass, clips, glow
+  g.globalCompositeOperation = "source-over"; g.drawImage(stat, 0, 0);
+  for (const e of els) if (e.b > .01) {
+    g.globalAlpha = Math.min(1, e.b); g.globalCompositeOperation = "lighter";
+    g.drawImage(e.spr[pal], e.sx, e.sy);
+  }
+  g.globalAlpha = 1; g.globalCompositeOperation = "source-over"; g.drawImage(clips, 0, 0);
+  // sparks from touching the glass
+  g.globalCompositeOperation = "lighter";
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const p = sparks[i]; p.life -= dt; if (p.life <= 0) { sparks.splice(i, 1); continue; }
+    p.vy += 900 * unit * dt; const ox = p.x, oy = p.y; p.x += p.vx * dt; p.y += p.vy * dt;
+    g.strokeStyle = `rgba(255,${200 + 55 * p.life | 0},${150 + 100 * p.life | 0},${clamp(p.life * 2)})`; g.lineWidth = 1.6 * unit;
+    g.beginPath(); g.moveTo(ox, oy); g.lineTo(p.x, p.y); g.stroke();
+  }
+  // wet floor: squashed, rippled mirror of everything above it
+  const fh = H - floorY, SQ = .7;
+  const r1 = rc.getContext("2d"); r1.globalCompositeOperation = "source-over"; r1.clearRect(0, 0, rc.width, rc.height);
+  r1.setTransform(1, 0, 0, -1, 0, rc.height); r1.drawImage(cv, 0, floorY - fh / SQ, W, fh / SQ, 0, 0, rc.width, rc.height); r1.setTransform(1, 0, 0, 1, 0, 0);
+  const r2 = rc2.getContext("2d"); r2.clearRect(0, 0, rc2.width, rc2.height);
+  const strip = 3;
+  for (let y = 0; y < rc.height; y += strip) {
+    const d = y / rc.height, off = Math.sin(y * .21 + t * 2.2) * (1 + d * 5) * unit + Math.sin(y * .05 - t * 1.3) * 2 * d * unit;
+    r2.drawImage(rc, 0, y, rc.width, strip, off, y, rc.width, strip);
+  }
+  const f = fc.getContext("2d"); f.globalCompositeOperation = "source-over"; f.clearRect(0, 0, fc.width, fc.height);
+  f.globalAlpha = .32; f.drawImage(rc2, 0, 0);
+  f.globalCompositeOperation = "lighter"; f.globalAlpha = .55; f.drawImage(shrinkR(rc2), 0, 0, fc.width, fc.height);
+  f.globalAlpha = .9; f.drawImage(shrinkS(rc2), 0, 0, fc.width, fc.height);
+  f.globalAlpha = 1; f.globalCompositeOperation = "destination-in"; f.drawImage(puddle, 0, 0);
+  const fade = f.createLinearGradient(0, 0, 0, fc.height); fade.addColorStop(0, "rgba(0,0,0,1)"); fade.addColorStop(1, "rgba(0,0,0,.35)");
+  f.fillStyle = fade; f.fillRect(0, 0, fc.width, fc.height);
+  g.globalCompositeOperation = "lighter"; g.drawImage(fc, 0, floorY, W, fh);
+  g.globalCompositeOperation = "source-over";
+
+  const firstAll = Math.max(...els.map(e => e.on + e.lit));
+  hintEl.style.opacity = (.75 * clamp((t - firstAll - .8) / .8) * (touched ? Math.max(0, 1 - (t - touched) / .6) : 1)).toFixed(3);
+}
+
+// ---------- touch: tap = next colour, drag across the glass = it buzzes ----------
+let down = null, touched = 0;
+const nowS = () => (performance.now() - (t0 || 0)) / 1000;
+function touchGlass(px, py) {
+  const t = nowS();
+  for (const e of els) {
+    const R = e.r * 7, [x0, y0, x1, y1] = e.box;
+    if (px < x0 - R || px > x1 + R || py < y0 - R || py > y1 + R) continue;
+    let best = null, bd = R * R;
+    for (const p of e.sample) { const d = (p[0] - px) ** 2 + (p[1] - py) ** 2; if (d < bd) { bd = d; best = p; } }
+    if (!best) continue;
+    const fresh = t - e.buzz > .2; e.buzz = t;
+    if (e.b > .3) for (let k = 0; k < (fresh ? 7 : 2); k++) {
+      const a = -Math.PI / 2 + (rnd() - .5) * 2.6, v = (120 + rnd() * 260) * unit;
+      sparks.push({ x: best[0], y: best[1], vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .25 + rnd() * .35 });
+    }
+  }
+}
+cv.addEventListener("pointerdown", e => { down = { x: e.clientX, y: e.clientY, moved: false }; cv.setPointerCapture && cv.setPointerCapture(e.pointerId); touchGlass(e.clientX * DPR, e.clientY * DPR); });
+cv.addEventListener("pointermove", e => {
+  if (!down) return;
+  if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10) down.moved = true;
+  if (down.moved) touchGlass(e.clientX * DPR, e.clientY * DPR);
+});
+cv.addEventListener("pointerup", () => {
+  if (down && !down.moved) { const t = nowS(); swapT = t; nextPal = (pal + 1) % PALS.length; }
+  if (down) touched = touched || nowS();
+  down = null;
+});
+cv.addEventListener("pointercancel", () => { down = null; });
+
+addEventListener("resize", () => { if (built) { build(); } });
+Promise.all([
+  document.fonts.load(`100px "${CONFIG.font}"`, CONFIG.name),
+  document.fonts.load(`400 40px "${CONFIG.lineFont}"`, CONFIG.line)
+]).catch(() => {}).then(() => { build(); requestAnimationFrame(frame); });
+</script>
+</body>
+</html>
