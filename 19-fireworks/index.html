@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fireworks</title>
+<meta name="description" content="Tap the sky to launch fireworks. Every fourth one writes her name. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yellowtail&family=Cormorant+Garamond:ital,wght@1,500&family=Figtree:wght@400;600&display=block">
+<style>
+:root{--ink:#F6EEE4;--mute:#9AA0BC}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:#05060F;color:var(--ink);font-family:"Figtree",system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;cursor:crosshair}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hint{position:fixed;top:max(22px,env(safe-area-inset-top));left:0;right:0;text-align:center;font-size:11px;font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:var(--mute);pointer-events:none}
+.msg{position:fixed;left:0;right:0;top:55%;text-align:center;padding:0 24px;margin:0;font:italic 500 clamp(22px,6.4vw,32px)/1.2 "Cormorant Garamond",Georgia,serif;letter-spacing:.01em;color:var(--ink);text-shadow:0 0 22px rgba(255,190,120,.55);pointer-events:none;opacity:0}
+.credit{position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:0;right:0;text-align:center;font-size:11px;color:var(--mute);opacity:.7}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hint" id="hint">tap anywhere to light the sky</div>
+<p class="msg" id="msg"></p>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Fireworks · free code by @sicscod.drops =====
+// Share it without coding: yoursite/?name=Delly&msg=you%20light%20up%20everything&hue=340
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "Delly",              // written in sparks
+  msg: url.get("msg") || "you light up everything",
+  hue: +(url.get("hue") || 340),                 // main firework colour, 0–360 (340 rose, 45 gold, 200 ice)
+  font: "Yellowtail",                            // script font for the name
+  nameEvery: 4,                                  // every 4th firework writes the name
+  finaleAt: 8,                                   // the 8th tap is the grand finale
+  nameHold: 1.9,                                 // seconds the name hangs in the sky
+  finaleHold: 3.4,
+  namePoints: 1050,                               // sparks in the name
+  rise: 0.78,                                    // seconds a rocket climbs
+  gravity: 150,                                  // spark gravity, px/s² (scaled to screen)
+  drag: 2.8,                                     // air drag on sparks
+  trail: 8.5,                                    // trail fade speed (lower = longer trails)
+  auto: url.has("auto")                          // ?auto plays the show by itself
+};
+
+const $ = id => document.getElementById(id);
+$("msg").textContent = CONFIG.msg;
+const cv = $("c"), g = cv.getContext("2d");
+const fire = document.createElement("canvas"), f = fire.getContext("2d");
+let W, H, D, S, base, sky = [], city, rockets = [], sparks = [], smoke = [], flashes = [], namePts = [];
+let taps = 0, finaleT = -1, lastT = 0, t0 = 0, hintA = 1, now = 0, nextAuto = 1.2;
+const R = Math.random, clamp = x => Math.max(0, Math.min(1, x));
+const hueAt = k => ((CONFIG.hue + k) % 360 + 360) % 360;
+
+// ---- glow sprites, one per hue (white-hot core, coloured halo) ----
+const sprites = {};
+function sprite(h, sat = 100){
+  const key = (Math.round(h / 6) * 6) + "_" + sat;
+  if (sprites[key]) return sprites[key];
+  const c = document.createElement("canvas"); c.width = c.height = 32;
+  const s = c.getContext("2d"), r = s.createRadialGradient(16, 16, 0, 16, 16, 16);
+  r.addColorStop(0, "rgba(255,255,255,1)");
+  r.addColorStop(.16, `hsla(${h},${sat}%,78%,.95)`);
+  r.addColorStop(.42, `hsla(${h},${sat}%,56%,.28)`);
+  r.addColorStop(1, `hsla(${h},${sat}%,50%,0)`);
+  s.fillStyle = r; s.fillRect(0, 0, 32, 32);
+  return sprites[key] = c;
+}
+const haze = (() => { const c = document.createElement("canvas"); c.width = c.height = 64;
+  const s = c.getContext("2d"), r = s.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(255,255,255,.5)"); r.addColorStop(.5, "rgba(255,255,255,.18)"); r.addColorStop(1, "rgba(255,255,255,0)");
+  s.fillStyle = r; s.fillRect(0, 0, 64, 64); return c; })();
+
+// ---- the city: a fixed skyline (own seed, so it is the same every visit) ----
+function skyline(){
+  let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const c = document.createElement("canvas"); c.width = W * D; c.height = H * D;
+  const k = c.getContext("2d"); k.scale(D, D);
+  const layer = (col, hMin, hMax, wMin, wMax, lit) => {
+    let x = -10;
+    while (x < W + 10){
+      const w = wMin + rnd() * (wMax - wMin), h = (hMin + rnd() ** 1.6 * (hMax - hMin)) * H, top = base - h;
+      k.fillStyle = col; k.fillRect(x, top, w, h + 2);
+      if (rnd() < .3) k.fillRect(x + w * .2, top - h * .08, w * .6, h * .08 + 1);            // stepped roof
+      if (rnd() < .22) k.fillRect(x + w * .5 - .6, top - h * .28, 1.2, h * .28);            // antenna
+      if (lit) for (let y = top + 5; y < base - 4; y += 6) for (let wx = x + 3; wx < x + w - 4; wx += 5)
+        if (rnd() < .16){ k.fillStyle = `rgba(255,${190 + rnd()*40 | 0},${110 + rnd()*60 | 0},${.35 + rnd()*.5})`; k.fillRect(wx, y, 2, 2.6); k.fillStyle = col; }
+      x += w + (rnd() < .3 ? rnd() * 6 : 0);
+    }
+  };
+  layer("#0E1128", .07, .24, 16, 38, false);   // far, hazy
+  layer("#090b17", .04, .17, 18, 54, true);    // near, with lit windows
+  return c;
+}
+
+// ---- the name as target points ----
+function nameTargets(){
+  const c = document.createElement("canvas"), s = c.getContext("2d");
+  c.width = W; c.height = H;
+  let fs = Math.min(H * .3, W * .42);
+  const font = sz => `${sz}px "${CONFIG.font}", cursive`;
+  s.font = font(fs);
+  fs = Math.min(fs, fs * W * .8 / s.measureText(CONFIG.name).width);
+  s.font = font(fs); s.textAlign = "center"; s.textBaseline = "middle";
+  s.fillText(CONFIG.name, W / 2, H * .38);
+  const px = s.getImageData(0, 0, W, H).data, pts = [];
+  for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) if (px[(y * W + x) * 4 + 3] > 150) pts.push([x, y]);
+  for (let i = pts.length - 1; i > 0; i--){ const j = R() * (i + 1) | 0; [pts[i], pts[j]] = [pts[j], pts[i]]; }
+  namePts = pts.slice(0, Math.min(pts.length, CONFIG.namePoints));
+}
+
+function resize(){
+  D = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; S = Math.min(1.4, Math.max(.6, H / 700));
+  base = H * .865;
+  cv.width = fire.width = W * D; cv.height = fire.height = H * D;
+  sky = Array.from({length: 150}, () => ({ x: R() * W, y: R() * base * .9, r: R() ** 3 * 1.6 + .4, tw: R() * 6, sp: .5 + R() * 1.5 }));
+  city = skyline(); nameTargets();
+}
+
+// ---- launching ----
+function launch(x, y, kind){
+  const sx = Math.max(16, Math.min(W - 16, x + (R() - .5) * 40)), h = base - y, T = CONFIG.rise * (.85 + R() * .3);
+  const gr = 2 * h / (T * T);                                   // climbs and slows to a stop right at the tap
+  rockets.push({ x: sx, y: base, vx: (x - sx) / T, vy: -gr * T, gr, kind, age: 0 });
+}
+
+const TYPES = ["peony", "ring", "willow", "crackle", "peony", "chrys"];
+function burst(r){
+  const x = r.x, y = r.y, kind = r.kind;
+  const sz = S * (.85 + R() * .3), h0 = kind === "willow" ? 38 : hueAt((R() - .5) * 80 + (R() < .3 ? 160 : 0));
+  flashes.push({ x, y, h: h0, age: 0, p: kind === "name" ? 1.4 : 1 });
+  for (let i = 0; i < 7; i++) smoke.push({ x: x + (R() - .5) * 120 * sz, y: y + (R() - .5) * 90 * sz, r: (40 + R() * 50) * sz, h: h0, age: 0, life: 6 + R() * 3, vx: 6 + R() * 6, vy: -2 - R() * 3 });
+  const add = (n, speed, o) => { for (let i = 0; i < n; i++){
+    let a = R() * Math.PI * 2, sp = speed * sz;
+    if (o.ring){ a = i / n * Math.PI * 2; sp *= .97 + R() * .06; }
+    else { const u = R() * 2 - 1; sp *= Math.sqrt(1 - u * u) * .35 + .65 + R() * .05; }   // a 3D shell seen from the side
+    const tilt = o.ring ? .55 : 1;
+    sparks.push({ x, y, px: x, py: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * tilt, age: 0, life: o.life * (.75 + R() * .5),
+      h: o.h ?? h0, sat: o.sat ?? 100, drag: o.drag ?? CONFIG.drag, g: (o.g ?? 1) * CONFIG.gravity * S, size: o.size ?? 7, tail: o.tail ?? 0, crackle: o.crackle });
+  } };
+  if (kind === "name"){
+    const k = Math.max(1, namePts.length);
+    namePts.forEach(([tx, ty], i) => {
+      const a = R() * Math.PI * 2, sp = (260 + R() * 240) * S;
+      sparks.push({ x, y, px: x, py: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, age: 0, life: 99, h: 40, sat: 100, drag: CONFIG.drag, g: 0, size: 7.5,
+        tx, ty, delay: .32 + i / k * .25, hold: r.hold, name: true });
+    });
+    add(90, 340, { life: 1.6, h: 42, size: 6, tail: .3 });
+    return;
+  }
+  if (kind === "peony"){ add(150, 420, { life: 1.9 }); add(40, 230, { life: 1.4, h: hueAt(180) }); }
+  if (kind === "ring"){ add(90, 400, { life: 1.8, ring: true }); add(30, 120, { life: 1.2, h: 45, sat: 70 }); }
+  if (kind === "willow") add(130, 330, { life: 3.2, h: 36, sat: 85, drag: 2.1, g: 1.5, size: 6, tail: .9 });
+  if (kind === "crackle") add(120, 380, { life: 1.5, h: 48, sat: 60, crackle: true, tail: .4 });
+  if (kind === "chrys"){ add(140, 450, { life: 2.1, tail: .5 }); add(50, 260, { life: 1.6, h: 48, sat: 70 }); }
+}
+
+function tap(x, y){
+  taps++; hintA = Math.min(hintA, .999);
+  y = y > base - 40 ? H * (.18 + R() * .25) : Math.max(H * .1, y);
+  if (taps === CONFIG.finaleAt && finaleT < 0){                  // grand finale: a salvo, then her name
+    finaleT = now;
+    [[.16, .3], [.84, .26], [.34, .16], [.66, .2], [.5, .12]].forEach(([fx, fy], i) =>
+      queue.push({ at: now + i * 110, x: W * fx, y: H * fy, kind: TYPES[(i * 2 + 1) % TYPES.length] }));
+    queue.push({ at: now + 520, x, y: Math.min(y, H * .42), kind: "name", hold: CONFIG.finaleHold });
+    return;
+  }
+  if (taps % CONFIG.nameEvery === 0) return launch(x, Math.min(y, H * .42), "name"), rockets.at(-1).hold = CONFIG.nameHold;
+  launch(x, y, TYPES[(taps - 1) % TYPES.length]);
+}
+const queue = [];
+
+// ---- the show: one loop ----
+function frame(ms){
+  now = ms; if (!t0) t0 = ms;
+  const dt = Math.min(.05, (ms - (lastT || ms)) / 1000); lastT = ms;
+  const t = (ms - t0) / 1000;
+  for (let i = queue.length - 1; i >= 0; i--) if (ms >= queue[i].at){ const q = queue.splice(i, 1)[0]; launch(q.x, q.y, q.kind); if (q.hold) rockets.at(-1).hold = q.hold; }
+  if (CONFIG.auto && t > nextAuto){ nextAuto = t + 1.1; tap(W * (.15 + R() * .7), H * (.12 + R() * .35)); }
+
+  // fire layer: fade old light (= trails), then draw new light additively
+  f.setTransform(D, 0, 0, D, 0, 0);
+  f.globalCompositeOperation = "destination-out";
+  f.fillStyle = `rgba(0,0,0,${1 - Math.exp(-dt * CONFIG.trail)})`; f.fillRect(0, 0, W, H);
+  f.globalCompositeOperation = "lighter";
+
+  rockets = rockets.filter(r => {
+    r.age += dt; const ox = r.x, oy = r.y;
+    r.vy += r.gr * dt; r.x += r.vx * dt + Math.sin(r.age * 40) * .25; r.y += r.vy * dt;
+    for (let k = 0; k < 3; k++){ const m = k / 3; f.globalAlpha = .9; const s = 7 * S; f.drawImage(sprite(35, 90), ox + (r.x - ox) * m - s / 2, oy + (r.y - oy) * m - s / 2, s, s); }
+    if (R() < .8) sparks.push({ x: r.x, y: r.y, px: r.x, py: r.y, vx: (R() - .5) * 40, vy: 30 + R() * 50, age: 0, life: .35 + R() * .3, h: 30, sat: 90, drag: 3, g: CONFIG.gravity * S, size: 4, tail: 0 });
+    if (r.vy >= -12){ burst(r); return false; }
+    return true;
+  });
+
+  const nextSparks = [];
+  for (const p of sparks){
+    p.age += dt; p.px = p.x; p.py = p.y;
+    if (p.name){
+      const a = p.age;
+      if (a > p.delay && !p.free){
+        // pulled into the letters by a damped spring, then held
+        const k = Math.min(1, (a - p.delay) * 1.6) * 90, c = 2 * Math.sqrt(k) * 1.05;
+        p.vx += ((p.tx - p.x) * k - p.vx * c) * dt; p.vy += ((p.ty - p.y) * k - p.vy * c) * dt;
+        if (a > p.delay + .9 + p.hold){ p.free = a; p.vx = (R() - .5) * 18; p.vy = R() * 10; p.life = a + 1.8 + R() * 2.2; }
+      } else {
+        const d = Math.exp(-(p.free ? 1.2 : CONFIG.drag) * dt);
+        p.vx *= d; p.vy *= d; if (p.free) p.vy += 22 * S * dt, p.vx += Math.sin(t * 1.3 + p.ty * .05) * 6 * dt;
+      }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+    } else {
+      const d = Math.exp(-p.drag * dt);
+      p.vx *= d; p.vy = p.vy * d + p.g * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+    }
+    if (p.age >= p.life){
+      if (p.crackle) for (let k = 0; k < 2; k++) nextSparks.push({ x: p.x, y: p.y, px: p.x, py: p.y, vx: (R() - .5) * 90, vy: (R() - .5) * 90, age: 0, life: .12 + R() * .12, h: 50, sat: 0, drag: 4, g: 0, size: 9, tail: 0 });
+      continue;
+    }
+    nextSparks.push(p);
+    // colour: white-hot at first, then its own colour, then a dim red ember that flickers out
+    const k = p.free ? (p.age - p.free) / (p.life - p.free) : p.name ? 0 : p.age / p.life;
+    let a = k < .7 ? 1 : 1 - (k - .7) / .3;
+    if (k > .55 && R() < (k - .5) * .9) a *= .15;                 // flicker
+    if (p.name && !p.free) a = .75 + .25 * Math.sin(t * 9 + p.tx * .3);
+    const hue = p.name ? 40 - k * 25 : p.h - k * 18 * (p.sat ? 1 : 0);
+    const spr = sprite(hue < 0 ? hue + 360 : hue, p.free ? 95 : p.sat), s = p.size * S * (1 - k * .45) * (p.name && p.age < .5 ? 1.3 : 1);
+    const dist = Math.hypot(p.x - p.px, p.y - p.py), n = Math.min(4, 1 + dist / (s * .45) | 0);
+    f.globalAlpha = a;
+    for (let j = 0; j < n; j++){ const m = (j + 1) / n; f.drawImage(spr, p.px + (p.x - p.px) * m - s / 2, p.py + (p.y - p.py) * m - s / 2, s, s); }
+    if (p.tail && R() < p.tail * .5) nextSparks.push({ x: p.x, y: p.y, px: p.x, py: p.y, vx: 0, vy: 10, age: 0, life: .5 + R() * .5, h: 34, sat: 80, drag: 3, g: 30, size: 3.5, tail: 0 });
+  }
+  sparks = nextSparks;
+  f.globalAlpha = 1;
+
+  // sky
+  g.setTransform(D, 0, 0, D, 0, 0);
+  g.globalCompositeOperation = "source-over"; g.globalAlpha = 1;
+  const bg = g.createLinearGradient(0, 0, 0, base);
+  bg.addColorStop(0, "#03040B"); bg.addColorStop(.55, "#0A0D24"); bg.addColorStop(.88, "#1C1530"); bg.addColorStop(1, "#3A2234");
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  for (const s of sky){ g.globalAlpha = .25 + .3 * Math.sin(t * s.sp + s.tw); g.fillStyle = "#DDE4FF"; g.fillRect(s.x, s.y, s.r, s.r); }
+
+  g.globalCompositeOperation = "lighter";
+  flashes = flashes.filter(fl => {                                // each burst lights up the sky for a moment
+    fl.age += dt; const a = Math.exp(-fl.age * 4.5) * .42 * fl.p;
+    if (a < .01) return false;
+    const r = g.createRadialGradient(fl.x, fl.y, 0, fl.x, fl.y, W * .9);
+    r.addColorStop(0, `hsla(${fl.h},90%,60%,${a * .5})`); r.addColorStop(.4, `hsla(${fl.h},80%,45%,${a * .14})`); r.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = r; g.fillRect(0, 0, W, H); return true;
+  });
+  smoke = smoke.filter(s => {                                     // smoke haze drifts and is lit by new bursts
+    s.age += dt; if (s.age > s.life) return false;
+    s.x += s.vx * dt; s.y += s.vy * dt; s.r += 7 * dt;
+    let lit = 0; for (const fl of flashes) lit += Math.exp(-fl.age * 3) * Math.max(0, 1 - Math.hypot(fl.x - s.x, fl.y - s.y) / (W * .6));
+    const a = Math.sin(Math.PI * s.age / s.life) * (.05 + lit * .2);
+    g.globalAlpha = Math.min(.3, a); g.drawImage(sprite(s.h, 25), s.x - s.r, s.y - s.r, s.r * 2, s.r * 2);
+    g.globalAlpha = Math.min(.2, a * .8); g.drawImage(haze, s.x - s.r * 1.3, s.y - s.r * 1.3, s.r * 2.6, s.r * 2.6);
+    return true;
+  });
+  g.globalAlpha = 1; g.setTransform(1, 0, 0, 1, 0, 0);
+  g.drawImage(fire, 0, 0);
+  g.globalCompositeOperation = "source-over";
+  g.drawImage(city, 0, 0);
+
+  // river: the sky reflected in slow ripples
+  const wy = base * D, wh = (H - base) * D;
+  for (let y = 0; y < wh; y += 2 * D){
+    const src = wy - 2 - y * 1.25, off = Math.sin(y * .09 + t * 2.2) * (1.5 + y * .03) * D;
+    g.drawImage(cv, 0, src, cv.width, 2 * D, off, wy + y, cv.width, 2 * D);
+  }
+  g.setTransform(D, 0, 0, D, 0, 0);
+  const wg = g.createLinearGradient(0, base, 0, H);
+  wg.addColorStop(0, "rgba(4,5,14,.45)"); wg.addColorStop(1, "rgba(4,5,14,.92)");
+  g.fillStyle = wg; g.fillRect(0, base, W, H - base);
+  g.fillStyle = "rgba(255,200,150,.10)"; g.fillRect(0, base, W, 1);
+
+  // words
+  if (hintA < 1) hintA = Math.max(0, hintA - dt * 1.5);
+  $("hint").style.opacity = (hintA * (.7 + .3 * Math.sin(t * 2.4))).toFixed(3);
+  $("msg").style.opacity = finaleT < 0 ? 0 : clamp(((ms - finaleT) / 1000 - 2.4) / 1.1).toFixed(3);
+  requestAnimationFrame(frame);
+}
+
+addEventListener("pointerdown", e => tap(e.clientX, e.clientY));
+addEventListener("resize", resize);
+addEventListener("load", () => document.fonts.load(`80px "${CONFIG.font}"`).finally(() => {
+  resize();
+  launch(W * .62, H * .24, "peony");                              // one hello firework on load
+  requestAnimationFrame(frame);
+}));
+</script>
+</body>
+</html>

@@ -8,6 +8,7 @@ Saw a drop in a video? Its number is the folder.
 
 | # | Drop | What it is |
 |---|------|-----------|
+| 19 | [🎆 Fireworks](19-fireworks) | Fireworks that write her name, ?name=&msg= in the link |
 | 01 | [✨ Particle Portfolio](01-particle-portfolio) | Your name made of particles that scatter under your cursor |
 | 02 | [❤️ Terminal Heart](02-terminal-heart) | A beating heart made of a name, right in your terminal |
 | 03 | [🐉 Neon Dragon](03-neon-dragon) | A glowing dragon that follows your finger |
