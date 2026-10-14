@@ -30,6 +30,7 @@ Saw a drop in a video? Its number is the folder.
 | 21 | [💫 Two Stars](21-two-stars) | Two stars that merge into a heart, ?name=&me=&msg= in the link |
 | 22 | [🥠 Fortune Cookie](22-fortune-cookie) | A fortune cookie with a rigged last fortune, ?name=&last= in the link |
 | 23 | [💗 Neon Sign](23-neon-sign) | Her name as a flickering neon sign, ?name=&line= in the link |
+| 24 | [🌸 Blossom](24-blossom) | A cherry tree whose petals spell her name, ?name=&msg= in the link |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
