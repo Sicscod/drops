@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Two stars</title>
+<meta name="description" content="Two stars in a binary orbit. Pull them together and they become one. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=block">
+<style>
+:root{--bg:#03040a;--ink:#f6f1ea;--mute:#7d8199}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;cursor:grab}
+.hud{position:fixed;top:18px;left:0;right:0;text-align:center;font:500 11px "JetBrains Mono",ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute);pointer-events:none}
+.hud b{font-weight:500;color:#d9d4cc}
+.words{position:fixed;left:0;right:0;text-align:center;padding:0 24px;pointer-events:none;color:var(--ink);opacity:0}
+.l1{margin:0;font:italic 400 clamp(20px,5.6vw,26px) "Instrument Serif",Georgia,serif;color:#bfb6c4;letter-spacing:.01em}
+.l2{margin:2px 0 0;font:400 clamp(38px,11vw,54px)/1 "Instrument Serif",Georgia,serif;letter-spacing:-.01em}
+.hint{position:fixed;left:0;right:0;bottom:44px;text-align:center;font:400 11px "JetBrains Mono",ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);pointer-events:none}
+.credit{position:fixed;bottom:14px;left:0;right:0;text-align:center;font:12px "JetBrains Mono",ui-monospace,monospace;color:var(--mute);opacity:.6}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud" id="hud"></div>
+<div class="words" id="words"><p class="l1" id="l1"></p><p class="l2" id="l2"></p></div>
+<div class="hint" id="hint"></div>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Two Stars · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&me=you&msg=out%20of%20all%20the%20stars,%20I%20found%20you
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "Delly",      // her star
+  me: url.get("me") || "you",            // your star
+  msg: url.get("msg") || "out of all the stars, I found you",
+  hue: +(url.get("hue") || 338),         // her star's colour (0-360), yours is +62°
+  hint: "drag to pull them closer",
+  distance: 4.2,                         // light years apart at the start
+  dust: 9000,                            // particles
+  pull: 900                              // px of dragging needed to bring them together
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+const trail = document.createElement("canvas"), tg = trail.getContext("2d");       // particles + fading trails
+const b1 = document.createElement("canvas"), g1 = b1.getContext("2d");             // bloom, 1/4 size
+const b2 = document.createElement("canvas"), g2 = b2.getContext("2d");             // bloom, 1/10 size
+const sky = document.createElement("canvas"), sg = sky.getContext("2d");          // background stars
+const $ = id => document.getElementById(id);
+const [l1, l2] = (CONFIG.msg.includes(",") ? CONFIG.msg.split(/,(.*)/s) : ["", CONFIG.msg]).map(s => s.trim());
+$("l1").textContent = l1 ? l1 + "," : ""; $("l2").textContent = l2; $("hint").textContent = CONFIG.hint;
+
+const hsl = (h, s, l) => { // -> [r,g,b]
+  s /= 100; l /= 100; const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  return [0, 8, 4].map(n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)))));
+};
+const HER = CONFIG.hue, YOU = (CONFIG.hue + 62) % 360;
+const COL = [[hsl(YOU, 95, 66), hsl(YOU, 100, 84)], [hsl(HER, 95, 68), hsl(HER, 100, 86)], [[255, 246, 236], [255, 255, 255]]];
+const clamp = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const smooth = (a, b, x) => { x = clamp((x - a) / (b - a)); return x * x * (3 - 2 * x); };
+const io3 = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+
+// ---------- particles ----------
+// kind 0 = disk around its star, 1 = trail along the orbit, 2 = ring around both, 3 = bridge between them
+const N = CONFIG.dust;
+const heart = t => { const s = Math.sin(t); return [16 * s * s * s / 17, -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 17 - 2.5 / 17]; };
+const OUTLINE = Array.from({ length: 120 }, (_, i) => heart(i / 120 * 6.283));
+const inHeart = (x, y) => { let c = false; for (let i = 0, j = 119; i < 120; j = i++) { const [xi, yi] = OUTLINE[i], [xj, yj] = OUTLINE[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+const kind = new Uint8Array(N), star = new Uint8Array(N), lvl = new Uint8Array(N), big = new Uint8Array(N);
+const A = new Float32Array(N), B = new Float32Array(N), Cc = new Float32Array(N), spin = new Float32Array(N);
+const px = new Float32Array(N), py = new Float32Array(N), dx = new Float32Array(N), dy = new Float32Array(N), vx = new Float32Array(N), vy = new Float32Array(N);
+const bx = new Float32Array(N), by = new Float32Array(N), ux = new Float32Array(N), uy = new Float32Array(N), hx = new Float32Array(N), hy = new Float32Array(N), hp = new Float32Array(N);
+for (let i = 0; i < N; i++) {
+  const r = Math.random();
+  const k = r < .56 ? 0 : r < .82 ? 1 : r < .91 ? 2 : 3;
+  kind[i] = k; star[i] = i & 1;
+  if (k === 0) { A[i] = .1 + .9 * Math.pow(Math.random(), 1.5); B[i] = Math.random() * 6.283; spin[i] = 1.1 / (.25 + A[i]); }
+  if (k === 1) { A[i] = Math.pow(Math.random(), 1.4) * 2.5; B[i] = gauss(); Cc[i] = gauss(); }
+  if (k === 2) { A[i] = .8 + .5 * Math.random(); B[i] = Math.random() * 6.283; spin[i] = .22 / A[i]; Cc[i] = gauss() * .05; }
+  if (k === 3) { A[i] = Math.random(); B[i] = gauss(); Cc[i] = gauss(); }
+  // brightness level 0..3 (fixed per particle so we can batch by colour)
+  const fall = k === 1 ? 1 - A[i] / 2.5 : k === 0 ? 1 - A[i] * .6 : .45;
+  lvl[i] = Math.min(3, Math.floor(fall * 3.2 * (.55 + .45 * Math.random())));
+  big[i] = Math.random() < .08 ? 1 : 0;
+  // its place in the heart nebula: a bright rim + soft filling
+  if (Math.random() < .6) { const [ex, ey] = heart(Math.random() * 6.283), f = 1 - Math.abs(gauss()) * .07; hx[i] = ex * f; hy[i] = ey * f; }
+  else do { hx[i] = Math.random() * 2 - 1; hy[i] = Math.random() * 1.8 - .85; } while (!inHeart(hx[i], hy[i]));
+  hx[i] += gauss() * .012; hy[i] += gauss() * .012; hp[i] = Math.random() * 6.283;
+}
+// colour: star 0 = you, 1 = her; a few white-hot ones near the cores
+const col = new Uint8Array(N);
+for (let i = 0; i < N; i++) col[i] = (kind[i] === 0 && A[i] < .2) || Math.random() < .06 ? 2 : star[i];
+// batch order: colour x level, so we only switch fillStyle 12 times a frame
+const order = Array.from({ length: N }, (_, i) => i).sort((a, b) => (col[a] * 4 + lvl[a]) - (col[b] * 4 + lvl[b]));
+const STY = [], ALPHA = [.16, .3, .52, .85];
+for (let c = 0; c < 3; c++) for (let l = 0; l < 4; l++) { const [r, gg, b] = COL[c][l > 2 ? 1 : 0]; STY.push(`rgba(${r},${gg},${b},${ALPHA[l]})`); }
+
+// ---------- state ----------
+let W, H, S, D, Cx, Cy, Hx, Hy, sep0;
+let T = 0, last = 0, theta = .4, pull = 0, pullS = 0, phase = 0, tMerge = 0, held = false, fx = 0, fy = 0, moved = 0;
+const sky0 = [];
+for (let i = 0; i < 420; i++) sky0.push([Math.random(), Math.random(), Math.pow(Math.random(), 3), Math.random() * 6.283]);
+
+function resize() {
+  W = innerWidth; H = innerHeight; D = Math.min(devicePixelRatio || 1, 2); S = Math.min(W, H * .92);
+  for (const c of [cv, trail]) { c.width = W * D; c.height = H * D; }
+  b1.width = W * D / 4; b1.height = H * D / 4; b2.width = W * D / 10; b2.height = H * D / 10;
+  sky.width = W * D; sky.height = H * D;
+  Cx = W / 2; Cy = H * .43; Hx = W / 2; Hy = H * .4; sep0 = S * .5;
+  // faint haze + stars, drawn once
+  sg.setTransform(D, 0, 0, D, 0, 0);
+  const hz = (x, y, r, c) => { const q = sg.createRadialGradient(x, y, 0, x, y, r); q.addColorStop(0, c); q.addColorStop(1, "rgba(0,0,0,0)"); sg.fillStyle = q; sg.fillRect(0, 0, W, H); };
+  const [r1, g1_, bb1] = hsl(HER, 60, 30), [r2, g2_, bb2] = hsl(220, 70, 28);
+  hz(W * .15, H * .2, S * .7, `rgba(${r1},${g1_},${bb1},.18)`); hz(W * .9, H * .75, S * .8, `rgba(${r2},${g2_},${bb2},.22)`);
+  const words = $("words"); words.style.top = (Hy + S * .285 * (14.5 / 17) + 16) + "px";
+}
+addEventListener("resize", resize); resize();
+
+// ---------- input: drag anywhere ----------
+addEventListener("pointerdown", e => { held = true; fx = e.clientX; fy = e.clientY; if (phase === 2 && T - tMerge > 5) restart(); });
+addEventListener("pointermove", e => { if (!held) return; moved += Math.hypot(e.clientX - fx, e.clientY - fy); fx = e.clientX; fy = e.clientY; });
+addEventListener("pointerup", () => held = false); addEventListener("pointercancel", () => held = false);
+function restart() { phase = 0; pull = pullS = 0; trail.width = trail.width; dx.fill(0); dy.fill(0); vx.fill(0); vy.fill(0); }
+
+// ---------- loop ----------
+function frame(now) {
+  const dt = Math.min(.05, last ? (now - last) / 1000 : 0); last = now; T += dt;
+  if (phase === 0) {
+    if (held) { pull = Math.min(1, pull + moved / CONFIG.pull); }
+    else pull = Math.max(0, pull - .045 * dt);
+    moved = 0;
+    pullS += (pull - pullS) * (1 - Math.exp(-dt * 4));
+    if (pullS > .975) { phase = 2; tMerge = T; for (let i = 0; i < N; i++) launch(i); }
+  }
+  const sep = sep0 * (1 - .93 * pullS), h = sep / 2;
+  theta += dt * .6 * Math.min(7, Math.pow(sep0 / sep, 1.5));
+  const tilt = .58, ax = Cx + h * Math.cos(theta), ay = Cy + h * Math.sin(theta) * tilt, bxs = 2 * Cx - ax, bys = 2 * Cy - ay;
+  const rd = S * .16 * (.5 + .5 * sep / sep0);
+
+  // fade the trail layer (frame-rate independent)
+  tg.setTransform(1, 0, 0, 1, 0, 0);
+  tg.globalCompositeOperation = "destination-out";
+  tg.fillStyle = `rgba(0,0,0,${1 - Math.pow(phase === 2 ? .8 : .76, dt * 60)})`; tg.fillRect(0, 0, trail.width, trail.height);
+  tg.globalCompositeOperation = "lighter";
+
+  const tau = T - tMerge, u = io3(clamp((tau - .5) / 2.2));
+  const beat = 1 + .028 * Math.max(0, Math.sin(T * 7.4)) * smooth(.5, 1, u) * (Math.sin(T * 3.7) > 0 ? 1 : .5);
+  const hs = S * .285 * beat, bridge = smooth(.3, .75, pullS);
+
+  for (let i = 0; i < N; i++) {
+    let x, y;
+    if (phase === 0) {
+      const sx = star[i] ? bxs : ax, sy = star[i] ? bys : ay;
+      const k = kind[i];
+      if (k === 0) { B[i] += dt * spin[i] * (1 + 2.2 * pullS); const r = A[i] * rd; x = sx + r * Math.cos(B[i]); y = sy + r * Math.sin(B[i]) * .72; }
+      else if (k === 1) { const a = theta - A[i] + (star[i] ? Math.PI : 0), w = S * (.012 + .03 * A[i] / 2.5); x = Cx + h * Math.cos(a) + B[i] * w; y = Cy + h * Math.sin(a) * tilt + Cc[i] * w; }
+      else if (k === 2) { B[i] += dt * spin[i] * (1 + pullS); const R = (h + rd) * A[i] * 1.15; x = Cx + R * Math.cos(B[i]); y = Cy + R * Math.sin(B[i]) * tilt + Cc[i] * S; }
+      else {
+        const t = (A[i] + T * .45) % 1, ox = bxs - ax, oy = bys - ay, n = Math.sin(Math.PI * t) * .35 * (star[i] ? 1 : -1);
+        const sc = star[i] ? 1 : -1, cx0 = sc > 0 ? ax : bxs, cy0 = sc > 0 ? ay : bys;
+        x = cx0 + ox * t * sc - oy * n * sc + B[i] * S * .01; y = cy0 + oy * t * sc + ox * n * sc + Cc[i] * S * .01;
+        if (bridge < .01) { x = sx; y = sy; }
+      }
+      // your finger is a little gravity well
+      if (held) {
+        const ex = fx - (x + dx[i]), ey = fy - (y + dy[i]), d = Math.hypot(ex, ey) + 1, R = S * .26;
+        if (d < R) { const f = 900 * (1 - d / R) * dt / d; vx[i] += ex * f; vy[i] += ey * f; }
+      }
+      vx[i] += -dx[i] * 7 * dt; vy[i] += -dy[i] * 7 * dt; const damp = Math.exp(-dt * 2.6); vx[i] *= damp; vy[i] *= damp;
+      dx[i] += vx[i] * dt; dy[i] += vy[i] * dt;
+      x += dx[i]; y += dy[i];
+    } else {
+      // supernova, then the dust settles into a heart
+      const e = (1 - Math.exp(-2.6 * tau)) / 2.6;
+      const qx = bx[i] + ux[i] * e, qy = by[i] + uy[i] * e;
+      const sh = S * .006, w = T * (.8 + (i % 7) * .1) + hp[i];
+      const tx = Hx + hx[i] * hs + Math.cos(w) * sh, ty = Hy + hy[i] * hs + Math.sin(w) * sh;
+      x = qx + (tx - qx) * u; y = qy + (ty - qy) * u;
+    }
+    px[i] = x; py[i] = y;
+  }
+
+  // draw dust in colour batches
+  tg.setTransform(D, 0, 0, D, 0, 0);
+  let cur = -1;
+  for (let j = 0; j < N; j++) {
+    const i = order[j], key = col[i] * 4 + lvl[i];
+    if (key !== cur) { cur = key; tg.fillStyle = STY[key]; }
+    if (phase === 0 && kind[i] === 3 && bridge < .02) continue;
+    const s = big[i] ? 1.9 : 1.1;
+    tg.globalAlpha = phase === 0 && kind[i] === 3 ? bridge : 1;
+    tg.fillRect(px[i] - s / 2, py[i] - s / 2, s, s);
+  }
+  tg.globalAlpha = 1;
+
+  // compose: sky, dust, two bloom passes, stars
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = "source-over"; g.globalAlpha = 1;
+  g.fillStyle = "#03040a"; g.fillRect(0, 0, cv.width, cv.height);
+  g.drawImage(sky, 0, 0);
+  g.setTransform(D, 0, 0, D, 0, 0);
+  g.fillStyle = "#fff";
+  for (const [sx, sy, m, ph] of sky0) { g.globalAlpha = .15 + .55 * m * (.6 + .4 * Math.sin(T * 1.3 + ph * 3)); g.fillRect(sx * W, sy * H, .9 + m, .9 + m); }
+  g.globalAlpha = 1; g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = "lighter";
+  g.drawImage(trail, 0, 0);
+  g1.clearRect(0, 0, b1.width, b1.height); g1.filter = "blur(3px)"; g1.drawImage(trail, 0, 0, b1.width, b1.height); g1.filter = "none";
+  g2.clearRect(0, 0, b2.width, b2.height); g2.filter = "blur(4px)"; g2.drawImage(b1, 0, 0, b2.width, b2.height); g2.filter = "none";
+  g.globalAlpha = .9; g.drawImage(b1, 0, 0, cv.width, cv.height);
+  g.globalAlpha = 1; g.drawImage(b2, 0, 0, cv.width, cv.height); g.drawImage(b2, 0, 0, cv.width, cv.height);
+  g.setTransform(D, 0, 0, D, 0, 0);
+
+  const glow = (x, y, r, c, a) => {
+    const q = g.createRadialGradient(x, y, 0, x, y, r);
+    q.addColorStop(0, `rgba(255,255,255,${a})`); q.addColorStop(.12, `rgba(${c[0]},${c[1]},${c[2]},${a * .8})`);
+    q.addColorStop(.4, `rgba(${c[0]},${c[1]},${c[2]},${a * .18})`); q.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = q; g.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  if (phase === 0) {
+    const za = .85 + .15 * Math.sin(theta), zb = .85 - .15 * Math.sin(theta);
+    glow(ax, ay, S * .13 * za, COL[0][0], 1); glow(bxs, bys, S * .13 * zb, COL[1][0], 1);
+    // names under each star, they fade as the stars get close
+    g.globalCompositeOperation = "source-over";
+    g.font = `500 ${11}px "JetBrains Mono", ui-monospace, monospace`; g.textAlign = "center";
+    g.globalAlpha = .75 * (1 - smooth(.55, .85, pullS));
+    g.fillStyle = `rgb(${COL[0][1]})`; g.fillText(CONFIG.me.toUpperCase(), ax, ay + S * .07 + 6);
+    g.fillStyle = `rgb(${COL[1][1]})`; g.fillText(CONFIG.name.toUpperCase(), bxs, bys + S * .07 + 6);
+    g.globalAlpha = 1;
+  } else {
+    // flash + shockwave, then one star in the middle of the heart
+    const mx = Cx + (Hx - Cx) * u, my = Cy + (Hy - Cy) * u;
+    const fl = Math.exp(-tau * 3.2);
+    glow(mx, my, S * (.13 + .55 * fl), COL[2][0], Math.min(1, .7 + fl));
+    glow(mx, my, S * (.1 + .06 * (beat - 1) / .028), COL[1][0], .55);
+    if (tau < 2.2) {
+      const k = tau / 2.2, R = S * .95 * (1 - Math.exp(-tau * 2.6)), a = .5 * (1 - k) * (1 - k);
+      g.lineWidth = 1 + 5 * (1 - k);
+      g.strokeStyle = `rgba(${COL[1][1]},${a})`; g.beginPath(); g.ellipse(mx, my, R, R * .58, 0, 0, 6.283); g.stroke();
+    }
+    if (tau < .5) { g.fillStyle = `rgba(255,236,226,${.16 * (1 - tau / .5)})`; g.fillRect(0, 0, W, H); }
+  }
+  g.globalCompositeOperation = "source-over";
+
+  // text
+  const ly = CONFIG.distance * (1 - pullS / .975);
+  const hud = phase === 0 ? `${esc(CONFIG.me)} <b>&harr;</b> ${esc(CONFIG.name)} &middot; <b>${Math.max(0, ly).toFixed(2)}</b> light years`
+                          : `${esc(CONFIG.me)} <b>+</b> ${esc(CONFIG.name)} &middot; <b>0.00</b> light years`;
+  if (hud !== hudLast) { $("hud").innerHTML = hud; hudLast = hud; }
+  $("hint").style.opacity = phase === 0 ? (1 - smooth(.02, .2, pullS)) * (.55 + .25 * Math.sin(T * 2.4)) : smooth(6, 7, tau) * .6;
+  if (phase === 2 && $("hint").textContent !== "tap to do it again") $("hint").textContent = "tap to do it again";
+  if (phase === 0 && $("hint").textContent !== CONFIG.hint) $("hint").textContent = CONFIG.hint;
+  const wa = phase === 2 ? smooth(2.1, 3.3, tau) : 0;
+  $("words").style.opacity = wa; $("words").style.transform = `translateY(${(1 - wa) * 14}px)`;
+  $("l2").style.textShadow = `0 0 ${18 + 8 * (beat - 1) / .028}px rgba(${COL[1][0]},.55)`;
+
+  requestAnimationFrame(frame);
+}
+let hudLast = "";
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function launch(i) {
+  // freeze where the particle was and throw it outward
+  bx[i] = px[i] - dx[i] * .8; by[i] = py[i] - dy[i] * .8;
+  let ex = bx[i] - Cx, ey = by[i] - Cy; const d = Math.hypot(ex, ey) || 1;
+  if (d < S * .02) { const a = Math.random() * 6.283; ex = Math.cos(a); ey = Math.sin(a); } else { ex /= d; ey /= d; }
+  const sp = S * (.35 + 1.3 * Math.pow(Math.random(), 1.5));
+  ux[i] = (ex - ey * .35) * sp; uy[i] = (ey + ex * .35) * sp * .8;
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
