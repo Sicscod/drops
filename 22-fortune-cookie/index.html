@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>A fortune cookie for you</title>
+<meta name="description" content="Tap the fortune cookie, crack it open and read your fortune. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;1,9..144,400;1,9..144,500&family=IBM+Plex+Mono:wght@400;500&display=block">
+<style>
+html,body{height:100%;margin:0;background:#120d0a;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;cursor:pointer}
+header{position:fixed;top:0;left:0;right:0;padding:26px 20px 0;text-align:center;pointer-events:none;color:#efe3d0}
+.kick{margin:0;font:500 11px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.22em;text-transform:uppercase;color:#9b8a78}
+.kick b{color:#d9573f;font-weight:500}
+h1{margin:10px 0 0;font:italic 400 clamp(26px,7.4vw,34px)/1.05 "Fraunces",Georgia,serif;letter-spacing:-.01em}
+.hint{position:fixed;left:0;right:0;bottom:44px;text-align:center;margin:0;pointer-events:none;font:500 11px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;color:#a8957f}
+.credit{position:fixed;bottom:16px;left:0;right:0;text-align:center;font:12px "IBM Plex Mono",ui-monospace,monospace;color:#6f6152}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<header><p class="kick">fortune <b>Nº</b> <span id="no">01</span></p><h1 id="title">crack one open</h1></header>
+<p class="hint" id="hint">tap the cookie</p>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Fortune Cookie · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly  (cookie Nº 3 is rigged: "your next date is with Delly")
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "Delly",                 // who the rigged fortune points to (you)
+  fortunes: url.get("fortunes")                     // ?fortunes=one|two|three
+    ? url.get("fortunes").split("|").map(s => s.trim()).filter(Boolean)
+    : [
+      "you will laugh at something dumb today. it will be my fault.",
+      "a snack is in your near future. share it (or don't).",
+      "someone is smiling at their phone because of you.",
+      "good things come to those who text back.",
+      "a nap will fix at least one of your problems.",
+      "you look great today. the cookie is never wrong.",
+      "an unreasonable amount of hugs is coming your way."
+    ],
+  last: url.get("last") || "your next date is with {name}.",   // the rigged fortune
+  rigOn: +(url.get("rig") || 3),                    // which cookie gets it
+  doneTitle: "the cookie has spoken."
+};
+
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+const $no = document.getElementById("no"), $title = document.getElementById("title"), $hint = document.getElementById("hint");
+let W, H, DPR, S, cx, cy, cookie = null, cookieTab = null;
+const clamp = x => Math.max(0, Math.min(1, x));
+const easeOut = x => 1 - Math.pow(1 - clamp(x), 3);
+const spring = x => x <= 0 ? 0 : 1 - Math.exp(-6 * x) * Math.cos(9 * x);
+const bounce = x => { x = clamp(x); const n = 7.5625, d = 2.75;
+  if (x < 1 / d) return n * x * x; if (x < 2 / d) return n * (x -= 1.5 / d) * x + .75;
+  if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + .9375; return n * (x -= 2.625 / d) * x + .984375; };
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+// ---------- the cookie, painted once with gradients into an offscreen canvas ----------
+const OX = 1.35, OY = 1.0;                           // offscreen origin, in cookie units
+function outline(c, s) {
+  const P = (x, y) => [(OX + x) * s, (OY + y) * s];
+  c.beginPath(); c.moveTo(...P(0, -.15));
+  c.bezierCurveTo(...P(-.28, -.50), ...P(-.74, -.62), ...P(-1.03, -.45));   // top lip up to the left horn
+  c.bezierCurveTo(...P(-1.19, -.36), ...P(-1.17, -.02), ...P(-1.0, .10));   // open end
+  c.bezierCurveTo(...P(-.80, .44), ...P(-.32, .53), ...P(0, .36));          // belly to the fold
+  c.bezierCurveTo(...P(.32, .53), ...P(.80, .44), ...P(1.0, .10));
+  c.bezierCurveTo(...P(1.17, -.02), ...P(1.19, -.36), ...P(1.03, -.45));
+  c.bezierCurveTo(...P(.74, -.62), ...P(.28, -.50), ...P(0, -.15));
+  c.closePath();
+}
+function paintCookie(s) {
+  const k = document.createElement("canvas"); k.width = 2.7 * s; k.height = 2 * s;
+  const c = k.getContext("2d"), X = x => (OX + x) * s, Y = y => (OY + y) * s;
+  const blur = v => c.filter = v ? `blur(${s * v}px)` : "none";
+  outline(c, s); c.save(); c.clip();
+  // base bake: golden top, toasted underside
+  let gr = c.createLinearGradient(0, Y(-.6), 0, Y(.55));
+  gr.addColorStop(0, "#f3c57a"); gr.addColorStop(.5, "#dd9a45"); gr.addColorStop(1, "#9c561b");
+  c.fillStyle = gr; c.fillRect(0, 0, k.width, k.height);
+  // each wing is a curved shell: warm light on its shoulder
+  for (const sd of [-1, 1]) {
+    gr = c.createRadialGradient(X(sd * .5), Y(-.2), s * .04, X(sd * .55), Y(-.05), s * .75);
+    gr.addColorStop(0, "rgba(255,224,155,.9)"); gr.addColorStop(.5, "rgba(238,175,90,.25)"); gr.addColorStop(1, "rgba(120,55,10,0)");
+    c.fillStyle = gr; c.fillRect(0, 0, k.width, k.height);
+  }
+  // folded rim: the edge of the disc curls under each wing toward the centre fold
+  for (const sd of [-1, 1]) {
+    c.beginPath(); c.moveTo(X(sd * 1.02), Y(-.02));
+    c.bezierCurveTo(X(sd * .86), Y(.22), X(sd * .42), Y(.32), X(sd * .02), Y(.26));
+    c.lineTo(X(sd * .02), Y(.7)); c.lineTo(X(sd * 1.3), Y(.7)); c.closePath();
+    gr = c.createLinearGradient(0, Y(.05), 0, Y(.5));
+    gr.addColorStop(0, "rgba(112,52,12,.6)"); gr.addColorStop(1, "rgba(150,78,24,.2)");
+    c.fillStyle = gr; c.fill();
+    c.beginPath(); c.moveTo(X(sd * 1.02), Y(-.04));
+    c.bezierCurveTo(X(sd * .86), Y(.19), X(sd * .42), Y(.29), X(sd * .04), Y(.23));
+    c.lineWidth = s * .04; c.strokeStyle = "rgba(255,212,138,.8)"; blur(.01); c.stroke(); blur(0);
+  }
+  // top lip: a rounded ridge along the folded edge
+  for (const sd of [-1, 1]) {
+    c.beginPath(); c.moveTo(X(sd * .03), Y(-.12));
+    c.bezierCurveTo(X(sd * .3), Y(-.43), X(sd * .72), Y(-.53), X(sd * .98), Y(-.40));
+    c.lineWidth = s * .09; c.strokeStyle = "rgba(150,78,22,.35)"; blur(.03); c.stroke();
+    c.beginPath(); c.moveTo(X(sd * .05), Y(-.17));
+    c.bezierCurveTo(X(sd * .3), Y(-.48), X(sd * .72), Y(-.58), X(sd * .98), Y(-.45));
+    c.lineWidth = s * .035; c.strokeStyle = "rgba(255,236,190,.7)"; blur(.008); c.stroke(); blur(0);
+  }
+  // centre crease where it was folded
+  c.beginPath(); c.moveTo(X(0), Y(-.2)); c.quadraticCurveTo(X(.045), Y(.06), X(0), Y(.4));
+  c.lineWidth = s * .12; c.strokeStyle = "rgba(105,45,8,.55)"; blur(.04); c.stroke();
+  c.lineWidth = s * .022; c.strokeStyle = "rgba(78,30,4,.65)"; blur(.006); c.stroke();
+  c.beginPath(); c.moveTo(X(-.045), Y(-.18)); c.quadraticCurveTo(X(-.005), Y(.06), X(-.05), Y(.36));
+  c.lineWidth = s * .018; c.strokeStyle = "rgba(255,222,155,.45)"; c.stroke(); blur(0);
+  // toasted edges (inner shadow along the outline)
+  outline(c, s); c.lineWidth = s * .16; c.strokeStyle = "rgba(118,55,12,.55)"; blur(.05); c.stroke(); blur(0);
+  // the hollow ends you can see into
+  for (const sd of [-1, 1]) {
+    c.save(); c.translate(X(sd * 1.0), Y(-.18)); c.rotate(sd * .22);
+    c.beginPath(); c.ellipse(0, 0, s * .1, s * .22, 0, 0, 7);
+    c.fillStyle = "#f0bd72"; c.fill();                                     // cookie wall thickness
+    c.beginPath(); c.ellipse(sd * s * .012, s * .01, s * .072, s * .185, 0, 0, 7);
+    gr = c.createRadialGradient(-sd * s * .03, s * .06, 0, 0, 0, s * .2);
+    gr.addColorStop(0, "#2a1103"); gr.addColorStop(.7, "#5b2a08"); gr.addColorStop(1, "#8a4a15");
+    c.fillStyle = gr; c.fill(); c.restore();
+  }
+  // baked speckle texture
+  let seed = 7; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 900; i++) {
+    const x = X(r() * 2.4 - 1.2), y = Y(r() * 1.2 - .65), d = r();
+    c.fillStyle = d < .5 ? `rgba(120,60,15,${.06 + r() * .12})` : `rgba(255,236,190,${.05 + r() * .12})`;
+    c.beginPath(); c.arc(x, y, s * (.004 + r() * .01), 0, 7); c.fill();
+  }
+  // glossy specular highlights
+  for (const sd of [-1, 1]) {
+    c.save(); c.translate(X(sd * .5), Y(-.3)); c.rotate(sd * .2); c.scale(1, .34);
+    gr = c.createRadialGradient(0, 0, 0, 0, 0, s * .3);
+    gr.addColorStop(0, "rgba(255,250,232,.8)"); gr.addColorStop(.4, "rgba(255,240,205,.3)"); gr.addColorStop(1, "rgba(255,240,205,0)");
+    c.fillStyle = gr; c.beginPath(); c.arc(0, 0, s * .3, 0, 7); c.fill(); c.restore();
+  }
+  c.restore();
+  outline(c, s); c.lineWidth = s * .012; c.strokeStyle = "rgba(105,50,12,.75)"; c.stroke();   // crisp edge
+  return k;
+}
+// the whole cookie gets a hint of paper peeking out of one end
+function withTab(full, s) {
+  const k = document.createElement("canvas"); k.width = full.width; k.height = full.height;
+  const c = k.getContext("2d"), X = x => (OX + x) * s, Y = y => (OY + y) * s;
+  c.drawImage(full, 0, 0);
+  c.save(); c.translate(X(1.02), Y(-.2)); c.rotate(-.5);
+  c.shadowColor = "rgba(60,25,5,.45)"; c.shadowBlur = s * .04; c.shadowOffsetY = s * .02;
+  const gr = c.createLinearGradient(0, -s * .05, 0, s * .05); gr.addColorStop(0, "#fffaf0"); gr.addColorStop(1, "#e4dac6");
+  c.fillStyle = gr; c.beginPath(); c.moveTo(-s * .02, -s * .045); c.lineTo(s * .2, -s * .05); c.lineTo(s * .21, s * .04); c.lineTo(-s * .02, s * .045); c.fill();
+  c.restore(); return k;
+}
+
+// split along a jagged line, each half shows a pale broken edge
+function splitCookie(full, s) {
+  const zig = []; const n = 9;
+  for (let i = 0; i <= n; i++) zig.push([(OX + (i % n === 0 ? 0 : rnd(-.07, .07)) + .02) * s, (OY - .8 + 1.45 * i / n) * s]);
+  return [-1, 1].map(sd => {
+    const k = document.createElement("canvas"); k.width = full.width; k.height = full.height;
+    const c = k.getContext("2d");
+    c.beginPath(); c.moveTo(sd < 0 ? 0 : k.width, 0); zig.forEach(p => c.lineTo(...p)); c.lineTo(sd < 0 ? 0 : k.width, k.height); c.closePath();
+    c.save(); c.clip(); c.drawImage(full, 0, 0);
+    c.globalCompositeOperation = "source-atop";
+    c.beginPath(); zig.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p));
+    c.lineWidth = s * .07; c.strokeStyle = "#f8e2b0"; c.stroke();
+    c.lineWidth = s * .025; c.strokeStyle = "#fff3d6"; c.stroke();
+    c.restore();
+    return k;
+  });
+}
+
+// ---------- state ----------
+let plateR = 1, shuffled = [], round = null, crumbs = [], last = 0;
+function nextFortune(n) {
+  if (n === CONFIG.rigOn) return { text: CONFIG.last.replace(/\{name\}/g, CONFIG.name), nums: "1 · 4 · 3", rig: true };
+  if (!shuffled.length) shuffled = CONFIG.fortunes.slice().sort(() => Math.random() - .5);
+  const nums = [0, 0, 0, 0].map(() => String(1 + (Math.random() * 48 | 0)).padStart(2, "0")).join(" · ");
+  return { text: shuffled.pop(), nums, rig: false };
+}
+function newRound(t) {
+  const n = round ? round.n + 1 : 1;
+  round = { n, phase: "drop", t0: t, f: nextFortune(n), halves: null, tilt: rnd(-.06, .06) };
+  $no.textContent = String(n).padStart(2, "0");
+  $hint.textContent = "tap the cookie";
+}
+
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR;
+  S = Math.min(W * .26, H * .235); cx = W / 2; cy = H * .45;
+  cookie = paintCookie(S * DPR); cookieTab = withTab(cookie, S * DPR);
+  if (round && round.halves) round.halves = splitCookie(cookie, S * DPR);
+}
+addEventListener("resize", resize);
+
+cv.addEventListener("pointerdown", () => {
+  const t = performance.now() / 1000;
+  if (!round) return;
+  const u = t - round.t0;
+  if (round.phase === "idle" || (round.phase === "drop" && u > .7)) { round.phase = "wobble"; round.t0 = t; $hint.textContent = ""; }
+  else if (round.phase === "open" && u > 1.0) { round.phase = "out"; round.t0 = t; }
+});
+
+// ---------- drawing ----------
+function background() {
+  g.fillStyle = "#120d0a"; g.fillRect(0, 0, W, H);
+  let gr = g.createRadialGradient(cx, cy - S * .6, 0, cx, cy - S * .6, Math.max(W, H) * .75);
+  gr.addColorStop(0, "rgba(255,184,110,.13)"); gr.addColorStop(.5, "rgba(255,150,80,.04)"); gr.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  // plate: dark glazed ceramic
+  const px = cx, py = cy + S * .42, rx = plateR = Math.min(W * .47, S * 1.85), ry = rx * .3;
+  g.save(); g.translate(px, py + ry * .16); g.scale(1, ry / rx);
+  gr = g.createRadialGradient(0, 0, rx * .8, 0, 0, rx * 1.12); gr.addColorStop(0, "rgba(0,0,0,.6)"); gr.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx * 1.12, 0, 7); g.fill(); g.restore();
+  g.save(); g.translate(px, py); g.scale(1, ry / rx);
+  gr = g.createLinearGradient(0, -rx, 0, rx); gr.addColorStop(0, "#3b322d"); gr.addColorStop(.5, "#231d1a"); gr.addColorStop(1, "#141010");
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx, 0, 7); g.fill();
+  gr = g.createRadialGradient(0, rx * .08, 0, 0, rx * .08, rx * .72); gr.addColorStop(0, "#1f1917"); gr.addColorStop(.85, "#191413"); gr.addColorStop(1, "#2c2522");
+  g.fillStyle = gr; g.beginPath(); g.arc(0, rx * .04, rx * .7, 0, 7); g.fill();
+  g.lineWidth = rx * .012; g.strokeStyle = "rgba(255,225,190,.16)"; g.beginPath(); g.arc(0, 0, rx * .985, Math.PI * 1.1, Math.PI * 1.75); g.stroke();
+  g.lineWidth = rx * .008; g.strokeStyle = "rgba(255,225,190,.07)"; g.beginPath(); g.arc(0, rx * .04, rx * .7, Math.PI * .15, Math.PI * .85); g.stroke();
+  g.restore();
+  return py;
+}
+function shadow(x, y, rx, a) {
+  g.save(); g.translate(x, y); g.scale(1, .2);
+  const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx); gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx, 0, 7); g.fill(); g.restore();
+}
+function blit(img, x, y, rot, sc, px = 0, py = .31, alpha = 1) {        // draw offscreen cookie art with pivot (px,py) in cookie units
+  g.save(); g.globalAlpha = alpha; g.translate(x + px * S, y + py * S); g.rotate(rot); g.scale(sc, 1 / sc);
+  g.drawImage(img, -(OX + px) * S, -(OY + py) * S, img.width / DPR, img.height / DPR); g.restore();
+}
+function spawnCrumbs(floor) {
+  for (let i = 0; i < 70; i++) {
+    const sd = Math.random() < .5 ? -1 : 1, big = Math.random() < .25;
+    crumbs.push({ x: cx + rnd(-.08, .08) * S, y: cy + rnd(-.3, .25) * S, vx: sd * rnd(.4, 4.2) * S, vy: -rnd(1.2, 4.6) * S,
+      r: (big ? rnd(.035, .06) : rnd(.01, .03)) * S, a: rnd(0, 6), va: rnd(-14, 14), floor: floor + rnd(-.18, .2) * S,
+      col: ["#f2c27a", "#e3a24c", "#c9802f", "#f8dca5"][i % 4], pts: [0, 1, 2, 3, 4].map(k => [k / 5 * 6.283 + rnd(-.3, .3), rnd(.65, 1)]), life: 1 });
+  }
+}
+function drawCrumbs(dt, fade) {
+  for (const c of crumbs) {
+    if (!c.off && Math.abs(c.x - cx) > plateR * .97) { c.off = 1; c.floor += S * .32; }   // rolled off the plate
+    if (c.y < c.floor || Math.abs(c.vy) > .2 * S) {
+      c.vy += 15 * S * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.a += c.va * dt;
+      if (c.y > c.floor && c.vy > 0) { c.y = c.floor; c.vy *= -.32; c.vx *= .55; c.va *= .5; }
+    } else { c.vx *= .9; c.x += c.vx * dt; c.vy = 0; c.va *= .9; }
+    if (fade) c.life -= dt * 2.4;
+    g.save(); g.globalAlpha = clamp(c.life); g.translate(c.x, c.y); g.rotate(c.a);
+    g.beginPath(); c.pts.forEach(([a, m], i) => { const x = Math.cos(a) * c.r * m, y = Math.sin(a) * c.r * m; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath();
+    const gr = g.createLinearGradient(-c.r, -c.r, c.r, c.r); gr.addColorStop(0, "#fbe2b0"); gr.addColorStop(.5, c.col); gr.addColorStop(1, "#8f4f17");
+    g.fillStyle = gr; g.fill(); g.restore();
+  }
+  crumbs = crumbs.filter(c => c.life > 0 && c.y < H + 50);
+}
+function wrap(text, maxW) {
+  const words = text.split(" "), lines = []; let line = "";
+  for (const w of words) { const t = line ? line + " " + w : w; if (g.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; }
+  lines.push(line); return lines;
+}
+function drawSlip(u, alpha, drop = 0) {
+  // u: seconds since the crack
+  if (u < .2) return;
+  const f = round.f, sw = Math.min(W - 32, S * 3.3), fs = Math.max(15, S * (f.rig ? .175 : .145));
+  g.font = `italic 500 ${fs}px Fraunces, Georgia, serif`;
+  let mw = sw - S * .42, lines = wrap(f.text, mw);
+  while (lines.length > 1 && mw > 60 && wrap(f.text, mw - 6).length === lines.length) lines = wrap(f.text, mw -= 6);   // balance the lines
+  const lh = fs * 1.28, sh = lines.length * lh + fs * 2.7;
+  const travel = easeOut((u - .2) / .35), open = easeOut((u - .5) / .75);
+  const x = cx, y = cy + S * (.08 + .66 * travel) + Math.sin(u * 2.2) * S * .008 * open, rot = -.025 * open + (1 - travel) * .3;
+  const w = S * .12 + (sw - S * .12) * open, rw = S * .075 * Math.sqrt(1 - open) + S * .004;
+  g.save(); g.globalAlpha = alpha; g.translate(x, y + drop * S * .9); g.rotate(rot + drop * .25);
+  g.shadowColor = "rgba(0,0,0,.5)"; g.shadowBlur = S * .14; g.shadowOffsetY = S * .05;
+  let gr = g.createLinearGradient(0, -sh / 2, 0, sh / 2); gr.addColorStop(0, "#fffbf1"); gr.addColorStop(1, "#efe6d2");
+  g.fillStyle = gr; g.fillRect(-w / 2, -sh / 2, w, sh); g.shadowColor = "transparent";
+  // faint paper fibre lines
+  g.fillStyle = "rgba(160,140,110,.07)"; for (let i = 1; i < 6; i++) g.fillRect(-w / 2, -sh / 2 + sh * i / 6, w, 1);
+  g.save(); g.beginPath(); g.rect(-w / 2 + rw, -sh / 2, w - 2 * rw, sh); g.clip();
+  g.fillStyle = "#b5352a"; g.textAlign = "center"; g.textBaseline = "middle";
+  lines.forEach((l, i) => g.fillText(l, 0, -sh / 2 + fs * .95 + lh * (i + .5)));
+  g.font = `500 ${Math.max(9, fs * .52)}px "IBM Plex Mono", monospace`; g.fillStyle = "#8f8473";
+  const lab = "lucky numbers  " + f.nums;
+  g.fillText(lab.toUpperCase(), 0, sh / 2 - fs * .8);
+  if (f.rig) {                                     // a tiny inked heart, because this one isn't random
+    const hx = g.measureText(lab.toUpperCase()).width / 2 + fs * .55, hy = sh / 2 - fs * .82, k = fs * .018;
+    g.fillStyle = "#c2392d"; g.beginPath(); g.moveTo(hx, hy + 6 * k);
+    g.bezierCurveTo(hx - 14 * k, hy - 3 * k, hx - 6 * k, hy - 13 * k, hx, hy - 6 * k);
+    g.bezierCurveTo(hx + 6 * k, hy - 13 * k, hx + 14 * k, hy - 3 * k, hx, hy + 6 * k); g.fill();
+  }
+  g.restore();
+  // paper rolls at both ends while it unrolls
+  for (const sd of [-1, 1]) {
+    const rx0 = sd * (w / 2 - rw);
+    gr = g.createLinearGradient(rx0 - rw, 0, rx0 + rw, 0);
+    gr.addColorStop(0, "#c9bfae"); gr.addColorStop(.5, "#fffaf0"); gr.addColorStop(1, "#b8ad9a");
+    g.fillStyle = gr; g.beginPath(); g.roundRect(rx0 - rw, -sh / 2 - 2, rw * 2, sh + 4, rw); g.fill();
+  }
+  g.restore();
+}
+
+function frame(now) {
+  const t = now / 1000, dt = Math.min(1 / 20, Math.max(0, t - last)); last = t;
+  if (!round) newRound(t + .15);
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const floor = background();
+  const u = t - round.t0, R = round;
+  let fadeCrumbs = false;
+  if (R.phase === "drop" || R.phase === "idle" || R.phase === "wobble") {
+    let y = cy, rot = R.tilt, sc = 1;
+    if (R.phase === "drop") {
+      const k = bounce(u / .85); y = cy - (1 - k) * (cy + S * 1.2); rot = R.tilt + (1 - k) * .5;
+      sc = 1 + Math.max(0, Math.sin(clamp((u - .3) / .2) * Math.PI)) * .04;
+      if (u > .9) { R.phase = "idle"; R.t0 = t; }
+    } else if (R.phase === "idle") {
+      y = cy + Math.sin(u * 2) * S * .012; rot = R.tilt + Math.sin(u * 1.3) * .03;
+      // gentle "tap me" nudge every few seconds
+      const p = (u % 3.2) - 2.2; if (p > 0 && p < .45) rot += Math.sin(p * 28) * .05 * (1 - p / .45);
+    } else {
+      const k = clamp(u / .45); rot = R.tilt + Math.sin(u * 46) * .1 * k; sc = 1 + .05 * Math.sin(k * Math.PI);
+      y = cy - Math.sin(k * Math.PI) * S * .05;
+      if (u > .45) { R.phase = "open"; R.t0 = t; R.halves = splitCookie(cookie, S * DPR); spawnCrumbs(floor); }
+    }
+    const lift = (cy - y) / (S * 3);
+    shadow(cx, floor + S * .02, S * 1.05 * (1 - clamp(lift) * .5), .6 * (1 - clamp(lift)));
+    blit(cookieTab, cx, y, rot, sc);
+  }
+  if (R.phase === "open" || R.phase === "out") {
+    const o = R.phase === "out" ? easeOut(u / .45) : 0, uo = R.phase === "out" ? 9 : u;
+    const k = spring(Math.min(uo, 3) * .9), a = 1 - o;
+    for (const sd of [-1, 1]) {
+      const hx = cx + sd * (S * .5 * k + W * .6 * o * o), hy = cy + S * .12 * k + S * .2 * o;
+      shadow(hx + sd * S * .4, floor + S * .04, S * .62, .55 * a);
+      blit(R.halves[sd < 0 ? 0 : 1], hx, hy, R.tilt + sd * .42 * k + sd * o * .8, 1, 0, .31, a);
+    }
+    if (R.phase === "out") fadeCrumbs = true;
+  }
+  drawCrumbs(dt, fadeCrumbs);
+  if (R.phase === "open") {
+    drawSlip(u, 1);
+    if (u > 1.0 && $hint.textContent === "") {
+      $hint.textContent = "tap for another";
+      if (R.f.rig) $title.textContent = CONFIG.doneTitle;
+    }
+  }
+  if (R.phase === "out") {
+    drawSlip(5, 1 - easeOut(u / .22), easeOut(u / .45));
+    if (u > .45) { $title.textContent = "crack one open"; newRound(t); }
+  }
+  requestAnimationFrame(frame);
+}
+
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
