@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>open when</title>
+<meta name="description" content="A little stack of open-when letters for one person. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@1,500;1,600&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:#e6dac7;overflow:hidden;-webkit-tap-highlight-color:transparent}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:pointer}
+.credit{position:fixed;left:0;right:0;bottom:8px;text-align:center;font:italic 500 13px "Cormorant Garamond",serif;color:#8a7360;z-index:2}
+.credit a{color:inherit;text-decoration:none;border-bottom:1px solid rgba(138,115,96,.35)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Open When · free code by @sicscod.drops =====
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name: P.get("name") || "Delly",              // who the letters are for
+  // ?notes=title::text|title::text  (each envelope: "open when <title>")
+  notes: P.get("notes") ? P.get("notes").split("|").map(n => n.split("::")) : [
+    ["you miss me", "Close your eyes for a second. I'm probably thinking about you right now too. It's only distance, and distance runs out."],
+    ["you can't sleep", "Breathe slow. Picture us on that bench, your head on my shoulder. Nothing needs fixing tonight. Just rest."],
+    ["you need a smile", "Remember when you laughed so hard you snorted? I replay it more than I should. Do it again for me."],
+    ["it's your birthday", "Happy birthday, love. Another year of you is the best thing this world keeps giving me."],
+  ],
+  lastTitle: P.get("lastTitle") || "you just need me",   // the envelope on top of the pile
+  last: P.get("last") || "I'm always here.",            // its letter, written big
+  sign: P.get("sign") || "always, me",
+  papers: ["#e9d3b4", "#dcbfb1", "#cfd2bb", "#d6c6a8", "#f1e6d2"],  // envelope colours
+  wax: "#9e1f27",
+  openSecs: 2.3, closeSecs: .9,      // seconds to open / fold back
+};
+
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const HAND = '"Caveat", cursive', SERIF = '"Cormorant Garamond", serif';
+let W, H, DPR, layout, bgCanvas;
+const env = [...CONFIG.notes.map(n => ({ title: n[0], text: n[1] || "" })), { title: CONFIG.lastTitle, text: CONFIG.last, last: true }]
+  .map((e, i, a) => ({ ...e, paper: CONFIG.papers[i % CONFIG.papers.length], opened: false, p: 0, born: i * .13,
+    jx: [-.6, .9, -1, .5, -.2, .7][i % 6], jr: [-1.2, .8, -.5, 1.3, -.4, .6][i % 6] }));
+let active = -1, dir = 0, hintFade = 0;
+
+// ---------- tiny helpers ----------
+const clamp = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const ease = v => (v = clamp(v), v < .5 ? 4*v*v*v : 1 - Math.pow(-2*v + 2, 3)/2);
+const back = v => (v = clamp(v), 1 + 2.2*Math.pow(v - 1, 3) + 1.2*Math.pow(v - 1, 2));
+const mix = (a, b, k) => a + (b - a)*k;
+let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
+function shade(hex, f) { // f<0 darker, f>0 lighter
+  const n = parseInt(hex.slice(1), 16), c = [n >> 16, n >> 8 & 255, n & 255]
+    .map(v => Math.round(f < 0 ? v*(1 + f) : v + (255 - v)*f));
+  return `rgb(${c})`;
+}
+
+// ---------- paper grain (made once) ----------
+const grain = document.createElement("canvas"); grain.width = grain.height = 220;
+{ const g = grain.getContext("2d");
+  for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(${rnd() < .5 ? "90,60,30" : "255,250,240"},${.05 + rnd()*.09})`; g.fillRect(rnd()*220, rnd()*220, 1 + rnd()*1.3, 1 + rnd()*1.3); }
+  g.lineWidth = .6;
+  for (let i = 0; i < 140; i++) { const x = rnd()*220, y = rnd()*220, a = rnd()*6.3, l = 3 + rnd()*9;
+    g.strokeStyle = `rgba(110,80,50,${.06 + rnd()*.08})`; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a)*l*.5 + rnd()*2, y + Math.sin(a)*l*.5 + rnd()*2, x + Math.cos(a)*l, y + Math.sin(a)*l); g.stroke(); } }
+const grainPat = ctx.createPattern(grain, "repeat");
+function paper(path, color, shadow) {
+  ctx.save();
+  if (shadow) { ctx.shadowColor = "rgba(70,40,20,.28)"; ctx.shadowBlur = shadow; ctx.shadowOffsetY = shadow*.35; }
+  ctx.fillStyle = color; ctx.fill(path); ctx.restore();
+  ctx.save(); ctx.globalAlpha = .9; ctx.fillStyle = grainPat; ctx.fill(path); ctx.restore();
+}
+
+// ---------- layout ----------
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W*DPR; cv.height = H*DPR;
+  const n = env.length, head = 92, foot = 34, avail = H - head - foot - 8;
+  let ew = Math.min(W - 70, 310), eh = ew*.6, step = (avail - eh)/(n - 1);
+  if (step < 50) { eh = Math.max(120, avail - 50*(n - 1)); ew = eh/.6; step = (avail - eh)/(n - 1); }
+  step = Math.min(step, eh*.5);
+  const top = head + (avail - (eh + step*(n - 1)))/2;
+  const sc = Math.min(W - 34, 410, (H - 20)*.72)/ew;
+  layout = { ew, eh, sc, head, slots: env.map((e, i) => ({ x: W/2 + e.jx*9, y: top + eh/2 + i*step, r: e.jr*.022 })),
+    midY: H*.5, openY: H - .6*eh*sc + eh*sc/2 };
+  // letter geometry in envelope-local units
+  const lt = Math.max((22 - layout.openY)/sc, -eh/2 - ew*1.05), lb = eh*.28;
+  layout.openY -= Math.max(0, layout.openY + lt*sc - 22)/2.2;   // tall screens: lift it a little
+  layout.letter = { w: ew*.86, top: lt, h: lb - lt };
+  env.forEach(e => e.lines = null);
+  // table background
+  bgCanvas = document.createElement("canvas"); bgCanvas.width = W*DPR; bgCanvas.height = H*DPR;
+  const b = bgCanvas.getContext("2d"); b.scale(DPR, DPR);
+  b.fillStyle = "#e6dac7"; b.fillRect(0, 0, W, H);
+  b.fillStyle = b.createPattern(grain, "repeat"); b.globalAlpha = .8; b.fillRect(0, 0, W, H); b.globalAlpha = 1;
+  const v = b.createRadialGradient(W/2, H*.45, Math.min(W, H)*.2, W/2, H*.45, Math.max(W, H)*.8);
+  v.addColorStop(0, "rgba(255,248,236,.35)"); v.addColorStop(1, "rgba(120,85,55,.28)");
+  b.fillStyle = v; b.fillRect(0, 0, W, H);
+}
+addEventListener("resize", resize);
+
+// ---------- drawing pieces ----------
+function rr(x, y, w, h, r) { const p = new Path2D(); p.roundRect(x, y, w, h, r); return p; }
+function heartPath(c, x, y, s, k = 1) { // hand-drawn heart, k = how much of the stroke is drawn
+  const N = 46, m = Math.floor(N*k);
+  c.beginPath(); if (m < 2) return;
+  for (let i = 0; i <= m; i++) { const t = i/N*Math.PI*2 + .05, w = 1 + .04*Math.sin(i*1.7);
+    const hx = 16*Math.pow(Math.sin(t), 3), hy = -(13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t));
+    c[i ? "lineTo" : "moveTo"](x + hx*s/16*w, y + hy*s/16*w); }
+}
+function seal(r, crack, half, gap) { // wax seal at 0,0; half: 0 whole, -1 upper part, 1 lower part
+  ctx.save();
+  const crackPts = [[-r*1.4, 0], [-r*.7, -r*.12], [-r*.35, r*.1], [0, -r*.08], [r*.3, r*.13], [r*.75, -r*.06], [r*1.4, .04*r]];
+  if (half) {
+    ctx.translate(0, half*gap); ctx.rotate(half*gap*.012);
+    const cp = new Path2D(); cp.moveTo(-r*1.4, half*r*1.5); crackPts.forEach(p => cp.lineTo(p[0], p[1])); cp.lineTo(r*1.4, half*r*1.5); cp.closePath();
+    ctx.clip(cp);
+  }
+  const blob = new Path2D();
+  for (let i = 0; i < 28; i++) { const a = i/28*Math.PI*2, rr2 = r*(1 + .07*Math.sin(i*2.3) + .04*Math.cos(i*5.1));
+    blob[i ? "lineTo" : "moveTo"](Math.cos(a)*rr2, Math.sin(a)*rr2); }
+  blob.closePath();
+  ctx.save(); ctx.shadowColor = "rgba(60,10,10,.35)"; ctx.shadowBlur = r*.35; ctx.shadowOffsetY = r*.12;
+  const g = ctx.createRadialGradient(-r*.35, -r*.4, r*.1, 0, 0, r*1.15);
+  g.addColorStop(0, shade(CONFIG.wax, .25)); g.addColorStop(.55, CONFIG.wax); g.addColorStop(1, shade(CONFIG.wax, -.4));
+  ctx.fillStyle = g; ctx.fill(blob); ctx.restore();
+  ctx.lineWidth = r*.09; ctx.strokeStyle = shade(CONFIG.wax, -.35); ctx.beginPath(); ctx.arc(0, 0, r*.7, 0, 7); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,190,180,.25)"; ctx.lineWidth = r*.05; ctx.beginPath(); ctx.arc(-r*.02, -r*.03, r*.73, 3.4, 5.2); ctx.stroke();
+  heartPath(ctx, 0, -r*.08, r*.42); ctx.fillStyle = shade(CONFIG.wax, -.3); ctx.fill();
+  heartPath(ctx, -r*.03, -r*.12, r*.42); ctx.fillStyle = shade(CONFIG.wax, .12); ctx.fill();
+  if (crack > 0 && !half) { // crack line growing across
+    ctx.beginPath(); const m = crack*(crackPts.length - 1);
+    for (let i = 0; i <= Math.ceil(m); i++) { const k = Math.min(1, m - i + 1), p = crackPts[i], q = crackPts[Math.max(0, i - 1)];
+      ctx[i ? "lineTo" : "moveTo"](i ? mix(q[0], p[0], k) : p[0], i ? mix(q[1], p[1], k) : p[1]); }
+    ctx.strokeStyle = "rgba(40,5,5,.85)"; ctx.lineWidth = r*.07; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function front(e, w, h) {
+  const body = rr(-w/2, -h/2, w, h, 3);
+  paper(body, e.paper, 0);
+  ctx.strokeStyle = "rgba(90,60,35,.18)"; ctx.lineWidth = 1; ctx.stroke(body);
+  const ink = "#3d2a20";
+  ctx.fillStyle = ink; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+  ctx.globalAlpha = .62; ctx.font = `500 ${w*.05}px ${HAND}`; ctx.fillText("open when", -w/2 + w*.06, -h/2 + h*.12);
+  ctx.globalAlpha = .92; ctx.font = `600 ${w*.08}px ${HAND}`; ctx.fillText(e.title, -w/2 + w*.06, -h/2 + h*.12 + w*.075);
+  ctx.globalAlpha = 1;
+  if (e.opened) { // pencil tick, read already
+    ctx.strokeStyle = "rgba(60,40,30,.55)"; ctx.lineWidth = 1.6; ctx.lineCap = "round"; ctx.beginPath();
+    const tx = -w/2 + w*.07 + Math.min(w*.62, ctx.measureText(e.title).width) + w*.035, ty = -h/2 + h*.12 + w*.05;
+    ctx.moveTo(tx, ty); ctx.lineTo(tx + w*.018, ty + w*.022); ctx.lineTo(tx + w*.05, ty - w*.03); ctx.stroke();
+  }
+  // stamp
+  const sw = w*.15, sh = w*.18, sx = w/2 - w*.06 - sw, sy = -h/2 + h*.08;
+  ctx.save(); ctx.translate(sx + sw/2, sy + sh/2); ctx.rotate(.04);
+  const st = new Path2D(), d = sw/9;
+  st.rect(-sw/2, -sh/2, sw, sh);
+  ctx.save(); ctx.shadowColor = "rgba(60,40,20,.25)"; ctx.shadowBlur = 3; ctx.shadowOffsetY = 1; ctx.fillStyle = "#fbf6ec"; ctx.fill(st); ctx.restore();
+  ctx.fillStyle = e.paper; // perforation bites
+  for (let i = 0; i <= 9; i++) { for (const yy of [-sh/2, sh/2]) { ctx.beginPath(); ctx.arc(-sw/2 + i*d, yy, d*.32, 0, 7); ctx.fill(); } }
+  for (let i = 0; i <= 11; i++) { for (const xx of [-sw/2, sw/2]) { ctx.beginPath(); ctx.arc(xx, -sh/2 + i*sh/11, d*.32, 0, 7); ctx.fill(); } }
+  ctx.fillStyle = shade(CONFIG.wax, .55); ctx.fillRect(-sw/2 + d*.9, -sh/2 + d*.9, sw - d*1.8, sh - d*1.8);
+  heartPath(ctx, 0, -sh*.06, sw*.24); ctx.fillStyle = CONFIG.wax; ctx.globalAlpha = .85; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = "#fbf6ec"; ctx.font = `600 ${sw*.2}px ${SERIF}`; ctx.textAlign = "center"; ctx.fillText("xo", 0, sh*.33);
+  ctx.restore();
+  // postmark
+  ctx.save(); ctx.strokeStyle = "rgba(60,45,40,.38)"; ctx.lineWidth = 1.1;
+  const px = sx - sw*.05, py = sy + sh*.62;
+  ctx.beginPath(); ctx.arc(px, py, sw*.42, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.arc(px, py, sw*.32, 0, 7); ctx.stroke();
+  for (let k = 0; k < 3; k++) { ctx.beginPath(); for (let x = 0; x <= sw*1.2; x += 2) ctx[x ? "lineTo" : "moveTo"](px + sw*.5 + x, py - sw*.16 + k*sw*.16 + Math.sin(x*.18)*2.2); ctx.stroke(); }
+  ctx.restore();
+  // address
+  ctx.fillStyle = ink; ctx.textAlign = "left"; ctx.globalAlpha = .55; ctx.font = `500 ${w*.05}px ${HAND}`;
+  ctx.fillText("to", -w*.12, h*.17); ctx.globalAlpha = .9; ctx.font = `600 ${w*.075}px ${HAND}`; ctx.fillText(CONFIG.name, -w*.05, h*.17);
+  ctx.strokeStyle = "rgba(60,40,30,.25)"; ctx.lineWidth = 1;
+  for (let k = 0; k < 2; k++) { ctx.beginPath(); ctx.moveTo(-w*.13, h*.2 + k*h*.12); ctx.lineTo(w*.34, h*.2 + k*h*.12); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+}
+
+function pocket(e, w, h) { // the three lower flaps of the back, drawn over the letter
+  const side = new Path2D(); side.moveTo(-w/2, -h/2); side.lineTo(-w*.03, h*.04); side.lineTo(w*.03, h*.04); side.lineTo(w/2, -h/2); side.lineTo(w/2, h/2 - 3); side.lineTo(-w/2, h/2 - 3); side.closePath();
+  paper(side, shade(e.paper, -.03), 0);
+  const bot = new Path2D(); bot.moveTo(-w/2, h/2); bot.quadraticCurveTo(-w*.3, h*.05, -w*.06, -h*.02); bot.quadraticCurveTo(0, -h*.05, w*.06, -h*.02); bot.quadraticCurveTo(w*.3, h*.05, w/2, h/2); bot.closePath();
+  ctx.save(); ctx.shadowColor = "rgba(70,40,20,.18)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = -2; ctx.fillStyle = e.paper; ctx.fill(bot); ctx.restore();
+  ctx.save(); ctx.fillStyle = grainPat; ctx.globalAlpha = .9; ctx.fill(bot); ctx.restore();
+  ctx.strokeStyle = "rgba(90,60,35,.14)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-w/2, -h/2); ctx.lineTo(-w*.03, h*.04); ctx.moveTo(w/2, -h/2); ctx.lineTo(w*.03, h*.04); ctx.stroke();
+}
+
+function flap(e, w, h, c, sealR, crack, gap, sy = 0) { // c = cos of the flap angle; >0 closed side, <0 opened inside
+  const fh = h*.56*c, f = new Path2D();
+  f.moveTo(-w/2 - .5, -h/2); f.lineTo(w/2 + .5, -h/2); f.quadraticCurveTo(w*.12, -h/2 + fh*.96, 0, -h/2 + fh); f.quadraticCurveTo(-w*.12, -h/2 + fh*.96, -w/2 - .5, -h/2); f.closePath();
+  if (c > 0) {
+    ctx.save(); ctx.shadowColor = "rgba(70,40,20,.22)"; ctx.shadowBlur = 7; ctx.shadowOffsetY = 3*c; ctx.fillStyle = shade(e.paper, .04); ctx.fill(f); ctx.restore();
+    ctx.save(); ctx.fillStyle = grainPat; ctx.fill(f); ctx.restore();
+    ctx.save(); ctx.translate(0, -h/2); ctx.scale(1, c); ctx.translate(0, h/2 + sy);
+    seal(sealR, crack, crack >= 1 ? -1 : 0, gap); ctx.restore();
+  } else {
+    paper(f, shade(e.paper, -.12), 0);
+    ctx.strokeStyle = "rgba(90,60,35,.15)"; ctx.stroke(f);
+  }
+}
+
+function wrap(text, font, maxW) {
+  ctx.font = font; const out = []; let line = "";
+  for (const word of text.split(/\s+/)) { const t = line ? line + " " + word : word;
+    if (ctx.measureText(t).width > maxW && line) { out.push(line); line = word; } else line = t; }
+  if (line) out.push(line); return out;
+}
+
+function letter(e, w, h, write, hearts) {
+  const L = layout.letter, lw = L.w, top = L.top, lh = L.h, x0 = -lw/2, pad = lw*.08;
+  const room = (-h/2 + h*.06) - top - pad*.9; // visible writing room above the envelope edge
+  if (!e.lines) { // fit the text once
+    if (e.last) { let fs = lw*.14; e.big = fs; e.lines = wrap(e.text, `700 ${fs}px ${HAND}`, lw - pad*1.4); }
+    else { let fs = Math.min(lw*.088, 28);
+      for (; fs > 13; fs -= .5) { const ls = wrap(e.text, `500 ${fs}px ${HAND}`, lw - pad*2); if (fs*.62 + fs*1.6 + ls.length*fs*1.22 + fs*1.5 <= room) { e.lines = ls; break; } }
+      if (!e.lines) e.lines = wrap(e.text, `500 ${fs}px ${HAND}`, lw - pad*2); e.fs = fs; }
+  }
+  const sheet = rr(x0, top, lw, lh, 2);
+  ctx.save(); ctx.shadowColor = "rgba(70,40,20,.2)"; ctx.shadowBlur = 10; ctx.fillStyle = "#fbf7ef"; ctx.fill(sheet); ctx.restore();
+  ctx.save(); ctx.globalAlpha = .45; ctx.fillStyle = grainPat; ctx.fill(sheet); ctx.restore();
+  ctx.save(); ctx.clip(sheet);
+  const ink = "#33241c"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  let total = 0; const ch = n => { const v = Math.max(0, Math.min(n.length, Math.floor(write*count - total))); total += n.length; return n.slice(0, v); };
+  if (!e.last) {
+    const fs = e.fs, lhh = fs*1.22; let y = top + pad + fs*.62;
+    var count = e.title.length + 12 + CONFIG.name.length + e.lines.join("").length + CONFIG.sign.length + 3;
+    ctx.strokeStyle = "rgba(150,110,80,.16)"; ctx.lineWidth = 1; // ruled lines
+    for (let k = 0; k < 14; k++) { const ly = top + pad + fs*.62 + fs*1.6 + k*lhh + fs*.18; if (ly > top + lh - 4) break; ctx.beginPath(); ctx.moveTo(x0 + pad*.6, ly); ctx.lineTo(x0 + lw - pad*.6, ly); ctx.stroke(); }
+    ctx.strokeStyle = "rgba(190,90,80,.22)"; ctx.beginPath(); ctx.moveTo(x0 + pad*.75, top); ctx.lineTo(x0 + pad*.75, top + lh); ctx.stroke();
+    ctx.fillStyle = "rgba(51,36,28,.55)"; ctx.font = `italic 600 ${fs*.6}px ${SERIF}`; ctx.fillText(ch("open when " + e.title + "  "), x0 + pad, y);
+    y += fs*1.5; ctx.fillStyle = ink; ctx.font = `700 ${fs*1.15}px ${HAND}`; ctx.fillText(ch(CONFIG.name + ","), x0 + pad, y);
+    ctx.font = `500 ${fs}px ${HAND}`;
+    for (const l of e.lines) { y += lhh; ctx.fillText(ch(l), x0 + pad*1.25, y); }
+    y += lhh*1.05; ctx.textAlign = "right"; ctx.font = `600 ${fs*1.02}px ${HAND}`; ctx.fillText(ch("— " + CONFIG.sign), x0 + lw - pad*1.1, y);
+    ctx.textAlign = "left";
+    ctx.lineWidth = 1.6; ctx.lineCap = ctx.lineJoin = "round"; ctx.strokeStyle = shade(CONFIG.wax, .1);
+    heartPath(ctx, x0 + lw - pad*1.4, top + pad*1.15, fs*.42, hearts); ctx.stroke();
+    heartPath(ctx, x0 + lw - pad*2.35, top + pad*1.75, fs*.26, clamp(hearts*1.6 - .4)); ctx.stroke();
+    ctx.textAlign = "right"; ctx.font = `600 ${fs*1.02}px ${HAND}`; const sw2 = ctx.measureText("— " + CONFIG.sign).width; ctx.textAlign = "left";
+    heartPath(ctx, x0 + lw - pad*1.1 - sw2 - fs*.55, y - fs*.32, fs*.3, clamp(hearts*1.6 - .6)); ctx.stroke();
+  } else {
+    const fs = e.big; var count = ("open when " + e.title).length + CONFIG.name.length + 1 + e.lines.join("").length + CONFIG.sign.length + 2;
+    const mid = top + Math.max(pad, (room - fs*(1.3 + e.lines.length*1.05))/2) + fs*.4;
+    ctx.textAlign = "center"; ctx.fillStyle = "rgba(51,36,28,.6)"; ctx.font = `italic 600 ${fs*.24}px ${SERIF}`;
+    ctx.fillText(ch("open when " + e.title), 0, mid - fs*.25);
+    ctx.fillStyle = ink; ctx.font = `700 ${fs*.78}px ${HAND}`; ctx.fillText(ch(CONFIG.name + ","), 0, mid + fs*.62);
+    ctx.font = `700 ${fs}px ${HAND}`; e.lines.forEach((l, i) => ctx.fillText(ch(l), 0, mid + fs*(1.55 + i*1.02)));
+    ctx.font = `600 ${fs*.36}px ${HAND}`; ctx.fillStyle = "rgba(51,36,28,.8)"; ctx.fillText(ch("— " + CONFIG.sign), 0, mid + fs*(1.6 + e.lines.length*1.02) + fs*.3);
+    ctx.lineWidth = 2; ctx.lineCap = ctx.lineJoin = "round"; ctx.strokeStyle = shade(CONFIG.wax, .1);
+    const sy = mid + fs*(1.6 + e.lines.length*1.02) + fs*.3;
+    const hs = [[-.36, top + pad*1.4, .1], [.36, top + pad*1.2, .13], [-.37, mid + fs*.35, .065], [.37, mid + fs*.3, .08], [0, sy + fs*.7, .055]];
+    hs.forEach(([hx, hy, s], i) => { heartPath(ctx, hx*lw, hy, s*lw*.5, clamp(hearts*2 - i*.22)); ctx.stroke(); });
+  }
+  ctx.restore();
+}
+
+// one envelope, envelope-local units
+function drawEnvelope(e, x, y, rot, sc, phi, crack, flapA, rise, write, hearts, gap) {
+  const { ew: w, eh: h } = layout, cphi = Math.cos(phi);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(sc*Math.max(.001, Math.abs(cphi)), sc);
+  // soft drop shadow under the whole envelope
+  ctx.save(); ctx.shadowColor = "rgba(70,40,20,.3)"; ctx.shadowBlur = 16 + 10*(sc - 1); ctx.shadowOffsetY = 6 + 8*(sc - 1);
+  ctx.fillStyle = e.paper; ctx.fill(rr(-w/2, -h/2, w, h, 3)); ctx.restore();
+  if (cphi > 0) front(e, w, h);
+  else {
+    const sealR = w*.072, fc = Math.cos(flapA);
+    paper(rr(-w/2, -h/2, w, h, 3), shade(e.paper, -.2), 0);          // inside of the envelope
+    if (fc < 0) flap(e, w, h, fc, sealR, crack, gap);                  // opened flap sits behind the letter
+    if (rise > 0 || fc < .9) {
+      ctx.save(); ctx.beginPath(); ctx.rect(-w, -h*40, w*2, h*40 + h/2 - 2); ctx.clip();
+      ctx.translate(0, (1 - rise)*(-layout.letter.top - h/2 + h*.08)); letter(e, w, h, write, hearts); ctx.restore();
+    }
+    pocket(e, w, h);
+    const sy = -h/2 + h*.56 - sealR*.55;
+    if (crack >= 1) { ctx.save(); ctx.translate(0, sy); seal(sealR, 1, 1, gap); ctx.restore(); } // lower half stays on the pocket
+    if (fc >= 0) flap(e, w, h, Math.max(fc, .001), sealR, crack, gap, sy);
+  }
+  ctx.restore();
+}
+
+// ---------- input ----------
+cv.addEventListener("pointerdown", ev => {
+  const x = ev.clientX, y = ev.clientY;
+  if (active >= 0) { dir = -1; return; }                               // tap anywhere folds it back
+  for (let i = env.length - 1; i >= 0; i--) {
+    const s = layout.slots[i], dx = x - s.x, dy = y - s.y, c = Math.cos(-s.r), sn = Math.sin(-s.r);
+    const lx = dx*c - dy*sn, ly = dx*sn + dy*c;
+    if (Math.abs(lx) < layout.ew/2 && Math.abs(ly) < layout.eh/2) { active = i; dir = 1; hintFade = 1; return; }
+  }
+});
+
+// ---------- the one loop ----------
+let last = performance.now(), t0 = last;
+function frame(now) {
+  const dt = Math.min(.05, (now - last)/1000), T = (now - t0)/1000; last = now;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.drawImage(bgCanvas, 0, 0, W, H);
+  // header
+  const hi = ease(T/.8);
+  ctx.save(); ctx.globalAlpha = hi; ctx.textAlign = "center"; ctx.fillStyle = "#3d2a20";
+  ctx.font = `italic 600 15px ${SERIF}`; ctx.globalAlpha = hi*.7; ctx.fillText(`a few letters for ${CONFIG.name}`, W/2, 32);
+  ctx.globalAlpha = hi; ctx.font = `700 40px ${HAND}`; ctx.fillText("open when…", W/2, 70);
+  ctx.restore();
+  // pile (newest on top)
+  const homing = active >= 0 && dir < 0 && env[active].p < .14;      // nearly back: slip it into its place in the pile
+  env.forEach((e, i) => {
+    if (i === active) { if (homing) drawOpen(0); return; }
+    const s = layout.slots[i], k = back((T - .25 - e.born)/.7);
+    if (k <= 0) return;
+    ctx.save(); ctx.globalAlpha = clamp((T - .25 - e.born)/.25);
+    drawEnvelope(e, s.x, s.y - (1 - k)*60, s.r + (1 - k)*.15, 1, 0, 0, 0, 0, 0, 0, 0); ctx.restore();
+  });
+  // hint under the pile
+  if (active < 0 && hintFade < 1) { const a = clamp((T - 1.4)/.6)*(1 - hintFade)*(.55 + .2*Math.sin(T*3));
+    ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = "#5a4232"; ctx.textAlign = "center"; ctx.font = `500 19px ${HAND}`;
+    const ls = layout.slots[env.length - 1]; ctx.fillText("tap an envelope", W/2, Math.min(H - 40, ls.y + layout.eh/2 + 24)); ctx.restore(); }
+  // the open one
+  if (active >= 0) {
+    const e = env[active];
+    e.p = clamp(e.p + dir*dt/(dir > 0 ? CONFIG.openSecs : CONFIG.closeSecs));
+    if (!homing) drawOpen(1);
+    if (dir < 0 && e.p <= 0) { e.opened = true; active = -1; dir = 0; }
+  }
+  requestAnimationFrame(frame);
+}
+function drawOpen(dim) {
+  {
+    const e = env[active];
+    const tau = e.p*2.6, s = layout.slots[active], L = layout;
+    const lift = ease(tau/.6), flip = ease((tau - .3)/.55), rise = ease((tau - 1.45)/.75);
+    let crack = e.opened ? 1 : clamp((tau - .9)/.3);
+    const flapA = ease((tau - 1.15)/.5)*Math.PI, write = clamp((tau - 1.75)/.85), hearts = clamp((tau - 2.05)/.55);
+    const gap = crack >= 1 ? (e.opened ? 2 : Math.min(1, (tau - 1.2)/.2)*2) : 0;
+    if (dim) { ctx.fillStyle = `rgba(48,30,20,${.42*lift})`; ctx.fillRect(0, 0, W, H); }
+    const shake = crack > 0 && crack < 1 ? Math.sin(tau*90)*1.5 : 0;
+    const x = mix(s.x, W/2, lift) + shake, y = mix(mix(s.y, L.midY, lift), L.openY, rise);
+    const sc = mix(mix(1, L.sc*.9, lift), L.sc, rise), rot = mix(s.r, 0, lift) + Math.sin(lift*Math.PI)*.05;
+    drawEnvelope(e, x, y, rot, sc, flip*Math.PI, crack, flapA, rise, write, hearts, gap*L.ew*.004);
+  }
+}
+resize();
+document.fonts.ready.then(() => { env.forEach(e => e.lines = null); });
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -26,6 +26,7 @@ Saw a drop in a video? Its number is the folder.
 | 17 | [🎟️ Afterglow](17-afterglow) | Full event / festival website with countdown, lineup, timetable and tickets, ?name=&date=&city= in the link |
 | 18 | [⏳ Sand](18-sand) | Satisfying falling-sand sim, pour striped dunes, ?hue=&grain= in the link |
 | 19 | [🎆 Fireworks](19-fireworks) | Fireworks that write her name, ?name=&msg= in the link |
+| 20 | [💌 Open When](20-open-when) | Open-when letters for your person, ?name=&notes= in the link |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
