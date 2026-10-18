@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Until I see you</title>
+<meta name="description" content="A night globe with a flight path between you and your person, and a live countdown to the day you meet. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&display=block">
+<style>
+:root{--bg:#060912;--ink:#f3ece0;--mute:#7c8496;--line:rgba(243,236,224,.16)}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;cursor:pointer}
+.ui{position:fixed;inset:0;display:flex;flex-direction:column;pointer-events:none;color:var(--ink)}
+.mail{height:4px;background:repeating-linear-gradient(-45deg,#b8443d 0 9px,transparent 9px 14px,#34508f 14px 23px,transparent 23px 28px);opacity:.75}
+.top{display:flex;justify-content:space-between;align-items:baseline;padding:14px 20px 0;font:500 10.5px "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.top b{font-weight:500;color:#d8d0c3}
+.stage{flex:1;min-height:0}
+.count{position:relative;text-align:center;padding:0 16px}
+.digits{display:flex;justify-content:center;align-items:flex-start;gap:6px;font:400 clamp(34px,10.5vw,48px)/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.digits i{font-style:normal;color:#4a5164;padding-top:1px}
+.cell{display:flex;flex-direction:column;align-items:center;min-width:1.25em}
+.cell small{margin-top:7px;font:500 9.5px "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.2em;color:var(--mute)}
+.line{margin:12px 0 0;font:italic 300 clamp(19px,5.4vw,24px) "Fraunces",Georgia,serif;color:#cfc5b6}
+.line em{font-style:italic;font-weight:400;color:var(--her)}
+.fin{position:absolute;left:0;right:0;top:-6px;text-align:center;opacity:0}
+.fin p{margin:0;font:italic 300 clamp(52px,15vw,70px)/1 "Fraunces",Georgia,serif;letter-spacing:-.02em}
+.fin small{display:block;margin-top:10px;font:500 10.5px "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--mute)}
+.act{display:flex;flex-direction:column;align-items:center;padding:18px 0 0}
+#kiss{pointer-events:auto;display:inline-flex;align-items:center;gap:9px;padding:11px 20px 11px 17px;border:1px solid var(--line);border-radius:999px;background:rgba(243,236,224,.04);color:var(--ink);font:500 11.5px "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}
+#kiss svg{width:13px;height:13px;fill:var(--her)}
+.sent{height:14px;margin-top:8px;font:400 10px "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.12em;color:var(--mute)}
+.credit{padding:6px 0 12px;text-align:center;font:11px "IBM Plex Mono",ui-monospace,monospace;color:var(--mute);opacity:.6;pointer-events:auto}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="ui">
+  <div class="mail"></div>
+  <div class="top"><span id="route"></span><span id="km"></span></div>
+  <div class="stage" id="stage"></div>
+  <div class="count">
+    <div id="cd">
+      <div class="digits">
+        <div class="cell"><span id="dd">00</span><small>days</small></div><i>:</i>
+        <div class="cell"><span id="hh">00</span><small>hrs</small></div><i>:</i>
+        <div class="cell"><span id="mm">00</span><small>min</small></div><i>:</i>
+        <div class="cell"><span id="ss">00</span><small>sec</small></div>
+      </div>
+      <p class="line" id="line"></p>
+    </div>
+    <div class="fin" id="fin"><p id="finally"></p><small id="finsub"></small></div>
+  </div>
+  <div class="act">
+    <button id="kiss" type="button"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.2 0 3.8 1.3 5.3 3.1 1.5-1.8 3.1-3.1 5.3-3.1 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg><span id="kisslbl"></span></button>
+    <div class="sent" id="sent"></div>
+  </div>
+  <div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+</div>
+<script>
+// ===== Until I See You · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&from=New%20York&to=Paris&date=2026-12-20T18:00
+const url = new URLSearchParams(location.search);
+const CONFIG = {
+  name: url.get("name") || "Delly",         // your person
+  from: url.get("from") || "New York",      // your city (or "Town@lat,lon")
+  to: url.get("to") || "Paris",             // her city  (or "Town@lat,lon")
+  date: url.get("date") || "",              // when you meet, e.g. 2026-12-20T18:00
+  hue: +(url.get("hue") || 348),            // her colour 0-360 (hearts, her dot)
+  line: "until I see you",
+  finally: "finally.",
+  kiss: "send a kiss",
+  demo: 10.6,                               // no date / date passed: time-lapse demo, seconds
+  spin: 0.05                                // idle sway of the globe
+};
+
+// ---------- cities ----------
+const CITIES = { "new york":[40.7,-74], "los angeles":[34.05,-118.2], "chicago":[41.9,-87.6], "toronto":[43.7,-79.4],
+  "miami":[25.8,-80.2], "mexico city":[19.4,-99.1], "sao paulo":[-23.5,-46.6], "buenos aires":[-34.6,-58.4],
+  "london":[51.5,-0.1], "paris":[48.9,2.35], "berlin":[52.5,13.4], "madrid":[40.4,-3.7], "rome":[41.9,12.5],
+  "lisbon":[38.7,-9.1], "amsterdam":[52.4,4.9], "istanbul":[41,29], "moscow":[55.75,37.6], "kyiv":[50.45,30.5],
+  "warsaw":[52.2,21], "dubai":[25.2,55.3], "cairo":[30,31.2], "lagos":[6.5,3.4], "almaty":[43.2,76.9],
+  "astana":[51.2,71.4], "tashkent":[41.3,69.2], "delhi":[28.6,77.2], "mumbai":[19.1,72.9], "bangkok":[13.75,100.5],
+  "singapore":[1.35,103.8], "shanghai":[31.2,121.5], "beijing":[39.9,116.4], "hong kong":[22.3,114.2],
+  "seoul":[37.6,127], "tokyo":[35.7,139.7], "manila":[14.6,121], "jakarta":[-6.2,106.8], "sydney":[-33.9,151.2],
+  "melbourne":[-37.8,145], "auckland":[-36.85,174.8], "vancouver":[49.3,-123.1], "seattle":[47.6,-122.3] };
+const place = (s, fb) => {
+  const m = s.match(/^(.*)@\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/);
+  if (m) return { name: m[1].trim(), ll: [+m[2], +m[3]] };
+  return { name: s, ll: CITIES[s.trim().toLowerCase()] || fb };
+};
+const A = place(CONFIG.from, [40.7, -74]), B = place(CONFIG.to, [48.9, 2.35]);
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), g = cv.getContext("2d"), $ = id => document.getElementById(id);
+const HER = `hsl(${CONFIG.hue} 85% 66%)`, ME = "#f1c27a";
+document.documentElement.style.setProperty("--her", HER);
+const rgb = (h, s, l) => { s /= 100; l /= 100; const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  return [0, 8, 4].map(n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))))); };
+const herRGB = rgb(CONFIG.hue, 85, 66), meRGB = [241, 194, 122];
+const rad = d => d * Math.PI / 180, clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = x => (x = clamp(x), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const out3 = x => 1 - Math.pow(1 - clamp(x), 3);
+const vec = ([la, lo]) => [Math.cos(rad(la)) * Math.sin(rad(lo)), Math.sin(rad(la)), Math.cos(rad(la)) * Math.cos(rad(lo))];
+const VA = vec(A.ll), VB = vec(B.ll);
+const omega = Math.acos(clamp(VA[0] * VB[0] + VA[1] * VB[1] + VA[2] * VB[2], -1, 1));
+const KM = Math.round(omega * 6371);
+const slerp = s => { const so = Math.sin(omega) || 1e-6, a = Math.sin((1 - s) * omega) / so, b = Math.sin(s * omega) / so;
+  return [VA[0] * a + VB[0] * b, VA[1] * a + VB[1] * b, VA[2] * a + VB[2] * b]; };
+const LIFT = .14 + .22 * omega / Math.PI;                 // how high the flight arc rises
+const arc = s => { const p = slerp(s), h = 1 + LIFT * Math.sin(Math.PI * s); return [p[0] * h, p[1] * h, p[2] * h]; };
+// home view: centre the midpoint of the route
+const mid = slerp(.5), HOME = Math.atan2(mid[0], mid[2]), PITCH = Math.asin(mid[1]) - .42;
+
+$("route").innerHTML = `<b>${A.name}</b> &nbsp;→&nbsp; <b>${B.name}</b>`;
+$("line").innerHTML = `${CONFIG.line}, <em>${CONFIG.name}</em>`;
+$("finally").textContent = CONFIG.finally;
+$("finsub").textContent = `0 km between you and ${CONFIG.name}`;
+$("kisslbl").textContent = CONFIG.kiss;
+
+// countdown target: real date, or demo time-lapse if missing / already passed
+const target = CONFIG.date ? new Date(CONFIG.date).getTime() : NaN;
+const DEMO = !(target > Date.now());
+
+// ---------- land dots from a 2° land mask (180 x 90 bits, Natural Earth) ----------
+const MASK = Uint8Array.from(atob("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf4AP/AAAAAAAAAAAAAAAAAAAAAAAAX/z///+AAAAAAAABAAAAAAAAAAAAAYd8P///wAA+AAAAAA8AAAAAAAAAAAwAnw////4AAIAAAAAAGAAAAAAAAAAADivwAf//wAAAAADAAf/wAHYAAAAAADoi3sAP//gAAAAAMAD///sAAAAgBgACfwz/AD/+gAAAwAEHf///+/8gBAP/7/nJdjwD/+AAAH/AA7f///////f4P//////h8H/gAAAf/6//f////////Mf/////9H4D8AeAA+ev///////////AP/////4A0B4AAAD5/////////////Af3////gHgA4AAAH5///////////LwAHgH///gHkAAAAAH4/////////+CIAABAB///4D+AAAAGCx/////////4A8AAIAAf///n/gAAAOCD/////////wA4AAAAAf///n/wAAAbP///////////AgAAAAAP/////wAAADf//////////9AAAAAAAF////0YAAAB///////////9AAAAAAAD////8EAAAB///////////5AAAAAAAD////2AAAAB/f5fP//////wAAAAAAAD////gAAAAfxnwPP//////jAAAAAAAD////AAAAAPCb3/n/////+CAAAAAAAD///8AAAAAfALf/n////+ECAAAAAAAB///8AAAAAGHQP/n/////mMAAAAAAAA///8AAAAAH+Ai///////E8AAAAAAAAf//wAAAAAP/AA///////BgAAAAAAAAP//gAAAAAf/73///////gAAAAAAAAAD/AQAAAAAf////f/////gAAAAAAAAAF+AQAAAAB///+/n/////AAAAAAAAAAC+AAAAAAB///+f0H////AAAAAAAAAAAeAwAAAAD////f/B///8gAAAAAAAAAAeGEAAAAH////v+B/z/AAAAAAAAAAAAPMAgAAAD////n+A/B+gAAAAAAAAAAAD8AAAAAD////n4AeB/AgAAAAAAAAAAAPAAAAAH////3gAcAfAgAAAAAAAAAAADAAAAAD////6AAcAfggAAAAAAAAAAABDwAAAD////8wAMATAIAAAAAAAAAAAAr/AAAB/////gAKASAAAAAAAAAAAAAAH/gAAA/////gACAAAIAAAAAAAAAAAAH/8AAAaH///AAAAsGAAAAAAAAAAAAAH/+AAAAB//+AAAAUOAAAAAAAAAAAAAP/+AAAAB//8AAAAYegAAAAAAAAAAAAP//gAAAD//4AAAAMeBgAAAAAAAAAAAP//8AAAB//wAAAAGdiuAAAAAAAAAAAf///AAAA//wAAAACAQHgAAAAAAAAAAP///gAAA//wAAAABwAHwgAAAAAAAAAH///AAAA//wAAAAACIDQIAAAAAAAAAH//+AAAAf/wAAAAAAAAAAAAAAAAAAAD//+AAAA//wgAAAAABxAAAAAAAAAAAD//+AAAA//wgAAAAAPxgBAAAAAAAAAA//8AAAA//jgAAAAAf5gAAAAAAAAAAAf/8AAAA//DgAAAAAf/gAAAAAAAAAAAf/8AAAAf/DAAAAAD//4CAAAAAAAAAAf/wAAAAf/DAAAAAH//4AAAAAAAAAAAf/AAAAAf+CAAAAAH//8AAAAAAAAAAAf/AAAAAP8AAAAAAH//+AAAAAAAAAAA/+AAAAAP8AAAAAAH//+AAAAAAAAAAA/+AAAAAH4AAAAAAD//+AAAAAAAAAAA/8AAAAAHwAAAAAADwf8AAAAAAAAAAA/gAAAAAAAAAAAAACAH4AIAAAAAAAAB/wAAAAAAAAAAAAAAAD4AEAAAAAAAAB+AAAAAAAAAAAAAAAAAAAGAAAAAAAAB6AAAAAAAAAAAAAAAAAwAMAAAAAAAAA8AAAAAAAAAAAAAAAAAQAYAAAAAAAAB4AAAAAAAAAAAAAAAAAAAwAAAAAAAAB4AAAAAAAAAAAAAAAAAAAAAAAAAAAADwAAAAAAAAAACAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAAAAAAAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAAAeAAIP+f/gAAAAAAAAAAAMAAAAAAABP/+H//////AAAAAAAAAAA+AAAAAf////8////////AAAAAAAOEAPAAAB///////////////gAAAP//T//8AAAH//////////////+AAAH/////4AAAH///////////////8A////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"), c => c.charCodeAt(0));
+const isLand = (la, lo) => { const r = Math.min(89, Math.floor((90 - la) / 2)), c = Math.min(179, Math.floor((lo + 180) / 2)), i = r * 180 + c;
+  return (MASK[i >> 3] >> (7 - (i & 7))) & 1; };
+const land = [], sea = [];
+for (let la = -86; la <= 86; la += 1.5) {
+  const n = Math.round(240 * Math.cos(rad(la)));
+  for (let k = 0; k < n; k++) { const lo = -180 + (k + (la * 7 % 1 + 1) % 1 * .5) * 360 / n;
+    if (isLand(la, lo)) land.push(...vec([la, lo])); else if (k % 4 == 0 && Math.round(la / 1.5) % 3 == 0) sea.push(...vec([la, lo])); }
+}
+const LAND = Float32Array.from(land), SEA = Float32Array.from(sea);
+const stars = Array.from({ length: 170 }, () => [Math.random(), Math.random(), Math.random() * .9 + .2, Math.random() * 6.28]);
+
+// ---------- state ----------
+let W, H, D, cx, cy, R, t0 = null, yaw = HOME, yv = 0, spinTarget = 0, spinOff = 0;
+const hearts = [], bursts = [], heartPts = [];
+let kisses = 0, kissT = -9, finT = null, last = 0;
+for (let i = 0; i < 260; i++) {                          // finale heart: outline + a little fill
+  const a = Math.random() * 6.283, inner = i > 180 ? Math.sqrt(Math.random()) * .85 : 1;
+  const x = 16 * Math.pow(Math.sin(a), 3), y = 13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a);
+  heartPts.push({ x: x / 17 * inner, y: -y / 17 * inner, d: Math.random() * .35, s: .6 + Math.random() * 1.1, mix: Math.random(), ph: Math.random() * 6.28 });
+}
+
+function size() {
+  D = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+  cv.width = W * D; cv.height = H * D;
+  const r = $("stage").getBoundingClientRect();
+  cx = W / 2; cy = r.top + r.height * .52; R = Math.max(60, Math.min(W * .42, r.height * .46));
+}
+addEventListener("resize", size);
+
+// project a 3D point (globe frame) to screen: [x, y, z, hidden]
+function proj(p, ya) {
+  const c = Math.cos(ya), s = Math.sin(ya), cp = Math.cos(PITCH), sp = Math.sin(PITCH);
+  const x = p[0] * c - p[2] * s, z0 = p[2] * c + p[0] * s, y = p[1] * cp - z0 * sp, z = p[1] * sp + z0 * cp;
+  const hidden = z < 0 && x * x + y * y < 1;
+  return [cx + x * R, cy - y * R, z, hidden];
+}
+
+// ---------- input ----------
+cv.addEventListener("pointerdown", () => { spinTarget -= Math.PI * 2; });
+$("kiss").addEventListener("click", () => {
+  const now = performance.now() / 1000 - (t0 || 0);
+  kisses++; kissT = now;
+  for (let i = 0; i < 5; i++) hearts.push({ t: now + i * .13, dur: 1.55 + Math.random() * .3, w: (Math.random() - .5) * 2, sz: 7 + Math.random() * 5 });
+  $("sent").textContent = kisses === 1 ? "1 kiss on its way" : `${kisses} kisses on their way`;
+});
+
+// ---------- drawing helpers ----------
+function heartPath(x, y, s, rot = 0) {
+  g.save(); g.translate(x, y); g.rotate(rot); g.scale(s / 16, s / 16); g.beginPath();
+  g.moveTo(0, 6); g.bezierCurveTo(-11, -1, -9, -12, 0, -6); g.bezierCurveTo(9, -12, 11, -1, 0, 6); g.restore();
+}
+function glow(x, y, r, c, a) {
+  const gr = g.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, `rgba(${c},${a})`); gr.addColorStop(1, `rgba(${c},0)`);
+  g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+}
+const pad = n => String(Math.max(0, n)).padStart(2, "0");
+
+// ---------- loop ----------
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (t0 === null) { t0 = now / 1000; size(); }
+  const t = now / 1000 - t0, dt = Math.min(.05, t - last); last = t;
+
+  // countdown
+  let left;
+  if (DEMO) { const u = Math.max(0, CONFIG.demo - t), e = Math.max(0, u - 3);
+    left = (u + 1900 * e * e * e) * 1000; }
+  else left = Math.max(0, target - Date.now());
+  if (left <= 0 && finT === null) { finT = t; spinTarget = Math.round((spinOff) / 6.283) * 6.283; }
+  const sec = Math.ceil(left / 1000 - 1e-6);
+  $("dd").textContent = pad(Math.floor(sec / 86400)); $("hh").textContent = pad(Math.floor(sec / 3600) % 24);
+  $("mm").textContent = pad(Math.floor(sec / 60) % 60); $("ss").textContent = pad(sec % 60);
+  const F = finT === null ? 0 : t - finT;                 // seconds since we met
+  const merge = ease(F / 1.4), bloom = out3((F - 1.1) / 1.6);
+  $("cd").style.opacity = 1 - clamp(F / .5);
+  $("fin").style.opacity = clamp((F - 1.2) / .8);
+  $("fin").style.transform = `translateY(${(1 - out3((F - 1.2) / 1)) * 10}px)`;
+  $("km").textContent = `${Math.round(KM * (1 - merge)).toLocaleString("en-US")} km${DEMO && F === 0 ? " · demo" : ""}`;
+  const press = clamp(1 - (t - kissT) / .35);
+  $("kiss").style.transform = `scale(${1 - .06 * Math.sin(press * Math.PI)})`;
+
+  // globe spin: critically damped spring toward the target, plus a slow sway
+  const wsp = 2.3; yv += (wsp * wsp * (spinTarget - spinOff) - 2 * wsp * yv) * dt; spinOff += yv * dt;
+  yaw = HOME + spinOff + Math.sin(t * .35) * CONFIG.spin * 6 * (1 - merge);
+
+  g.setTransform(D, 0, 0, D, 0, 0);
+  g.fillStyle = "#060912"; g.fillRect(0, 0, W, H);
+  for (const [x, y, a, ph] of stars) { g.fillStyle = `rgba(220,226,240,${a * (.25 + .2 * Math.sin(t * 1.3 + ph))})`; g.fillRect(x * W, y * H, 1.1, 1.1); }
+
+  // atmosphere + ocean disc
+  glow(cx, cy, R * 1.32, "70,110,190", .2);
+  const oc = g.createRadialGradient(cx - R * .35, cy - R * .4, R * .1, cx, cy, R);
+  oc.addColorStop(0, "#14203a"); oc.addColorStop(1, "#070b16");
+  g.fillStyle = oc; g.beginPath(); g.arc(cx, cy, R, 0, 6.283); g.fill();
+  g.strokeStyle = "rgba(140,170,230,.22)"; g.lineWidth = 1; g.stroke();
+
+  // dots, bucketed by brightness so we only change fillStyle a few times
+  const c = Math.cos(yaw), s = Math.sin(yaw), cp = Math.cos(PITCH), sp = Math.sin(PITCH);
+  const drawDots = (P, base, col, sz) => {
+    const buckets = [[], [], [], [], []];
+    for (let i = 0; i < P.length; i += 3) {
+      const x = P[i] * c - P[i + 2] * s, z0 = P[i + 2] * c + P[i] * s, y = P[i + 1] * cp - z0 * sp, z = P[i + 1] * sp + z0 * cp;
+      if (z <= .02) continue;
+      const lit = clamp(.35 + .65 * (-x * .45 + y * .55 + z * .7));         // light from upper left
+      buckets[Math.min(4, Math.floor(lit * z * 5.2))].push(cx + x * R, cy - y * R);
+    }
+    buckets.forEach((b, k) => { g.fillStyle = `rgba(${col},${base * (.25 + k * .19)})`; g.beginPath();
+      for (let i = 0; i < b.length; i += 2) g.rect(b[i] - sz / 2, b[i + 1] - sz / 2, sz, sz); g.fill(); });
+  };
+  drawDots(SEA, .22, "120,150,210", 1);
+  drawDots(LAND, 1 - .45 * bloom, "196,208,230", Math.max(1.3, R / 95));
+
+  // route: dashed great-circle arc, marching from you to her
+  const N = 90, pts = [];
+  for (let i = 0; i <= N; i++) pts.push(proj(arc(i / N), yaw));
+  const routeA = (1 - merge) * clamp(t / .8);
+  g.save(); g.setLineDash([3, 5]); g.lineDashOffset = -t * 14; g.lineWidth = 1.2; g.strokeStyle = `rgba(243,236,224,${.45 * routeA})`;
+  g.beginPath(); let pen = false;
+  for (const p of pts) { if (p[3]) { pen = false; continue; } pen ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); pen = true; }
+  g.stroke(); g.restore();
+
+  g.globalCompositeOperation = "lighter";
+  // paper plane + glowing trail
+  const P = 4.4, ph = (t + 1.2) % P / P, sPl = ease(clamp((ph - .04) / .86)), plA = clamp(Math.min(ph / .06, (1 - ph) / .08)) * (1 - merge);
+  if (plA > 0) {
+    const TR = .26, n = 26;
+    for (let i = 0; i < n; i++) {
+      const s0 = sPl - TR * (1 - i / n), s1 = sPl - TR * (1 - (i + 1) / n); if (s1 < 0) continue;
+      const p0 = proj(arc(Math.max(0, s0)), yaw), p1 = proj(arc(s1), yaw); if (p0[3] || p1[3]) continue;
+      const k = i / n; g.strokeStyle = `rgba(255,214,160,${.85 * k * k * plA})`; g.lineWidth = .6 + 2.2 * k;
+      g.beginPath(); g.moveTo(p0[0], p0[1]); g.lineTo(p1[0], p1[1]); g.stroke();
+    }
+    const p = proj(arc(sPl), yaw), q = proj(arc(Math.min(1, sPl + .01)), yaw), r0 = proj(arc(Math.max(0, sPl - .01)), yaw);
+    if (!p[3]) {
+      glow(p[0], p[1], 16, "255,214,160", .35 * plA);
+      const ang = Math.atan2(q[1] - r0[1], q[0] - r0[0]);
+      g.globalCompositeOperation = "source-over";
+      g.save(); g.translate(p[0], p[1]); g.rotate(ang); g.globalAlpha = plA;
+      g.fillStyle = "#f6efe2"; g.beginPath(); g.moveTo(8, 0); g.lineTo(-6, -5.5); g.lineTo(-3, 0); g.lineTo(-6, 5.5); g.closePath(); g.fill();
+      g.fillStyle = "#b9b1a4"; g.beginPath(); g.moveTo(8, 0); g.lineTo(-3, 0); g.lineTo(-6, 5.5); g.closePath(); g.fill();
+      g.restore(); g.globalCompositeOperation = "lighter";
+    }
+  }
+
+  // kiss hearts flying the arc
+  for (let i = hearts.length - 1; i >= 0; i--) {
+    const h = hearts[i], k = (t - h.t) / h.dur; if (k < 0) continue;
+    if (k >= 1) { bursts.push({ t, }); hearts.splice(i, 1); continue; }
+    let x, y, hid = false, sc = 1;
+    if (finT === null) { const e = ease(k), p = proj(arc(e), yaw), q = proj(arc(Math.min(1, e + .02)), yaw);
+      const nx = -(q[1] - p[1]), ny = q[0] - p[0], nl = Math.hypot(nx, ny) || 1, wob = Math.sin(k * 9 + h.w * 3) * 7 * h.w * Math.sin(Math.PI * k);
+      x = p[0] + nx / nl * wob; y = p[1] + ny / nl * wob; hid = p[3]; }
+    else { const m = proj(arc(.5), yaw); x = m[0] + h.w * 60 * k; y = m[1] - R * .2 - k * R * .9; sc = 1 - k * .3; }
+    if (hid) continue;
+    const a = Math.min(1, k * 6, (1 - k) * 5);
+    glow(x, y, h.sz * 2.2, herRGB.join(), .4 * a);
+    g.fillStyle = `rgba(${herRGB},${.95 * a})`; heartPath(x, y, h.sz * 1.15 * sc, Math.sin(k * 7 + h.w) * .25); g.fill();
+  }
+
+  // city points
+  const pA = proj(merge > 0 ? arc(.5 * merge) : VA, yaw), pB = proj(merge > 0 ? arc(1 - .5 * merge) : VB, yaw);
+  const pulseB = bursts.reduce((m, b) => Math.max(m, clamp(1 - (t - b.t) / .9)), 0);
+  for (const [p, col, name, city, side, pulse] of [[pA, meRGB, "you", A.name, -1, 0], [pB, herRGB, CONFIG.name, B.name, 1, pulseB]]) {
+    const vis = p[3] ? 0 : clamp(p[2] * 4 + (merge > 0 ? 1 : .15)), a = vis * (1 - bloom);
+    if (a <= 0) continue;
+    glow(p[0], p[1], 22 + 16 * pulse, col.join(), (.55 + .4 * pulse) * a);
+    const ring = (t * .7 + (side > 0 ? .5 : 0)) % 1;
+    g.strokeStyle = `rgba(${col},${.5 * (1 - ring) * a})`; g.lineWidth = 1; g.beginPath(); g.arc(p[0], p[1], 4 + ring * 18, 0, 6.283); g.stroke();
+    if (pulse > 0) { g.strokeStyle = `rgba(${col},${.8 * pulse * a})`; g.beginPath(); g.arc(p[0], p[1], 6 + (1 - pulse) * 30, 0, 6.283); g.stroke(); }
+    g.fillStyle = `rgba(255,250,240,${a})`; g.beginPath(); g.arc(p[0], p[1], 2.6, 0, 6.283); g.fill();
+    // label
+    const la = a * (1 - merge);
+    if (la > .01) {
+      g.globalCompositeOperation = "source-over";
+      const lx = p[0] + side * 14, ly = p[1] - 17;
+      g.textAlign = side > 0 ? "left" : "right";
+      g.font = 'italic 300 17px "Fraunces", Georgia, serif'; g.fillStyle = `rgba(${col},${la})`; g.fillText(name, lx, ly);
+      g.font = '500 9px "IBM Plex Mono", monospace'; g.fillStyle = `rgba(160,168,186,${la})`; g.fillText(city.toUpperCase(), lx, ly + 13);
+      g.globalCompositeOperation = "lighter";
+    }
+  }
+  for (let i = bursts.length - 1; i >= 0; i--) if (t - bursts[i].t > 1) bursts.splice(i, 1);
+
+  // finale: the two dots meet at the top of the arc and open into a heart
+  if (finT !== null) {
+    const m = proj(arc(.5), yaw), flash = clamp(1 - Math.abs(F - 1.25) / .45);
+    glow(m[0], m[1], R * .6 * flash + 1, "255,225,215", .55 * flash);
+    if (bloom > 0) {
+      const beat = 1 + .05 * Math.pow(Math.max(0, Math.sin(t * 5.2)), 6), HS = R * .5 * beat;
+      const hx = m[0] + (cx - m[0]) * bloom, hy = m[1] + R * .08 + (cy - R * .06 - m[1] - R * .08) * bloom;
+      glow(hx, hy, HS * 1.6, herRGB.join(), .18 * bloom);
+      for (const q of heartPts) {
+        const e = out3((F - 1.1 - q.d) / 1.3); if (e <= 0) continue;
+        const x = hx + q.x * HS * e, y = hy + q.y * HS * e, tw = .65 + .35 * Math.sin(t * 3 + q.ph);
+        const col = q.mix < .5 ? herRGB : meRGB;
+        g.fillStyle = `rgba(${col},${.9 * tw * e})`; g.beginPath(); g.arc(x, y, q.s * (R / 125), 0, 6.283); g.fill();
+      }
+      g.fillStyle = `rgba(${herRGB},${.2 * bloom})`; g.beginPath();
+      for (let i = 0; i < 64; i++) { const a = i / 64 * 6.283, x = 16 * Math.pow(Math.sin(a), 3), y = 13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a);
+        g.lineTo(hx + x / 17 * HS * bloom, hy - y / 17 * HS * bloom); }
+      g.fill();
+    }
+  }
+  g.globalCompositeOperation = "source-over";
+}
+document.fonts.ready.then(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>
