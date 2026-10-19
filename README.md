@@ -32,6 +32,7 @@ Saw a drop in a video? Its number is the folder.
 | 23 | [💗 Neon Sign](23-neon-sign) | Her name as a flickering neon sign, ?name=&line= in the link |
 | 24 | [🌸 Blossom](24-blossom) | A cherry tree whose petals spell her name, ?name=&msg= in the link |
 | 25 | [✈️ Until I See You](25-until-i-see-you) | Long-distance countdown on a night globe, ?name=&from=&to=&date= in the link |
+| 26 | [📸 Polaroids](26-polaroids) | Polaroids that develop into your memories, ?name=&captions=&last= in the link |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
