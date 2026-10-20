@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>a little surprise</title>
+<meta name="description" content="A scratch card with one prize on it. Scratch the foil to find out. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:radial-gradient(120% 70% at 50% 38%,#1b2226 0%,#0d1113 55%,#080a0b 100%);color:#f3ead8}
+main{position:fixed;inset:0 0 56px;display:flex;align-items:center;justify-content:center}
+.card{position:relative;width:min(360px,calc(100vw - 32px));padding:16px 20px 14px;border-radius:14px;background-color:#f6efe0;color:#2a1a17;
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 0 0 1px rgba(120,80,40,.18) inset,0 30px 60px -18px rgba(0,0,0,.75),0 8px 18px rgba(0,0,0,.35);
+  -webkit-mask:radial-gradient(circle 9px at 0 calc(100% - 54px),#0000 98%,#000) left/51% 100% no-repeat,radial-gradient(circle 9px at 100% calc(100% - 54px),#0000 98%,#000) right/51% 100% no-repeat;
+  mask:radial-gradient(circle 9px at 0 calc(100% - 54px),#0000 98%,#000) left/51% 100% no-repeat,radial-gradient(circle 9px at 100% calc(100% - 54px),#0000 98%,#000) right/51% 100% no-repeat}
+.top{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid #b0182f;padding-bottom:7px}
+.brand{font:400 21px/1 Anton,Impact,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#b0182f}
+.no{font:500 9.5px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:#7a5a50}
+.for{margin:10px 0 12px;font:400 25px/1.05 "Instrument Serif",Georgia,serif;letter-spacing:-.01em;color:#2a1a17}
+.for em{color:#b0182f}
+.zone{position:relative;width:100%;aspect-ratio:10/7;border-radius:8px}
+.zone canvas{position:absolute;inset:0;width:100%;height:100%;border-radius:8px;display:block}
+.tear{margin:14px -20px 0;border-top:1.5px dashed rgba(122,90,80,.45)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:10px;font:400 9px/1.45 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:#7a5a50}
+.bars{width:96px;height:24px;flex:none}
+.hint{position:fixed;left:0;right:0;bottom:38px;margin:0;text-align:center;font:500 10.5px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.22em;text-transform:uppercase;color:#8f9a9c;pointer-events:none}
+.credit{position:fixed;left:0;right:0;bottom:14px;text-align:center;font:400 11px "JetBrains Mono",ui-monospace,monospace;color:#5d686a}
+.credit a{color:inherit}
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+</style>
+</head>
+<body>
+<main>
+  <div class="card" id="card">
+    <div class="top"><span class="brand">Lucky Hearts</span><span class="no" id="no">Nº 027 · series L</span></div>
+    <p class="for">a little surprise for <em id="nm">Delly</em></p>
+    <div class="zone" id="zone"><canvas id="under"></canvas></div>
+    <div class="tear"></div>
+    <div class="foot"><span>match 3 hearts, win the prize<br>valid forever · no cash value</span><canvas class="bars" id="bars"></canvas></div>
+  </div>
+</main>
+<p class="hint" id="hint">scratch the silver with your finger</p>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<canvas id="fx"></canvas>
+<script>
+// ===== Scratch Card · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&prize=a%20date%20with%20me.&when=Saturday,%208pm
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name: P.get("name") || "Delly",              // who the card is for
+  prize: P.get("prize") || "a date with me.",  // what she wins
+  when: P.get("when") || "Saturday, 8pm",      // small line under the prize
+  wonLabel: "you won",
+  serial: "Nº 027 · series L",
+  revealAt: 0.6,       // once this share is scratched, the rest of the foil peels off
+  coin: 17,            // scratch radius in px
+  ink: "#b0182f",      // card print colour
+  heart: ["#ff4d64", "#c8102e", "#7d0a1c"],   // heart light / mid / dark
+  doneHint: "screenshot it. it's binding.",
+};
+
+// ---------- setup ----------
+const $ = id => document.getElementById(id);
+const card = $("card"), zone = $("zone"), under = $("under"), fx = $("fx"), hint = $("hint");
+$("nm").textContent = CONFIG.name; $("no").textContent = CONFIG.serial;
+const U = under.getContext("2d"), X = fx.getContext("2d");
+const mk = (w, h) => { const c = document.createElement("canvas"); c.width = Math.max(1, w); c.height = Math.max(1, h); return c; };
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const ease = x => 1 - Math.pow(1 - clamp(x), 3);
+let DPR = 1, W = 0, H = 0, zw = 0, zh = 0;
+let foilTex, mask, cut, shade, light, sheenC, small;
+let dirty = true, frame = 0, covered = 0;
+const S = { revealT: -1, snap: null, popT: -1, stampT: -1 };
+const flakes = [], hearts = [];
+
+function heartPath(c, x, y, s) {           // heart centred on x,y, about s wide
+  c.moveTo(x, y + .38 * s);
+  c.bezierCurveTo(x - .12 * s, y + .28 * s, x - .52 * s, y + .02 * s, x - .52 * s, y - .2 * s);
+  c.bezierCurveTo(x - .52 * s, y - .42 * s, x - .32 * s, y - .52 * s, x - .18 * s, y - .5 * s);
+  c.bezierCurveTo(x - .08 * s, y - .49 * s, x - .02 * s, y - .42 * s, x, y - .33 * s);
+  c.bezierCurveTo(x + .02 * s, y - .42 * s, x + .08 * s, y - .49 * s, x + .18 * s, y - .5 * s);
+  c.bezierCurveTo(x + .32 * s, y - .52 * s, x + .52 * s, y - .42 * s, x + .52 * s, y - .2 * s);
+  c.bezierCurveTo(x + .52 * s, y + .02 * s, x + .12 * s, y + .28 * s, x, y + .38 * s);
+}
+
+// card paper: a faint guilloche rosette, like real security print
+function paintPaper() {
+  const r = card.getBoundingClientRect(), w = r.width * 2, h = r.height * 2, c = mk(w, h).getContext("2d");
+  c.lineWidth = 1;
+  for (let k = 0; k < 46; k++) {
+    c.beginPath();
+    for (let i = 0; i <= 720; i++) {
+      const a = i / 720 * Math.PI * 2, rr = 60 + k * 9 + 10 * Math.sin(9 * a + k * .35) + 4 * Math.sin(23 * a);
+      const px = w * .5 + Math.cos(a) * rr * 1.25, py = h * .44 + Math.sin(a) * rr;
+      i ? c.lineTo(px, py) : c.moveTo(px, py);
+    }
+    c.strokeStyle = `rgba(176,24,47,${k % 2 ? .05 : .085})`; c.stroke();
+  }
+  card.style.backgroundImage = `url(${c.canvas.toDataURL()})`; card.style.backgroundSize = "100% 100%";
+  // barcode
+  const b = $("bars"), bc = b.getContext("2d"); b.width = 192; b.height = 48;
+  let x = 0, seed = 27; const R = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  bc.fillStyle = "#3a2622"; while (x < 190) { const bw = 1 + Math.floor(R() * 4) * 1.5; if (R() > .35) bc.fillRect(x, 0, bw, 48); x += bw + 1 + Math.floor(R() * 3); }
+}
+
+// the foil, painted once: brushed silver, embossed hearts, rainbow sheen, "scratch here"
+function paintFoil() {
+  const w = zw * DPR, h = zh * DPR, c = (foilTex = mk(w, h)).getContext("2d"), d = DPR;
+  c.save(); c.beginPath(); c.roundRect(0, 0, w, h, 8 * d); c.clip();
+  let g = c.createLinearGradient(0, 0, w, h);
+  ["#8d939b", "#dfe3e7", "#a9afb6", "#f4f5f7", "#9aa0a8", "#c9ced4"].forEach((col, i, a) => g.addColorStop(i / (a.length - 1), col));
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
+  for (let y = 0; y < h; y += 1) {                                // brushed grain
+    c.fillStyle = Math.random() < .5 ? `rgba(255,255,255,${rnd(0, .09)})` : `rgba(40,45,55,${rnd(0, .07)})`;
+    c.fillRect(0, y, w, 1);
+  }
+  g = c.createLinearGradient(0, h, w, 0);                          // holo tint
+  ["#ff9ab0", "#ffe39a", "#9effd8", "#9ac8ff", "#d6a6ff", "#ff9ab0"].forEach((col, i, a) => g.addColorStop(i / (a.length - 1), col));
+  c.globalCompositeOperation = "soft-light"; c.globalAlpha = .55; c.fillStyle = g; c.fillRect(0, 0, w, h);
+  c.globalCompositeOperation = "source-over"; c.globalAlpha = 1;
+  for (let row = 0, y = 12 * d; y < h + 20 * d; row++, y += 22 * d)   // embossed heart pattern
+    for (let x = (row % 2 ? 11 : 0) * d; x < w + 20 * d; x += 22 * d) {
+      c.beginPath(); heartPath(c, x + .7 * d, y + .9 * d, 9 * d); c.fillStyle = "rgba(60,66,76,.22)"; c.fill();
+      c.beginPath(); heartPath(c, x - .5 * d, y - .5 * d, 9 * d); c.fillStyle = "rgba(255,255,255,.35)"; c.fill();
+    }
+  // centre plate
+  const pw = Math.min(w * .78, 230 * d), ph = 64 * d, px = (w - pw) / 2, py = (h - ph) / 2;
+  g = c.createLinearGradient(0, py, 0, py + ph); g.addColorStop(0, "#c3c8ce"); g.addColorStop(.5, "#eef0f2"); g.addColorStop(1, "#b5bbc2");
+  c.beginPath(); c.roundRect(px, py, pw, ph, 6 * d); c.fillStyle = g; c.fill();
+  c.lineWidth = 1 * d; c.strokeStyle = "rgba(80,86,96,.35)"; c.stroke();
+  c.beginPath(); c.roundRect(px + 3 * d, py + 3 * d, pw - 6 * d, ph - 6 * d, 4 * d); c.strokeStyle = "rgba(255,255,255,.7)"; c.stroke();
+  c.textAlign = "center"; c.textBaseline = "middle";
+  c.font = `${26 * d}px Anton, Impact, sans-serif`;
+  const label = "SCRATCH HERE".split("").join(String.fromCharCode(8202));
+  c.fillStyle = "rgba(255,255,255,.9)"; c.fillText(label, w / 2 - .8 * d, py + ph * .43 - .8 * d);
+  c.fillStyle = "rgba(55,60,70,.55)"; c.fillText(label, w / 2 + .9 * d, py + ph * .43 + 1 * d);
+  c.fillStyle = "#9097a0"; c.fillText(label, w / 2, py + ph * .43);
+  c.font = `500 ${8.5 * d}px "JetBrains Mono", monospace`; c.fillStyle = "rgba(60,66,76,.75)";
+  c.fillText("3 HEARTS  =  YOU WIN", w / 2, py + ph * .8);
+  for (let i = 0; i < 1800; i++) { c.fillStyle = Math.random() < .5 ? "rgba(255,255,255,.6)" : "rgba(50,55,65,.35)"; c.fillRect(Math.random() * w, Math.random() * h, d * .8, d * .8); }
+  c.restore();
+  c.beginPath(); c.roundRect(.5 * d, .5 * d, w - d, h - d, 8 * d); c.lineWidth = d; c.strokeStyle = "rgba(70,75,85,.45)"; c.stroke();
+}
+
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  fx.width = W * DPR; fx.height = H * DPR;
+  const r = zone.getBoundingClientRect();
+  if (Math.round(r.width) !== zw || Math.round(r.height) !== zh) {
+    zw = Math.round(r.width); zh = Math.round(r.height);
+    under.width = zw * DPR; under.height = zh * DPR;
+    mask = mk(zw * DPR, zh * DPR); cut = mk(zw * DPR, zh * DPR); shade = mk(zw * DPR, zh * DPR);
+    light = mk(zw * DPR, zh * DPR); sheenC = mk(zw * DPR, zh * DPR); small = mk(60, 42);
+    paintFoil(); paintPaper(); dirty = true;
+  }
+}
+addEventListener("resize", resize);
+resize();
+document.fonts && document.fonts.ready.then(() => { paintFoil(); dirty = true; });
+
+// ---------- scratching (pointer events) ----------
+let down = false, last = null;
+const local = e => { const r = zone.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, gx: e.clientX, gy: e.clientY }; };
+function stamp(p, dx, dy) {
+  const m = mask.getContext("2d"), d = DPR, r = CONFIG.coin * rnd(.9, 1.04);
+  m.fillStyle = "#000"; m.beginPath(); m.arc(p.x * d, p.y * d, r * d, 0, 7); m.fill();
+  for (let k = 0; k < 3; k++) {                                       // ragged coin edge
+    const a = rnd(0, 7), q = r * rnd(.7, .95);
+    m.beginPath(); m.arc((p.x + Math.cos(a) * q) * d, (p.y + Math.sin(a) * q) * d, r * rnd(.18, .38) * d, 0, 7); m.fill();
+  }
+  if (Math.random() < .25) { const a = rnd(0, 7), q = r * rnd(1.05, 1.35); m.fillRect((p.x + Math.cos(a) * q) * d, (p.y + Math.sin(a) * q) * d, rnd(1, 2.4) * d, rnd(1, 2.4) * d); }
+  dirty = true;
+  if (p.x > -r && p.y > -r && p.x < zw + r && p.y < zh + r && flakes.length < 700) {
+    const n = Math.random() < .7 ? 1 : 2;
+    for (let i = 0; i < n; i++) flakes.push({ x: p.gx + rnd(-r, r) * .8, y: p.gy + rnd(-r, r) * .6, vx: dx * rnd(8, 20) + rnd(-60, 60), vy: dy * rnd(8, 20) + rnd(-140, -20),
+      rot: rnd(0, 7), vr: rnd(-14, 14), s: rnd(1.2, 3.4), age: 0, life: rnd(.7, 1.5), spark: Math.random() < .08 });
+  }
+}
+function scratchTo(a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy), n = Math.max(1, Math.ceil(len / 3));
+  const ux = len ? dx / len : 0, uy = len ? dy / len : 0;
+  for (let i = 1; i <= n; i++) { const t = i / n; stamp({ x: a.x + dx * t, y: a.y + dy * t, gx: a.gx + (b.gx - a.gx) * t, gy: a.gy + (b.gy - a.gy) * t }, ux, uy); }
+}
+addEventListener("pointerdown", e => { if (S.revealT >= 0) return; down = true; last = local(e); scratchTo(last, last); });
+addEventListener("pointermove", e => { if (!down || S.revealT >= 0) return; const p = local(e); scratchTo(last, p); last = p; });
+addEventListener("pointerup", () => down = false);
+addEventListener("pointercancel", () => down = false);
+
+// ---------- foil compositing with a real cut edge ----------
+function rebuildCut() {
+  const w = cut.width, h = cut.height, d = DPR;
+  const l = light.getContext("2d"); l.globalCompositeOperation = "copy"; l.drawImage(mask, 0, 0);
+  l.globalCompositeOperation = "source-in"; l.fillStyle = "#fff"; l.fillRect(0, 0, w, h);
+  const c = cut.getContext("2d");
+  c.globalCompositeOperation = "copy"; c.drawImage(foilTex, 0, 0);
+  c.globalCompositeOperation = "source-atop";
+  c.globalAlpha = .55; c.drawImage(mask, 1.4 * d, 1.8 * d);           // dark lip on the far side
+  c.globalAlpha = .85; c.drawImage(light, -1.1 * d, -1.2 * d);        // bright burr on the near side
+  c.globalAlpha = 1; c.globalCompositeOperation = "destination-out"; c.drawImage(mask, 0, 0);
+  c.globalCompositeOperation = "source-over";
+  const s = shade.getContext("2d");                                   // shadow the foil throws into the hole
+  s.globalCompositeOperation = "copy"; s.drawImage(mask, 0, 0);
+  s.globalCompositeOperation = "destination-out"; s.drawImage(mask, 2.2 * d, 2.6 * d);
+  s.globalCompositeOperation = "source-over";
+  dirty = false;
+}
+function measure() {
+  const c = small.getContext("2d", { willReadFrequently: true });
+  c.clearRect(0, 0, 60, 42); c.drawImage(mask, 0, 0, 60, 42);
+  const a = c.getImageData(0, 0, 60, 42).data; let n = 0;
+  for (let i = 3; i < a.length; i += 4) if (a[i] > 128) n++;
+  covered = n / (60 * 42); return a;
+}
+function reveal(now) {
+  S.revealT = now; down = false;
+  S.snap = mk(cut.width, cut.height); S.snap.getContext("2d").drawImage(cut, 0, 0);
+  const a = measure(), r = zone.getBoundingClientRect();
+  for (let i = 0, k = 0; i < 60 * 42 && k < 220; i++) {               // foil crumbs from what's left
+    if (a[i * 4 + 3] > 128 || Math.random() > .5) continue; k++;
+    const x = r.left + (i % 60 + Math.random()) / 60 * r.width, y = r.top + (Math.floor(i / 60) + Math.random()) / 42 * r.height;
+    flakes.push({ x, y, vx: rnd(-90, 200), vy: rnd(-320, -60), rot: rnd(0, 7), vr: rnd(-16, 16), s: rnd(1.4, 3.8), age: rnd(-.25, 0), life: rnd(.9, 1.7), spark: Math.random() < .12 });
+  }
+  S.popT = now + 280; S.stampT = now + 1050;
+}
+function burst(now) {
+  const r = zone.getBoundingClientRect();
+  const cols = [CONFIG.heart[0], CONFIG.heart[1], "#ff8fa3", "#f6efe0", "#e9b949"];
+  for (let c = 0; c < 3; c++) {
+    const cx = r.left + cell(c).x, cy = r.top + cell(c).y;
+    for (let i = 0; i < 22; i++) {
+      const a = -Math.PI / 2 + rnd(-1.25, 1.25), v = rnd(220, 560);
+      hearts.push({ x: cx, y: cy, vx: Math.cos(a) * v + (c - 1) * 60, vy: Math.sin(a) * v, rot: rnd(-.6, .6), vr: rnd(-3, 3), s: rnd(10, 26), col: cols[i % cols.length], age: -i * .012, life: rnd(1.8, 2.8) });
+    }
+  }
+}
+
+// ---------- the prize underneath ----------
+const cell = i => { const cw = Math.min(78, zw * .25), gap = (zw - cw * 3) / 4; return { x: gap + cw / 2 + i * (cw + gap), y: 12 + cw / 2, s: cw }; };
+function drawUnder(now) {
+  const c = U, d = DPR; c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, zw, zh);
+  let g = c.createRadialGradient(zw * .5, zh * .35, 10, zw * .5, zh * .5, zw * .7);
+  g.addColorStop(0, "#fffaf0"); g.addColorStop(1, "#efe3cc"); c.fillStyle = g; c.fillRect(0, 0, zw, zh);
+  c.strokeStyle = "rgba(176,24,47,.10)"; c.lineWidth = 1;
+  for (let x = -zh; x < zw; x += 7) { c.beginPath(); c.moveTo(x, zh); c.lineTo(x + zh, 0); c.stroke(); }
+  const p = S.popT >= 0 ? (now - S.popT) / 1000 : -1;
+  for (let i = 0; i < 3; i++) {
+    const { x, y, s } = cell(i), q = p - i * .11;
+    const beat = q > 1.2 ? Math.pow(Math.max(0, Math.sin((q - 1.2) * 5.2)), 12) * .07 : 0;   // slow heartbeat after the win
+    const pop = q > 0 ? 1 + .32 * Math.exp(-4.5 * q) * Math.sin(11 * q) + beat : 1;
+    c.save(); c.translate(x, y);
+    if (q > 0) { const gl = c.createRadialGradient(0, 0, s * .2, 0, 0, s * .75); gl.addColorStop(0, `rgba(255,190,120,${.55 * Math.min(1, q * 3)})`); gl.addColorStop(1, "rgba(255,190,120,0)"); c.fillStyle = gl; c.fillRect(-s, -s, 2 * s, 2 * s); }
+    c.beginPath(); c.roundRect(-s / 2, -s / 2, s, s, 7); c.fillStyle = "rgba(255,255,255,.55)"; c.fill();
+    c.setLineDash([3, 3]); c.strokeStyle = "rgba(176,24,47,.55)"; c.lineWidth = 1.2; c.stroke(); c.setLineDash([]);
+    c.scale(pop, pop);
+    const hs = s * .7;
+    c.beginPath(); heartPath(c, 0, s * .03, hs);
+    g = c.createRadialGradient(-hs * .18, -hs * .22, hs * .05, 0, 0, hs * .62);
+    g.addColorStop(0, CONFIG.heart[0]); g.addColorStop(.55, CONFIG.heart[1]); g.addColorStop(1, CONFIG.heart[2]);
+    c.fillStyle = g; c.shadowColor = "rgba(120,10,25,.35)"; c.shadowBlur = 6; c.shadowOffsetY = 2; c.fill(); c.shadowColor = "transparent";
+    c.beginPath(); c.ellipse(-hs * .2, -hs * .2, hs * .11, hs * .06, -.6, 0, 7); c.fillStyle = "rgba(255,255,255,.75)"; c.fill();
+    c.restore();
+    c.font = `500 7.5px "JetBrains Mono", monospace`; c.textAlign = "center"; c.fillStyle = "rgba(122,90,80,.8)";
+    c.fillText(`♥ 0${i + 1}`, x, y + s / 2 + 10);
+  }
+  const ty = cell(0).y + cell(0).s / 2 + 30;
+  c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillStyle = "#7a5a50";
+  c.font = `500 9px "JetBrains Mono", monospace`; c.fillText(CONFIG.wonLabel.toUpperCase().split("").join(" "), zw / 2, ty);
+  let fs = 30; c.font = `italic 400 ${fs}px "Instrument Serif", Georgia, serif`;
+  while (c.measureText(CONFIG.prize).width > zw - 28 && fs > 14) c.font = `italic 400 ${--fs}px "Instrument Serif", Georgia, serif`;
+  c.fillStyle = CONFIG.ink; c.fillText(CONFIG.prize, zw / 2, ty + fs * .95 + 2);
+  c.font = `500 12px "JetBrains Mono", monospace`; c.fillStyle = "#2a1a17";
+  c.fillText(CONFIG.when + "  💌", zw / 2, ty + fs * .95 + 24);
+}
+
+// ---------- one loop ----------
+let prev = performance.now();
+function loop(now) {
+  const dt = Math.min(.05, (now - prev) / 1000); prev = now; frame++;
+  // card shake when the stamp lands
+  const sh = S.stampT >= 0 && now > S.stampT ? (now - S.stampT) / 1000 : -1;
+  card.style.transform = sh >= 0 && sh < .35 ? `translate(${Math.sin(sh * 70) * 4 * (1 - sh / .35)}px,${Math.cos(sh * 55) * 2 * (1 - sh / .35)}px)` : "";
+  drawUnder(now);
+  const r = zone.getBoundingClientRect();
+  X.setTransform(DPR, 0, 0, DPR, 0, 0); X.clearRect(0, 0, W, H);
+  if (S.revealT < 0) {
+    if (dirty) { rebuildCut(); if (frame % 2 === 0 || !down) { measure(); if (covered >= CONFIG.revealAt) reveal(now); } }
+  }
+  if (S.revealT < 0) {
+    X.save(); X.filter = "blur(1.2px)"; X.globalAlpha = .45; X.drawImage(shade, r.left, r.top, zw, zh); X.restore();
+    const sc = sheenC.getContext("2d"), w = sheenC.width, h = sheenC.height;   // moving glint across the foil
+    sc.globalCompositeOperation = "copy"; sc.drawImage(cut, 0, 0); sc.globalCompositeOperation = "source-atop";
+    const u = ((now / 2600) % 1) * 2.2 - .6, g = sc.createLinearGradient(w * u, 0, w * (u + .45), h);
+    g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(.5, "rgba(255,255,255,.42)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    sc.fillStyle = g; sc.fillRect(0, 0, w, h); sc.globalCompositeOperation = "source-over";
+    X.drawImage(sheenC, r.left, r.top, zw, zh);
+  } else {
+    const p = clamp((now - S.revealT) / 1100);                       // the rest peels off like a sticker
+    if (p < 1) {
+      const e = p * p * (3 - 2 * p);
+      X.save(); X.translate(r.left, r.top + zh);
+      X.translate(e * zw * .55, -e * zh * 1.1); X.rotate(-e * .55); X.transform(1, 0, -.25 * Math.sin(p * Math.PI), 1 - .3 * Math.sin(p * Math.PI), 0, 0);
+      X.globalAlpha = 1 - clamp((p - .45) / .55);
+      X.shadowColor = "rgba(0,0,0,.45)"; X.shadowBlur = 24 * e; X.shadowOffsetY = 14 * e;
+      X.drawImage(S.snap, 0, -zh, zw, zh); X.restore();
+    }
+    if (S.popT >= 0 && now >= S.popT && !S.burst) { S.burst = true; burst(now); hint.textContent = CONFIG.doneHint; }
+  }
+  // foil dust
+  for (let i = flakes.length - 1; i >= 0; i--) {
+    const f = flakes[i]; f.age += dt; if (f.age > f.life) { flakes.splice(i, 1); continue; } if (f.age < 0) continue;
+    f.vy += 980 * dt; f.vx *= 1 - 1.6 * dt; f.vy *= 1 - .6 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt;
+    const k = 1 - f.age / f.life;
+    if (f.spark) {
+      const s = f.s * 2.4 * Math.sin(Math.PI * clamp(f.age / f.life));
+      X.save(); X.translate(f.x, f.y); X.rotate(f.rot * .2); X.fillStyle = "rgba(255,255,255,.95)";
+      X.beginPath(); X.moveTo(0, -s); X.quadraticCurveTo(0, 0, s, 0); X.quadraticCurveTo(0, 0, 0, s); X.quadraticCurveTo(0, 0, -s, 0); X.quadraticCurveTo(0, 0, 0, -s); X.fill(); X.restore();
+      continue;
+    }
+    const b = Math.abs(Math.cos(f.rot * 1.7)), v = Math.round(110 + 145 * b);
+    X.save(); X.translate(f.x, f.y); X.rotate(f.rot); X.scale(1, .35 + .65 * Math.abs(Math.sin(f.rot)));
+    X.globalAlpha = Math.min(1, k * 2.2); X.fillStyle = `rgb(${v},${v + 4},${v + 10})`;
+    X.fillRect(-f.s / 2, -f.s / 2, f.s, f.s * .8); X.restore();
+  }
+  // heart burst
+  for (let i = hearts.length - 1; i >= 0; i--) {
+    const h = hearts[i]; h.age += dt; if (h.age > h.life) { hearts.splice(i, 1); continue; } if (h.age < 0) continue;
+    h.vy += 520 * dt; h.vx *= 1 - 1.4 * dt; h.vy *= 1 - 1.1 * dt; h.x += h.vx * dt; h.y += h.vy * dt; h.rot += h.vr * dt;
+    const a = h.age / h.life, s = h.s * Math.min(1, h.age * 6) * (1 - .3 * a);
+    X.save(); X.translate(h.x, h.y); X.rotate(h.rot + Math.sin(h.age * 5) * .25); X.globalAlpha = 1 - clamp((a - .65) / .35);
+    X.beginPath(); heartPath(X, 0, 0, s); X.fillStyle = h.col; X.fill(); X.restore();
+  }
+  // "winner" rubber stamp
+  if (S.stampT >= 0 && now > S.stampT) {
+    const q = clamp((now - S.stampT) / 180), sc = (2.1 - 1.1 * ease(q)) * .82;
+    X.save(); X.translate(r.right - 40, r.bottom - 36); X.rotate(-.24); X.scale(sc, sc); X.globalAlpha = .88 * Math.min(1, q * 1.6);
+    X.strokeStyle = X.fillStyle = CONFIG.ink;
+    X.lineWidth = 2.4; X.beginPath(); X.arc(0, 0, 40, 0, 7); X.stroke();
+    X.lineWidth = 1; X.beginPath(); X.arc(0, 0, 34, 0, 7); X.stroke();
+    X.textAlign = "center"; X.textBaseline = "middle";
+    X.font = `22px Anton, Impact, sans-serif`; X.fillText("WINNER", 0, 1);
+    X.font = `500 6.5px "JetBrains Mono", monospace`; X.fillText("3 OF 3 HEARTS", 0, -20); X.fillText("NO REFUNDS", 0, 21);
+    X.restore();
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
