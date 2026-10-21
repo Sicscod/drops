@@ -34,6 +34,7 @@ Saw a drop in a video? Its number is the folder.
 | 25 | [✈️ Until I See You](25-until-i-see-you) | Long-distance countdown on a night globe, ?name=&from=&to=&date= in the link |
 | 26 | [📸 Polaroids](26-polaroids) | Polaroids that develop into your memories, ?name=&captions=&last= in the link |
 | 27 | [💌 Scratch Card](27-scratch-card) | Scratch the foil, three hearts match, she wins a date with you |
+| 28 | [🌧️ Foggy Window](28-foggy-window) | Wipe the fogged glass to see the neon city, then the fog writes her name and a heart by itself |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
