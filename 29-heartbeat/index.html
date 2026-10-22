@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>heartbeat</title>
+<meta name="description" content="A heart monitor that races when you touch it, then writes her name. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;500&family=JetBrains+Mono:wght@400;500&family=Cormorant+Garamond:ital,wght@1,500&family=Great+Vibes&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#030605;color:#dfe9e4;--c:#3dffa0;--glow:rgba(61,255,160,.45)}
+#ecg{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+.ui{position:fixed;left:18px;right:18px;pointer-events:none;font:400 10px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;color:rgba(214,230,222,.5)}
+.top{top:16px;display:flex;justify-content:space-between}
+.top b{font-weight:500;color:var(--c)}
+.head{top:38px}
+.vitals{display:flex;justify-content:space-between;align-items:flex-start}
+.hr .lab{display:flex;align-items:center;gap:8px;color:var(--c)}
+.hr .lab svg{width:13px;height:12px;display:block}
+.num{margin-top:2px;font:200 clamp(84px,24vw,124px)/.86 "Barlow Condensed",sans-serif;letter-spacing:-.02em;color:var(--c);text-shadow:0 0 18px var(--glow),0 0 2px var(--glow);font-variant-numeric:tabular-nums;text-transform:none}
+.num small{font:300 15px/1 "Barlow Condensed",sans-serif;letter-spacing:.12em;margin-left:6px;color:rgba(214,230,222,.55);text-shadow:none;vertical-align:top;position:relative;top:14px}
+.side{display:grid;grid-template-columns:auto auto;column-gap:14px;row-gap:9px;text-align:right;padding-top:2px}
+.side span:nth-child(odd){text-align:left}
+.side i{font:300 24px/1 "Barlow Condensed",sans-serif;font-style:normal;letter-spacing:.02em;color:#e8f2ec;text-transform:none}
+.status{margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid rgba(214,230,222,.1);padding-top:10px}
+.status #rhythm{color:var(--c)}
+.status #who{text-transform:none;letter-spacing:.04em;font-size:11px;color:rgba(232,242,236,.78)}
+.status #who:before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--c);margin-right:8px;vertical-align:1px;box-shadow:0 0 6px var(--c)}
+.low{position:fixed;left:16px;right:16px;text-align:center;pointer-events:none}
+#msg{margin:0;font:500 26px/1.1 "Cormorant Garamond",Georgia,serif;font-style:italic;color:#f6eef0;opacity:0}
+#hint{margin:0;font:500 10px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.24em;text-transform:uppercase;color:rgba(222,236,229,.62)}
+.credit{position:fixed;left:0;right:0;bottom:14px;text-align:center;font:400 10px "JetBrains Mono",ui-monospace,monospace;letter-spacing:.04em;color:rgba(214,230,222,.38)}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="ecg"></canvas>
+<div class="ui top"><span><b>●</b>&nbsp; ECG · II</span><span>25 mm/s</span><span id="clock">11:52 pm</span></div>
+<div class="ui head"><div class="vitals">
+  <div class="hr">
+    <div class="lab">HR <svg viewBox="0 0 26 24"><path id="hico" d="M13 23C5 16.6 1 12.3 1 7.4 1 3.8 3.8 1 7.3 1c2.3 0 4.4 1.2 5.7 3.1C14.3 2.2 16.4 1 18.7 1 22.2 1 25 3.8 25 7.4c0 4.9-4 9.2-12 15.6z" fill="currentColor"/></svg></div>
+    <div class="num"><span id="bpm">72</span><small>BPM</small></div>
+  </div>
+  <div class="side">
+    <span>SpO₂</span><i id="spo">99</i>
+    <span>Resp</span><i id="resp">14</i>
+    <span>NIBP</span><i id="nibp">118/76</i>
+  </div>
+</div>
+<div class="status" id="status"><span id="rhythm">sinus rhythm</span><span id="who"></span></div></div>
+<div class="low" id="low"><p id="msg"></p><p id="hint">press &amp; hold the screen</p></div>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Heartbeat · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&msg=you%20do%20this%20to%20me&hue=150
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name: P.get("name") || "Delly",              // the name the heartbeat writes
+  msg: P.get("msg") || "you do this to me",    // the line under the name
+  hue: +(P.get("hue") || 150),                 // trace colour when calm (0-360, 150 = monitor green)
+  loveHue: 350,                                // colour it turns when the heart races
+  restBpm: 72,                                 // calm heart rate
+  peakBpm: 148,                                // heart rate when fully held
+  rise: 3.2,          // seconds of holding to reach the peak
+  fall: 4.5,          // seconds to calm down after letting go
+  flat: 1.0,          // seconds of flatline before the name
+  writeTime: 2.9,     // seconds to write the name
+  sweep: 2.7,         // seconds for the trace to cross the screen
+  font: P.get("font") || "Great Vibes", // script font the name is traced from (add it to the fonts <link> too)
+  sound: true,        // monitor beeps (start on first touch)
+  clock: "11:52 pm",
+};
+
+// ---------- setup ----------
+const $ = id => document.getElementById(id);
+const cv = $("ecg"), ctx = cv.getContext("2d");
+$("who").textContent = "thinking about " + CONFIG.name;
+$("msg").textContent = CONFIG.msg; $("clock").textContent = CONFIG.clock;
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const sst = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const lerp = (a, b, t) => a + (b - a) * t;
+const mk = (w, h) => { const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; };
+
+let W = 0, H = 0, DPR = 1, X0 = 0, X1 = 0, BASE = 0, AMP = 0, bandTop = 0, bandBot = 0;
+let bg, trace, tctx, b1, b2, ys, ts;
+let name = null;            // traced name path {pts, cum, total, heartAt}
+
+function layout() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  const st = $("status").getBoundingClientRect();
+  bandTop = st.bottom + 14; bandBot = H - 92;
+  const bh = bandBot - bandTop;
+  BASE = bandTop + bh * .66; AMP = bh * .5;
+  X0 = 46; X1 = W - 14;
+  $("low").style.top = (bandBot + 2) + "px";
+  trace = mk(W * DPR, H * DPR); tctx = trace.getContext("2d");
+  b1 = mk(W * DPR / 4, H * DPR / 4); b2 = mk(W * DPR / 10, H * DPR / 10);
+  ys = new Float32Array(Math.ceil(W) + 2).fill(NaN); ts = new Float32Array(Math.ceil(W) + 2).fill(-99);
+  drawBg();
+  if (fontReady) name = traceName(CONFIG.name);
+}
+
+// monitor paper: dotted grid, major lines, scanlines, vignette (drawn once per resize)
+function drawBg() {
+  bg = mk(W * DPR, H * DPR); const g = bg.getContext("2d"); g.scale(DPR, DPR);
+  g.fillStyle = "#030605"; g.fillRect(0, 0, W, H);
+  const step = 12, gx = X0 % step;
+  g.fillStyle = `hsla(${CONFIG.hue},40%,60%,.07)`;
+  for (let y = bandTop; y < bandBot; y += step) for (let x = gx; x < W; x += step) g.fillRect(x, y, 1, 1);
+  g.strokeStyle = `hsla(${CONFIG.hue},40%,60%,.06)`; g.lineWidth = 1; g.beginPath();
+  for (let x = X0; x < W; x += step * 5) { g.moveTo(Math.round(x) + .5, bandTop); g.lineTo(Math.round(x) + .5, bandBot); }
+  for (let y = BASE; y > bandTop; y -= step * 5) { g.moveTo(0, Math.round(y) + .5); g.lineTo(W, Math.round(y) + .5); }
+  for (let y = BASE + step * 5; y < bandBot; y += step * 5) { g.moveTo(0, Math.round(y) + .5); g.lineTo(W, Math.round(y) + .5); }
+  g.stroke();
+  // 1 mV calibration pulse + lead label, like a real strip
+  g.strokeStyle = `hsla(${CONFIG.hue},50%,70%,.32)`; g.lineWidth = 1.2; g.beginPath();
+  g.moveTo(14, BASE); g.lineTo(20, BASE); g.lineTo(20, BASE - 40); g.lineTo(32, BASE - 40); g.lineTo(32, BASE); g.lineTo(38, BASE); g.stroke();
+  g.fillStyle = `hsla(${CONFIG.hue},40%,75%,.4)`; g.font = '500 9px "JetBrains Mono",monospace'; g.fillText("II", 16, bandTop + 14);
+  g.fillText("1mV", 14, BASE + 16);
+  const v = g.createRadialGradient(W / 2, H * .5, Math.min(W, H) * .3, W / 2, H * .5, Math.max(W, H) * .78);
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.72)");
+  g.fillStyle = v; g.fillRect(0, 0, W, H);
+  g.fillStyle = "rgba(0,0,0,.16)"; for (let y = 0; y < H; y += 3) g.fillRect(0, y, W, 1);
+}
+
+// ---------- the waveform ----------
+const gauss = (p, c, w) => Math.exp(-.5 * ((p - c) / w) ** 2);
+function ecg(p, wild, n) {           // p = beat phase 0..1, R peak at .24
+  const a = 1 + wild * .55;
+  let y = .11 * gauss(p, .1, .03) - .13 * gauss(p, .215, .009) + a * gauss(p, .24, .011)
+        - (.3 + wild * .35) * gauss(p, .262, .011) + (.24 + wild * .12) * gauss(p, .47, .055);
+  return y + n;
+}
+
+// ---------- name → one continuous stroke (skeleton of the script font) ----------
+function traceName(text) {
+  const fs = 150, c0 = mk(10, 10).getContext("2d");
+  c0.font = `${fs}px "${CONFIG.font}", cursive`;
+  const tw = Math.ceil(c0.measureText(text).width), cw = tw + fs, ch = Math.round(fs * 1.7), by = Math.round(fs * 1.12);
+  const c = mk(cw, ch), g = c.getContext("2d");
+  g.font = c0.font; g.fillStyle = g.strokeStyle = "#fff"; g.lineWidth = fs * .035; g.lineJoin = "round";
+  g.fillText(text, fs / 2, by); g.strokeText(text, fs / 2, by);
+  const d = g.getImageData(0, 0, cw, ch).data, M = new Uint8Array(cw * ch);
+  for (let i = 0; i < M.length; i++) M[i] = d[i * 4 + 3] > 110 ? 1 : 0;
+  // Zhang-Suen thinning
+  const nb = i => [M[i - cw], M[i - cw + 1], M[i + 1], M[i + cw + 1], M[i + cw], M[i + cw - 1], M[i - 1], M[i - cw - 1]];
+  for (let changed = true, it = 0; changed && it < 60; it++) {
+    changed = false;
+    for (const pass of [0, 1]) {
+      const del = [];
+      for (let y = 1; y < ch - 1; y++) for (let x = 1; x < cw - 1; x++) {
+        const i = y * cw + x; if (!M[i]) continue;
+        const n = nb(i), B = n.reduce((s, v) => s + v, 0); if (B < 2 || B > 6) continue;
+        let A = 0; for (let k = 0; k < 8; k++) if (!n[k] && n[(k + 1) % 8]) A++;
+        if (A !== 1) continue;
+        if (pass === 0 ? (n[0] * n[2] * n[4] || n[2] * n[4] * n[6]) : (n[0] * n[2] * n[6] || n[0] * n[4] * n[6])) continue;
+        del.push(i);
+      }
+      for (const i of del) M[i] = 0; if (del.length) changed = true;
+    }
+  }
+  const OFF = [-cw, -cw + 1, 1, cw + 1, cw, cw - 1, -1, -cw - 1];
+  const deg = i => OFF.reduce((s, o) => s + M[i + o], 0);
+  // prune short spurs
+  for (let i = 0; i < M.length; i++) if (M[i] && deg(i) === 1) {
+    const run = [i]; let cur = i, prev = -1;
+    while (run.length < 9) {
+      const nx = OFF.map(o => cur + o).filter(j => M[j] && j !== prev && !run.includes(j));
+      if (nx.length !== 1 || deg(nx[0]) > 2) break;
+      prev = cur; cur = nx[0]; run.push(cur);
+    }
+    if (run.length < 9 && OFF.some(o => M[cur + o] && deg(cur + o) > 2)) for (const j of run) M[j] = 0;
+  }
+  // components left to right, each walked as one depth-first stroke
+  const seen = new Uint8Array(M.length), comps = [];
+  for (let i = 0; i < M.length; i++) if (M[i] && !seen[i]) {
+    const q = [i], all = []; seen[i] = 1;
+    while (q.length) { const k = q.pop(); all.push(k); for (const o of OFF) { const j = k + o; if (M[j] && !seen[j]) { seen[j] = 1; q.push(j); } } }
+    if (all.length > 12) comps.push(all);
+  }
+  const minx = a => Math.min(...a.map(i => i % cw));
+  comps.sort((a, b) => minx(a) - minx(b));
+  const vis = new Uint8Array(M.length), raw = [];
+  for (const all of comps) {
+    let start = all[0], best = 1e9;
+    for (const i of all) { const s = (i % cw) + (deg(i) === 1 ? 0 : 30); if (s < best) { best = s; start = i; } }
+    const stack = [start], walk = [[start, 0]]; vis[start] = 1; let dx = 1, dy = 0;
+    while (stack.length) {
+      const cur = stack[stack.length - 1]; let pick = -1, ps = -9;
+      for (const o of OFF) {
+        const j = cur + o; if (!M[j] || vis[j]) continue;
+        const ox = ((j % cw) - (cur % cw)), oy = (((j / cw) | 0) - ((cur / cw) | 0));
+        const s = (ox * dx + oy * dy) / Math.hypot(ox, oy) + (ox && oy ? 0 : .15);
+        if (s > ps) { ps = s; pick = j; }
+      }
+      if (pick >= 0) {
+        vis[pick] = 1; stack.push(pick); walk.push([pick, 0]);
+        dx = lerp(dx, (pick % cw) - (cur % cw), .5); dy = lerp(dy, ((pick / cw) | 0) - ((cur / cw) | 0), .5);
+      } else { stack.pop(); if (stack.length) walk.push([stack[stack.length - 1], 1]); }
+    }
+    while (walk.length && walk[walk.length - 1][1]) walk.pop();
+    raw.push(walk.map(([i, b]) => [i % cw, (i / cw) | 0, b]));
+  }
+  // fit into the band
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const w of raw) for (const [x, y] of w) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const heartW = Math.min(64, W * .13), room = X1 - X0 - heartW - 40;
+  const s = Math.min(room / (x1 - x0), (BASE - bandTop - 12) / (by - y0), AMP * 1.4 / (y1 - y0));
+  const ox = X0 + (room - (x1 - x0) * s) * .5 + 6 - x0 * s, oy = BASE - by * s;
+  const smooth = w => w.map((p, k) => { let sx = 0, sy = 0, n = 0; for (let j = -3; j <= 3; j++) { const q = w[clamp(k + j, 0, w.length - 1)]; sx += q[0]; sy += q[1]; n++; } return [sx / n, sy / n, p[2]]; });
+  const pts = [];          // [x, y, weight]
+  const add = (x, y, wt) => pts.push([x, y, wt]);
+  const line = (xa, ya, xb, yb, wt) => { const n = Math.max(2, Math.ceil(Math.hypot(xb - xa, yb - ya) / 2)); for (let k = 1; k <= n; k++) add(lerp(xa, xb, k / n), lerp(ya, yb, k / n), wt); };
+  add(X0, BASE, 0);
+  raw.forEach((w0, ci) => {
+    const w = smooth(w0).map(([x, y, b]) => [ox + x * s, oy + y * s, b]);
+    const [fx, fy] = w[0], L = pts[pts.length - 1];
+    if (ci === 0) { line(L[0], L[1], fx - 30, BASE, .45); line(fx - 30, BASE, fx - 22, BASE - AMP * .08, .8); line(fx - 22, BASE - AMP * .08, fx - 14, BASE, .8); line(fx - 14, BASE, fx, fy, 1); }
+    else line(L[0], L[1], fx, fy, 1);
+    for (let k = 1; k < w.length; k++) add(w[k][0], w[k][1], w[k][2] ? .18 : 1);
+  });
+  // down to the baseline, then the heart-shaped beat
+  const L = pts[pts.length - 1], hx = Math.min(X1 - heartW * .7, ox + x1 * s + heartW * .75), hk = heartW / 34;
+  line(L[0], L[1], L[0] + 10, BASE, 1); line(L[0] + 10, BASE, hx - 10, BASE, .5);
+  line(hx - 10, BASE, hx - 5, BASE + AMP * .07, 1); line(hx - 5, BASE + AMP * .07, hx, BASE, 1);
+  const heartFrom = pts.length;
+  for (let k = 1; k <= 90; k++) {
+    const t = Math.PI + k / 90 * Math.PI * 2;
+    add(hx + 16 * Math.sin(t) ** 3 * hk, BASE - (17 + 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * hk, 1.6);
+  }
+  const heartTo = pts.length;
+  line(hx, BASE, hx + 5, BASE + AMP * .05, 1); line(hx + 5, BASE + AMP * .05, hx + 10, BASE, 1); line(hx + 10, BASE, X1, BASE, .35);
+  const cum = [0];
+  for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]) * pts[k][2] + .05);
+  return { pts, cum, total: cum[cum.length - 1], heartFrom, heartTo, hx, hk };
+}
+
+// ---------- sound: real monitor beeps ----------
+let ac = null, flatOsc = null;
+function audioOn() {
+  if (!CONFIG.sound || ac) return;
+  try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; }
+}
+function beep(f, len, vol) {
+  if (!ac) return; const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + .006); g.gain.setTargetAtTime(0, t + len, .02);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + len + .2);
+}
+
+// ---------- state ----------
+let love = 0, holding = false, touched = false, heat = 0, bpm = CONFIG.restBpm, phase = .6, mode = "live", modeT = 0;
+let headX = X0, lastNow = 0, lastBeat = -9, fontReady = false, lastP = 0;
+window.__beats = [];        // beat times (s), used to sync the video's soundtrack
+document.fonts.load(`80px "${CONFIG.font}"`).then(() => { fontReady = true; if (W) name = traceName(CONFIG.name); });
+
+cv.addEventListener("pointerdown", e => {
+  audioOn(); touched = true;
+  if (mode === "done" && now() - modeT > 1.5) { mode = "live"; modeT = now(); heat = .2; }
+  holding = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+});
+const up = () => { holding = false; };
+cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up); cv.addEventListener("pointerleave", up);
+
+const now = () => performance.now() / 1000;
+function onBeat(t, strong) {
+  lastBeat = t; window.__beats.push(+t.toFixed(3));
+  if (strong !== false) beep(920 + heat * 220, .07 - heat * .02, .12);
+}
+
+// ---------- draw ----------
+// calm colour → love colour, mixed in RGB so it passes through a white-hot glow, not through yellow
+function hsl2rgb(h, s, l) { const a = s * Math.min(l, 1 - l), f = n => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); }; return [f(0), f(8), f(4)]; }
+function colour(_h, l = 62, a = 1) {
+  const h = love, A = hsl2rgb(CONFIG.hue, 1, l / 100), B = hsl2rgb(CONFIG.loveHue, 1, l / 100), lift = Math.sin(Math.PI * h) * .22;
+  const c = A.map((v, i) => Math.round(255 * Math.min(1, lerp(v, B[i], h) + lift)));
+  return `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+}
+
+function frame() {
+  const t = now(), dt = Math.min(.05, Math.max(0, t - lastNow)); lastNow = t;
+  // heat: holding races the heart, letting go calms it
+  if (mode === "live") {
+    if (holding) heat = Math.min(1, heat + dt / CONFIG.rise); else heat = Math.max(0, heat - dt / CONFIG.fall);
+    if (holding && heat >= 1) { mode = "flat"; modeT = t; if (ac) { flatOsc = ac.createOscillator(); const g = ac.createGain(); flatOsc.frequency.value = 880; g.gain.value = .07; flatOsc.connect(g).connect(ac.destination); flatOsc.start(); flatOsc.stop(ac.currentTime + CONFIG.flat); } }
+  } else heat = Math.max(.25, heat - dt / (CONFIG.fall * 2.6));
+  if (mode === "flat" && t - modeT > CONFIG.flat && name) { mode = "write"; modeT = t; }
+  if (mode !== "live") love = Math.min(1, love + dt * 2); else love = sst(0, 1, heat);
+  const age = t - modeT;
+  const hE = sst(0, 1, heat);
+  const target = mode === "flat" ? 0 : CONFIG.restBpm + (CONFIG.peakBpm - CONFIG.restBpm) * Math.pow(heat, 1.15);
+  bpm += (target - bpm) * Math.min(1, dt * (mode === "flat" ? 9 : 2.6));
+
+  // advance the beat; the sweep writes one column per pixel
+  const p0 = phase, live = mode === "live" || mode === "done";
+  if (live) phase += dt * bpm / 60;
+  if (live && Math.floor(phase - .24) > Math.floor(p0 - .24)) onBeat(t, true);
+  const speed = (X1 - X0) / CONFIG.sweep, nx = headX + speed * dt;
+  if (mode !== "write" && mode !== "done") {
+    for (let x = Math.floor(headX) + 1; x <= Math.floor(nx); x++) {
+      const k = (x - headX) / Math.max(1e-6, nx - headX), xc = ((x - X0) % (X1 - X0) + (X1 - X0)) % (X1 - X0) + X0 | 0;
+      let y = 0;
+      if (mode === "live") {
+        const pp = lerp(p0, phase, k), wild = hE, wob = Math.sin(t * 2.3 + x * .02) * .05 * wild;
+        let best = 0;
+        for (let s = -1; s <= 1; s++) { const q = pp + s * dt * bpm / 60 / Math.max(1, nx - headX) / 3; const v = ecg(((q % 1) + 1) % 1, wild, 0); if (Math.abs(v) > Math.abs(best)) best = v; }
+        y = best + wob + (Math.random() - .5) * .07 * wild * wild;
+      }
+      ys[xc] = BASE - y * AMP * .62 * (1 + hE * .25); ts[xc] = t;
+    }
+    headX = nx; if (headX > X1) headX -= X1 - X0;
+  }
+
+  // ---- background + screen glow ----
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bg, 0, 0); ctx.scale(DPR, DPR);
+  const pulse = Math.exp(-(t - lastBeat) * 5.5);
+  const glowA = .05 + hE * .22 + pulse * (.04 + hE * .1);
+  const rg = ctx.createRadialGradient(W / 2, BASE - AMP * .3, 10, W / 2, BASE - AMP * .3, Math.max(W, H) * .75);
+  rg.addColorStop(0, colour(hE, 45, glowA)); rg.addColorStop(1, colour(hE, 30, 0));
+  ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = "source-over";
+
+  // ---- trace layer ----
+  const tc = tctx; tc.setTransform(1, 0, 0, 1, 0, 0); tc.clearRect(0, 0, trace.width, trace.height); tc.scale(DPR, DPR);
+  tc.lineJoin = tc.lineCap = "round"; tc.globalCompositeOperation = "lighter";
+  const sweepFade = mode === "write" ? 1 - sst(0, .5, age) : mode === "done" ? 0 : 1;
+  if (sweepFade > 0) {
+    const tau = mode === "flat" ? .35 : 2.1, hx = (headX - X0) % (X1 - X0) + X0;
+    for (let x = X0; x < X1; x += 3) {
+      let a = Math.exp(-(t - ts[x]) / tau) * sweepFade; if (mode === "flat" && ts[x] >= modeT) a = Math.max(a, .55 * sweepFade);
+      if (!(a > .02) || isNaN(ys[x]) || isNaN(ys[x + 3] ?? NaN)) continue;
+      const gap = ((x - hx) % (X1 - X0) + (X1 - X0)) % (X1 - X0); if (gap < 16) continue;
+      tc.beginPath(); tc.moveTo(x, ys[x]); for (let k = 1; k <= 3 && x + k < X1; k++) if (!isNaN(ys[x + k])) tc.lineTo(x + k, ys[x + k]);
+      tc.strokeStyle = colour(hE, 64, a * .9); tc.lineWidth = 2.2; tc.stroke();
+    }
+    // sweep head + soft vertical sweep line
+    const hy = ys[Math.floor(hx)] || BASE;
+    const sl = tc.createLinearGradient(hx - 26, 0, hx + 2, 0);
+    sl.addColorStop(0, colour(hE, 60, 0)); sl.addColorStop(1, colour(hE, 60, .045 * sweepFade));
+    tc.fillStyle = sl; tc.fillRect(hx - 26, bandTop, 28, bandBot - bandTop);
+    tc.fillStyle = colour(hE, 92, sweepFade); tc.beginPath(); tc.arc(hx, hy, 2.4, 0, 7); tc.fill();
+  }
+  // ---- the name, written by the heartbeat ----
+  let msgA = 0, hintA = touched ? 1 - sst(0, .6, heat * 2) : 1;
+  if ((mode === "write" || mode === "done") && name) {
+    const N = name.pts, cum = name.cum, wt = CONFIG.writeTime;
+    const u = mode === "done" ? 1 : clamp(age / wt);
+    const L = name.total * (mode === "done" ? 1 : (u * .6 + sst(0, 1, u) * .4)), pulseN = mode === "done" ? pulse : 0;
+    let k = 1; while (k < N.length && cum[k] <= L) k++;
+    if (mode === "write" && k >= name.heartTo && lastP < name.heartTo) { onBeat(t, true); phase = 1.25; }
+    lastP = k;
+    if (mode === "write" && u >= 1) { mode = "done"; modeT = t; }
+    const drawTo = (alpha, lw, l) => { tc.beginPath(); tc.moveTo(N[0][0], N[0][1]); for (let j = 1; j < k; j++) tc.lineTo(N[j][0], N[j][1]); tc.strokeStyle = colour(hE, l, alpha); tc.lineWidth = lw; tc.stroke(); };
+    drawTo(.55 + pulseN * .3, 2.4, 62); drawTo(.35 + pulseN * .3, 1, 88);
+    // bright comet at the pen tip
+    const tip = Math.max(1, k - 26); tc.beginPath(); tc.moveTo(N[tip][0], N[tip][1]);
+    for (let j = tip + 1; j < k; j++) tc.lineTo(N[j][0], N[j][1]);
+    if (mode === "write") { tc.strokeStyle = colour(hE, 85, .9); tc.lineWidth = 2.6; tc.stroke(); const P2 = N[k - 1]; tc.fillStyle = colour(hE, 95, 1); tc.beginPath(); tc.arc(P2[0], P2[1], 2.6, 0, 7); tc.fill(); }
+    // heart fills with light once it closes
+    if (k >= name.heartTo) {
+      const since = mode === "done" ? age + CONFIG.writeTime * .12 : 0, fillA = (.2 + .5 * Math.exp(-since * 2.2) + pulseN * .35);
+      tc.beginPath(); for (let j = name.heartFrom; j < name.heartTo; j++) tc.lineTo(N[j][0], N[j][1]); tc.closePath();
+      tc.fillStyle = colour(hE, 60, fillA * .8); tc.fill();
+    }
+    msgA = mode === "done" ? sst(.15, 1.1, age) : 0; hintA = 0;
+  }
+  // ---- bloom: cheap blur by downscaling the trace twice ----
+  const g1 = b1.getContext("2d"), g2 = b2.getContext("2d");
+  g1.clearRect(0, 0, b1.width, b1.height); g1.drawImage(trace, 0, 0, b1.width, b1.height);
+  g2.clearRect(0, 0, b2.width, b2.height); g2.drawImage(b1, 0, 0, b2.width, b2.height);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = "lighter"; ctx.imageSmoothingEnabled = true;
+  ctx.globalAlpha = .9 + hE * .6; ctx.drawImage(b2, 0, 0, cv.width, cv.height);
+  ctx.globalAlpha = .7; ctx.drawImage(b1, 0, 0, cv.width, cv.height);
+  ctx.globalAlpha = 1; ctx.drawImage(trace, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+
+  // ---- readouts ----
+  const col = colour(hE, 64), root = document.body.style;
+  root.setProperty("--c", col); root.setProperty("--glow", colour(hE, 55, .35 + pulse * .35 + hE * .2));
+  $("bpm").textContent = mode === "flat" || (mode === "write" && lastP < name.heartTo) ? "– –" : Math.round(bpm);
+  $("hico").style.opacity = .35 + .65 * pulse;
+  $("resp").textContent = Math.round(14 + hE * 12); $("spo").textContent = mode === "flat" ? "– –" : 99 - Math.round(hE * 2);
+  $("nibp").textContent = `${Math.round(118 + hE * 26)}/${Math.round(76 + hE * 14)}`;
+  $("rhythm").textContent = mode === "flat" ? "asystole" : mode === "write" ? "new rhythm detected" : mode === "done" ? CONFIG.name + " rhythm" : bpm > 100 ? "sinus tachycardia" : "sinus rhythm";
+  $("msg").style.opacity = msgA; $("hint").style.opacity = hintA * .9; $("hint").style.display = msgA > 0 ? "none" : "";
+  requestAnimationFrame(frame);
+}
+addEventListener("resize", layout);
+layout(); lastNow = now(); modeT = now();
+// start with a full screen of calm trace, as if the monitor had been running for a while
+for (let x = X0; x < X1; x++) { const back = (X1 - x) / ((X1 - X0) / CONFIG.sweep), p = ((phase - back * CONFIG.restBpm / 60) % 1 + 1) % 1; ys[x] = BASE - ecg(p, 0, 0) * AMP * .62; ts[x] = now() - back; }
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

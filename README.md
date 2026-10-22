@@ -35,6 +35,7 @@ Saw a drop in a video? Its number is the folder.
 | 26 | [📸 Polaroids](26-polaroids) | Polaroids that develop into your memories, ?name=&captions=&last= in the link |
 | 27 | [💌 Scratch Card](27-scratch-card) | Scratch the foil, three hearts match, she wins a date with you |
 | 28 | [🌧️ Foggy Window](28-foggy-window) | Wipe the fogged glass to see the neon city, then the fog writes her name and a heart by itself |
+| 29 | [❤️ Heartbeat](29-heartbeat) | Hold the screen and the pulse races, then the ECG line flatlines and redraws itself as her name ending in a heart |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
