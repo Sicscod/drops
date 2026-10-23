@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>what are we doing this weekend?</title>
+<meta name="description" content="A game-show prize wheel that decides the weekend. Flick it and see where it lands. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Shrikhand&family=Space+Mono:wght@400;700&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#f3e3bf;color:#1b1838}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#fx{pointer-events:none;z-index:6}
+header{position:fixed;top:0;left:0;right:0;padding:22px 16px 0;text-align:center;pointer-events:none;z-index:2}
+.kick{display:flex;justify-content:center;align-items:center;gap:10px;margin:0;font:700 10.5px/1 "Space Mono",ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;color:#1b1838}
+.kick i{display:block;width:26px;height:1.5px;background:#1b1838}
+h1{margin:10px 0 0;font:400 clamp(25px,7.2vw,32px)/1.08 Shrikhand,Georgia,serif;letter-spacing:.005em;color:#1b1838;text-shadow:2px 2px 0 #f3b23a}
+h1 em{font-style:normal;color:#e4472c;text-shadow:2px 2px 0 #1b1838}
+.ticket{position:fixed;left:50%;top:60%;width:min(352px,calc(100vw - 32px));display:flex;opacity:0;z-index:4;pointer-events:none;
+  filter:drop-shadow(0 14px 18px rgba(27,24,56,.35)) drop-shadow(0 2px 3px rgba(27,24,56,.3))}
+.tk{display:flex;width:100%;background:#f3b23a;
+  -webkit-mask:radial-gradient(circle 4.5px at 50% 0,#0000 96%,#000) 0 0/13px 51% repeat-x,radial-gradient(circle 4.5px at 50% 100%,#0000 96%,#000) 0 100%/13px 51% repeat-x;
+  mask:radial-gradient(circle 4.5px at 50% 0,#0000 96%,#000) 0 0/13px 51% repeat-x,radial-gradient(circle 4.5px at 50% 100%,#0000 96%,#000) 0 100%/13px 51% repeat-x}
+.stub{flex:none;width:48px;background:#e4472c;display:flex;align-items:center;justify-content:center;border-right:2px dotted #1b1838}
+.stub span{writing-mode:vertical-rl;transform:rotate(180deg);font:400 15px/1 Bungee,sans-serif;letter-spacing:.12em;color:#f7ead0}
+.tb{flex:1;margin:11px 10px 11px 9px;padding:9px 12px 8px;border:1.5px solid #1b1838;border-radius:3px;position:relative}
+.row{white-space:nowrap;display:flex;justify-content:space-between;gap:8px;font:700 8.5px/1.3 "Space Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:#1b1838}
+.big{margin:7px 0 6px;font:400 27px/1.02 Shrikhand,Georgia,serif;color:#1b1838}
+.big em{display:block;font-style:normal;color:#e4472c}
+.row.bot{border-top:1.5px solid #1b1838;padding-top:6px}
+.stamp{position:absolute;right:10px;top:27px;width:62px;height:62px;border:2.5px solid #e4472c;border-radius:50%;display:flex;align-items:center;justify-content:center;text-align:center;
+  font:400 10px/1.05 Bungee,sans-serif;letter-spacing:.04em;color:#e4472c;opacity:0;box-shadow:0 0 0 2px #f3b23a inset,0 0 0 3.5px #e4472c inset}
+.hint{position:fixed;left:0;right:0;bottom:38px;margin:0 auto;padding:0;border:0;background:none;display:block;text-align:center;pointer-events:none;z-index:5;
+  font:700 10.5px/1 "Space Mono",ui-monospace,monospace;letter-spacing:.22em;text-transform:uppercase;color:#1b1838}
+.hint.on{pointer-events:auto;cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+.credit{position:fixed;left:0;right:0;bottom:14px;text-align:center;z-index:5;font:400 11px "Space Mono",ui-monospace,monospace;color:#7d6a4c}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<header id="head">
+  <p class="kick"><i></i><span>the weekend special · nº 30</span><i></i></p>
+  <h1>what are we doing<br>this weekend, <em id="nm">Delly</em>?</h1>
+</header>
+<div class="ticket" id="ticket"><div class="tk">
+  <div class="stub"><span>admit two</span></div>
+  <div class="tb">
+    <div class="row"><span>grand prize</span><span id="tWhen">valid this weekend</span></div>
+    <p class="big" id="tBig">all of them, <em>with me.</em></p>
+    <div class="row bot"><span>for <span id="tName">Delly</span></span><span>seat: next to me</span></div>
+    <div class="stamp" id="stamp">100%<br>rigged</div>
+  </div>
+</div></div>
+<button class="hint" id="hint">drag or flick the wheel</button>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<canvas id="fx"></canvas>
+<script>
+// ===== Date Wheel · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&options=sushi|movie%20night|arcade&final=all%20of%20them,%20with%20me
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name: P.get("name") || "Delly",                       // who is asking the wheel
+  options: (P.get("options") || "sushi|movie night|arcade|sunset walk|karaoke|stay in")
+    .split(/[|,]/).map(s => s.trim()).filter(Boolean),    // the honest-looking slices
+  final: P.get("final") || "all of them, with me",       // what it really lands on ("slices, hub")
+  when: P.get("when") || "valid this weekend",           // small line on the ticket
+  slices: ["#e4472c", "#f7ead0", "#2346b5", "#f3b23a", "#13856f", "#f2a0b6"],
+  ink: "#1b1838", paper: "#f3e3bf", brass: "#c9973a",
+  friction: 0.9,     // constant slowdown (rad/s²)
+  drag: 0.34,        // slowdown that grows with speed
+  maxSpin: 24,       // fastest flick (rad/s)
+  wait: 0.9,         // seconds it pretends the result is real
+};
+
+// ---------- setup ----------
+const $ = id => document.getElementById(id);
+const cv = $("c"), g = cv.getContext("2d"), fx = $("fx"), X = fx.getContext("2d");
+const head = $("head"), ticket = $("ticket"), stamp = $("stamp"), hint = $("hint");
+$("nm").textContent = $("tName").textContent = CONFIG.name;
+$("tWhen").textContent = CONFIG.when;
+const [finA, finB = ""] = CONFIG.final.split(/,(.*)/).map(s => (s || "").trim());
+$("tBig").innerHTML = "";
+$("tBig").append(finA + (finB ? "," : "."));
+if (finB) { const e = document.createElement("em"); e.textContent = finB.replace(/\.?$/, "."); $("tBig").append(e); }
+let opts = CONFIG.options.length ? CONFIG.options : ["sushi", "movie night", "arcade"];
+while (opts.length < 5) opts = opts.concat(opts);
+const N = opts.length, SL = Math.PI * 2 / N, TAU = Math.PI * 2;
+const colorOf = i => CONFIG.slices[(N % CONFIG.slices.length === 1 && i === N - 1) ? 2 : i % CONFIG.slices.length];
+const light = c => { const n = parseInt(c.slice(1), 16); return ((n >> 16) * .3 + (n >> 8 & 255) * .59 + (n & 255) * .11) > 160; };
+const wrapPI = a => a - TAU * Math.floor((a + Math.PI) / TAU);
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = x => (x = clamp(x), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const spring = x => x <= 0 ? 0 : 1 - Math.exp(-6.5 * x) * Math.cos(10 * x);
+["20px Bungee", "20px Shrikhand"].forEach(f => document.fonts && document.fonts.load(f));
+
+let W, H, DPR, cx, cy, R, grain;
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  for (const c of [cv, fx]) { c.width = W * DPR; c.height = H * DPR; }
+}
+addEventListener("resize", resize); resize();
+function layout() {
+  const top = head.getBoundingClientRect().bottom + 8, bot = H - 60;
+  R = Math.min((W - 26) / 2 / 1.13, (bot - top) / 2.34);
+  cx = W / 2; cy = top + Math.max(0, (bot - top - 2.34 * R) / 2) + 1.21 * R;
+}
+grain = document.createElement("canvas"); grain.width = grain.height = 160;
+{ const q = grain.getContext("2d"), d = q.createImageData(160, 160);
+  for (let i = 0; i < d.data.length; i += 4) { const v = Math.random() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 22; }
+  q.putImageData(d, 0, 0); }
+
+// ---------- sound (plays on real devices after the first touch) ----------
+const sfx = {
+  ctx: null,
+  init() { if (!this.ctx) try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} },
+  blip(f, d, v, type = "triangle") {
+    const c = this.ctx; if (!c) return;
+    const o = c.createOscillator(), a = c.createGain(), t = c.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * .6, t + d);
+    a.gain.setValueAtTime(v, t); a.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(a).connect(c.destination); o.start(t); o.stop(t + d);
+  },
+  tick(v) { this.blip(2100, .035, .05 + .1 * v); },
+  win() { [523, 659, 784, 1047].forEach((f, i) => this.blip(f, .5 + i * .12, .08, "square")); },
+};
+
+// ---------- the wheel: momentum, friction and a real flap on real pegs ----------
+const G = .2, PR = .045, FC = .6, KF = 1500, CF = 11, KC = 2.2e5, WR = .0025;
+let A = -Math.PI / 2 - SL * 2.5, w = 0, f = 0, fv = 0;   // wheel angle/speed, flap angle/speed
+const pegs = Array.from({ length: N }, (_, i) => ({ s: Math.sign(wrapPI(A + i * SL + Math.PI / 2)) || 1, ghost: false }));
+let phase = "idle", phaseT = 0, landed = -1, dir = 1, spins = 0, nudgeAt = .5;
+let drag = null, dragA = A, flips = [], hubSwap = -1, winT = -1, lastTick = -1;
+
+function physics(dt, kinematic) {
+  const x = G * Math.sin(f);
+  let fa = -KF * f - CF * fv, wa = 0;
+  for (let i = 0; i < N; i++) {
+    const p = pegs[i], d = wrapPI(A + i * SL + Math.PI / 2);
+    if (Math.abs(d) > .6) { p.s = Math.sign(d); p.ghost = false; continue; }
+    const rel = d - x;
+    if (p.ghost) { if (p.s * rel >= PR) p.ghost = false; continue; }
+    const pen = PR - p.s * rel;
+    if (pen <= 0) continue;
+    if (Math.abs(f) >= FC) { p.s = -p.s; p.ghost = true; onTick(); continue; }   // peg slips under the flap: click
+    const F = KC * pen;
+    fa -= p.s * F; wa += p.s * F * WR;
+  }
+  fv += fa * dt; f = clamp(f + fv * dt, -FC - .3, FC + .3);
+  if (kinematic) return;
+  let wn = w + (wa - CONFIG.drag * w) * dt;
+  const c = CONFIG.friction * dt;
+  w = Math.abs(wn) <= c ? 0 : wn - Math.sign(wn) * c;
+  A += w * dt;
+}
+function onTick() {
+  const v = clamp(Math.abs(w) / 12);
+  if (now - lastTick > .02) { sfx.tick(v); lastTick = now; }
+  tickFlash = 1;
+}
+const under = () => { const a = wrapPI(-Math.PI / 2 + G * Math.sin(f) - A); return ((Math.floor((a + TAU) % TAU / SL)) % N + N) % N; };
+
+// ---------- pointer: grab, drag, flick ----------
+const ang = e => Math.atan2(e.clientY - cy, e.clientX - cx);
+function down(e) {
+  sfx.init();
+  if (!(phase === "idle" || phase === "spin" || phase === "free")) return;
+  const r = Math.hypot(e.clientX - cx, e.clientY - cy);
+  if (r > R * 1.2) return;
+  drag = { a: ang(e), A0: A, hist: [[now, 0]], acc: 0, moved: 0, t0: now, x: e.clientX, y: e.clientY };
+  dragA = A; phase = "drag"; w = 0;
+}
+function move(e) {
+  if (!drag) return;
+  const a = ang(e); let da = wrapPI(a - drag.a); drag.a = a; drag.acc += da;
+  drag.moved = Math.max(drag.moved, Math.hypot(e.clientX - drag.x, e.clientY - drag.y));
+  dragA = drag.A0 + drag.acc;
+  drag.hist.push([now, drag.acc]); while (drag.hist.length > 2 && now - drag.hist[0][0] > .12) drag.hist.shift();
+}
+function up(e) {
+  if (!drag) return;
+  const h = drag.hist, a = h[0], b = h[h.length - 1];
+  let v = b[0] - a[0] > .015 ? (b[1] - a[1]) / (b[0] - a[0]) : 0;
+  if (drag.moved < 8 && now - drag.t0 < .35) v = 13 + Math.random() * 5;   // plain tap = spin for me
+  v = clamp(v, -CONFIG.maxSpin, CONFIG.maxSpin);
+  w = v; drag = null;
+  if (Math.abs(v) > 3) { phase = "spin"; dir = Math.sign(v); spins++; setHint("round and round…"); }
+  else phase = "free";
+  phaseT = now;
+}
+addEventListener("pointerdown", down); addEventListener("pointermove", move);
+addEventListener("pointerup", up); addEventListener("pointercancel", up);
+hint.addEventListener("click", () => { if (phase === "won") reset(); });
+
+function setHint(t, on) { if (hint.textContent !== t) hint.textContent = t; hint.classList.toggle("on", !!on); }
+function reset() {
+  phase = "idle"; flips = []; hubSwap = -1; winT = -1; landed = -1; confetti.length = 0;
+  setHint("drag or flick the wheel");
+}
+
+// ---------- the twist ----------
+let creep = null, tickFlash = 0;
+function director() {
+  let t = now - phaseT;
+  if (phase === "idle" && now > nudgeAt) { w = .9; nudgeAt = now + 3.2; phase = "free"; phaseT = now; }
+  if (phase === "spin" || phase === "free") {
+    const calm = Math.abs(w) < .02 && Math.abs(fv) < .1 && Math.abs(f) < .04;
+    if (!calm) settle = now;
+    if (phase === "free" && calm && now - settle > .2) { phase = spins ? phase : "idle"; }
+    if (phase === "spin" && calm && now - settle > .3) {
+      phase = "landed"; phaseT = now; t = 0; landed = under();
+      setHint("the wheel has spoken: " + opts[landed]);
+    }
+  }
+  if (phase === "landed" && t > CONFIG.wait) {
+    // nudge it over exactly one peg, as if nobody touched it
+    const j = (landed - dir + N) % N, target = -Math.PI / 2 - (j + .5) * SL;
+    let d = wrapPI(target - A); if (Math.sign(d) !== dir) d += dir * TAU;
+    creep = { A0: A, d }; phase = "creep"; phaseT = now; t = 0; setHint("…wait for it");
+  }
+  if (phase === "creep") {
+    const u = clamp(t / 1.15), e = u < .55 ? .18 * ease(u / .55) : .18 + .82 * ease((u - .55) / .45);
+    A = creep.A0 + creep.d * e;
+    if (u >= 1) {
+      phase = "flip"; phaseT = now; landed = under();
+      flips = Array.from({ length: N }, (_, i) => { const k = Math.min((i - landed + N) % N, (landed - i + N) % N); return now + .1 + k * .13; });
+      hubSwap = now + .2; t = 0; setHint("well, would you look at that");
+    }
+  }
+  if (phase === "flip" && t > .1 + Math.floor(N / 2) * .13 + .65) { phase = "won"; phaseT = now; winT = now; burst(); sfx.win(); setHint("spin again ↺", true); }
+}
+let settle = 0;
+
+// ---------- confetti cannons ----------
+const confetti = [];
+function burst() {
+  const pal = ["#e4472c", "#2346b5", "#f3b23a", "#13856f", "#f2a0b6", "#f7ead0"];
+  for (let k = 0; k < 2; k++) for (let i = 0; i < 90; i++) {
+    const side = k ? -1 : 1, a = -Math.PI / 2 + side * (.22 + Math.random() * .42), sp = (.9 + Math.random() * .8) * H * 1.55;
+    confetti.push({ x: k ? W + 6 : -6, y: H * .86, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: Math.random() * TAU, vr: (Math.random() - .5) * 14,
+      fl: Math.random() * TAU, vf: 8 + Math.random() * 10, s: 5 + Math.random() * 5, c: pal[(Math.random() * pal.length) | 0], ph: Math.random() * TAU });
+  }
+  for (let i = 0; i < 60; i++) {
+    const a = Math.random() * TAU, sp = 200 + Math.random() * 420;
+    confetti.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 260, r: Math.random() * TAU, vr: (Math.random() - .5) * 14,
+      fl: Math.random() * TAU, vf: 8 + Math.random() * 10, s: 4 + Math.random() * 4, c: pal[(Math.random() * pal.length) | 0], ph: Math.random() * TAU });
+  }
+}
+function drawConfetti(dt) {
+  X.setTransform(DPR, 0, 0, DPR, 0, 0); X.clearRect(0, 0, W, H);
+  for (let i = confetti.length - 1; i >= 0; i--) {
+    const p = confetti[i];
+    p.vy += 820 * dt; p.vx *= Math.pow(.18, dt); p.vy *= Math.pow(.3, dt);
+    p.x += (p.vx + Math.sin(now * 3 + p.ph) * 30) * dt; p.y += p.vy * dt; p.r += p.vr * dt; p.fl += p.vf * dt;
+    if (p.y > H + 30) { confetti.splice(i, 1); continue; }
+    X.save(); X.translate(p.x, p.y); X.rotate(p.r); X.scale(1, Math.cos(p.fl));
+    X.fillStyle = p.c; X.fillRect(-p.s / 2, -p.s * .32, p.s, p.s * .64); X.restore();
+  }
+}
+
+// ---------- drawing ----------
+function fitLines(text, maxW, maxH, font) {
+  const T = text.toUpperCase();
+  const tries = [[T]];
+  const sp = [...T].map((c, i) => c === " " ? i : -1).filter(i => i > 0);
+  if (sp.length) { const m = sp.reduce((b, i) => Math.abs(i - T.length / 2) < Math.abs(b - T.length / 2) ? i : b); tries.push([T.slice(0, m), T.slice(m + 1)]); }
+  let best = null;
+  for (const L of tries) {
+    g.font = `100px ${font}`;
+    const wMax = Math.max(...L.map(l => g.measureText(l).width));
+    const s = Math.min(maxW / wMax * 100, maxH / (L.length * 1.05));
+    if (!best || s > best.s * 1.12) best = { L, s };
+  }
+  return best;
+}
+function label(text, r0, r1, half, col) {
+  const fit = fitLines(text, r1 - r0, 2 * r0 * Math.tan(half) * .8 + (r1 - r0) * .25, "Bungee");
+  const s = Math.min(fit.s, R * .135);
+  g.font = `${s}px Bungee`; g.fillStyle = col; g.textAlign = "right"; g.textBaseline = "middle";
+  fit.L.forEach((l, k) => g.fillText(l, r1, (k - (fit.L.length - 1) / 2) * s * 1.05 + s * .06));
+}
+function disc(Ad) {
+  for (let i = 0; i < N; i++) {
+    const a0 = Ad + i * SL, a1 = a0 + SL, am = a0 + SL / 2;
+    let p = 0; if (flips.length) p = clamp((now - flips[i]) / .45);
+    const flipped = p >= .5, fc = flipped ? (i % 2 ? CONFIG.ink : "#e4472c") : colorOf(i);
+    g.fillStyle = fc; g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, R, a0, a1); g.closePath(); g.fill();
+    if (phase === "landed" && i === landed && Math.floor(now * 6) % 2) { g.fillStyle = "rgba(255,248,225,.35)"; g.fill(); }
+    g.save(); g.rotate(am); g.scale(1, Math.abs(Math.cos(Math.PI * p)) * .999 + .001);
+    label(flipped ? finA : opts[i], R * .27, R * .84, SL / 2, flipped ? (i % 2 ? "#f3b23a" : "#f7ead0") : (light(fc) ? CONFIG.ink : "#f7ead0"));
+    g.restore();
+  }
+  g.strokeStyle = "rgba(247,234,208,.9)"; g.lineWidth = R * .012;
+  for (let i = 0; i < N; i++) { const a = Ad + i * SL; g.beginPath(); g.moveTo(Math.cos(a) * R * .2, Math.sin(a) * R * .2); g.lineTo(Math.cos(a) * R, Math.sin(a) * R); g.stroke(); }
+  // pegs
+  for (let i = 0; i < N; i++) {
+    const a = Ad + i * SL, px = Math.cos(a) * R * .93, py = Math.sin(a) * R * .93;
+    g.fillStyle = "rgba(27,24,56,.4)"; g.beginPath(); g.arc(px + R * .008, py + R * .012, R * .034, 0, TAU); g.fill();
+    const pg = g.createRadialGradient(px - R * .01, py - R * .012, 0, px, py, R * .034);
+    pg.addColorStop(0, "#fff1c4"); pg.addColorStop(.5, "#d9a94a"); pg.addColorStop(1, "#7a5420");
+    g.fillStyle = pg; g.beginPath(); g.arc(px, py, R * .032, 0, TAU); g.fill();
+  }
+}
+function draw(dt) {
+  layout();
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // sunburst backdrop
+  g.fillStyle = CONFIG.paper; g.fillRect(0, 0, W, H);
+  g.save(); g.translate(cx, cy); g.rotate(now * .04);
+  g.fillStyle = "#ecd5a4";
+  for (let i = 0; i < 18; i++) { g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, Math.hypot(W, H), i * TAU / 18, i * TAU / 18 + TAU / 36); g.fill(); }
+  g.restore();
+  const vg = g.createRadialGradient(cx, cy, R * .6, cx, cy, Math.max(W, H) * .8);
+  vg.addColorStop(0, "rgba(243,227,191,.0)"); vg.addColorStop(1, "rgba(150,100,40,.28)");
+  g.fillStyle = vg; g.fillRect(0, 0, W, H);
+  g.fillStyle = g.createPattern(grain, "repeat"); g.fillRect(0, 0, W, H);
+
+  // cast shadow + frame ring with marquee bulbs
+  g.fillStyle = "rgba(27,24,56,.22)"; g.beginPath(); g.ellipse(cx + R * .05, cy + R * .09, R * 1.14, R * 1.14, 0, 0, TAU); g.fill();
+  g.fillStyle = CONFIG.ink; g.beginPath(); g.arc(cx, cy, R * 1.13, 0, TAU); g.fill();
+  g.strokeStyle = CONFIG.brass; g.lineWidth = R * .018; g.beginPath(); g.arc(cx, cy, R * 1.11, 0, TAU); g.stroke();
+  const NB = 28, won = phase === "won", spinning = Math.abs(w);
+  for (let i = 0; i < NB; i++) {
+    const a = -Math.PI / 2 + (i + .5) * TAU / NB, bx = cx + Math.cos(a) * R * 1.065, by = cy + Math.sin(a) * R * 1.065;
+    let on;
+    if (won) on = ((i + Math.floor((now - winT) * 7)) % 2) ? 1 : .25;
+    else if (phase === "landed" || phase === "creep" || phase === "flip") on = Math.floor(now * 5) % 2 ? 1 : .3;
+    else on = ((i - Math.floor(now * (5 + spinning * 1.5))) % 4 + 4) % 4 === 0 ? 1 : .32;
+    g.fillStyle = `rgba(255,214,120,${.25 * on})`; g.beginPath(); g.arc(bx, by, R * .048, 0, TAU); g.fill();
+    g.fillStyle = on > .5 ? "#fff3cf" : "#8a6a3a"; g.beginPath(); g.arc(bx, by, R * .026, 0, TAU); g.fill();
+  }
+
+  // slices
+  g.save(); g.translate(cx, cy);
+  // motion blur: average a few copies along the spin
+  const K = Math.abs(w) > 3 ? Math.min(6, Math.ceil(Math.abs(w) / 2.5)) : 1;
+  for (let k = 0; k < K; k++) { g.globalAlpha = 1 / (k + 1); disc(A - w * (1 / 40) * (K > 1 ? k / (K - 1) : 0)); }
+  g.globalAlpha = 1;
+  const sh = g.createRadialGradient(0, 0, R * .2, 0, 0, R);
+  sh.addColorStop(0, "rgba(255,255,255,.10)"); sh.addColorStop(.75, "rgba(0,0,0,0)"); sh.addColorStop(1, "rgba(27,24,56,.28)");
+  g.fillStyle = sh; g.beginPath(); g.arc(0, 0, R, 0, TAU); g.fill();
+  // hub
+  g.fillStyle = CONFIG.ink; g.beginPath(); g.arc(0, 0, R * .21, 0, TAU); g.fill();
+  g.strokeStyle = CONFIG.brass; g.lineWidth = R * .016; g.beginPath(); g.arc(0, 0, R * .185, 0, TAU); g.stroke();
+  const hs = hubSwap < 0 ? 0 : clamp((now - hubSwap) / .35);
+  g.save(); g.scale(1, Math.abs(Math.cos(Math.PI * hs)) * .999 + .001);
+  g.textAlign = "center"; g.textBaseline = "middle";
+  if (hs < .5) { g.font = `${R * .085}px Bungee`; g.fillStyle = "#f3b23a"; g.fillText("SPIN", 0, R * .006); }
+  else if (finB) {
+    const words = finB.split(" "), two = words.length > 1 ? [words.slice(0, -1).join(" "), words[words.length - 1]] : [finB];
+    g.fillStyle = "#f7ead0"; const fs = Math.min(R * .1, R * .3 / Math.max(...two.map(s => (g.font = `100px Shrikhand`, g.measureText(s).width / 100))));
+    g.font = `${fs}px Shrikhand`; two.forEach((s, k) => g.fillText(s, 0, (k - (two.length - 1) / 2) * fs * .98 + fs * .05));
+  } else { g.font = `${R * .14}px Shrikhand`; g.fillStyle = "#e4472c"; g.fillText("♥", 0, R * .01); }
+  g.restore();
+  g.restore();
+
+  // flap on its pivot
+  const fxp = cx, fyp = cy - R * 1.14;
+  g.save(); g.translate(fxp, fyp); g.rotate(-f * .9);
+  g.fillStyle = "rgba(27,24,56,.35)"; g.beginPath(); g.moveTo(-R * .07 + 3, 2); g.lineTo(R * .07 + 3, 2); g.lineTo(3, R * .24 + 4); g.closePath(); g.fill();
+  const fl = g.createLinearGradient(-R * .07, 0, R * .07, 0); fl.addColorStop(0, "#ff6a4a"); fl.addColorStop(.55, "#e4472c"); fl.addColorStop(1, "#a92a16");
+  g.fillStyle = fl; g.beginPath(); g.moveTo(-R * .075, 0); g.quadraticCurveTo(-R * .06, R * .12, 0, R * .245); g.quadraticCurveTo(R * .06, R * .12, R * .075, 0); g.closePath(); g.fill();
+  g.strokeStyle = "#f7ead0"; g.lineWidth = R * .01; g.stroke();
+  g.restore();
+  const pv = g.createRadialGradient(fxp - R * .015, fyp - R * .02, 0, fxp, fyp, R * .06);
+  pv.addColorStop(0, "#fff1c4"); pv.addColorStop(.55, "#d9a94a"); pv.addColorStop(1, "#7a5420");
+  g.fillStyle = pv; g.beginPath(); g.arc(fxp, fyp, R * .055, 0, TAU); g.fill();
+
+  // "landed on…" banner
+  if (phase === "landed" || phase === "creep") {
+    const t = now - phaseT, s = phase === "landed" ? spring(t * 1.6) : 1 - ease(t / .35);
+    const shake = phase === "creep" ? Math.sin(t * 60) * 3 * (1 - clamp(t / .3)) : 0;
+    if (s > .01) {
+      g.save(); g.translate(cx + shake, cy + R * .42); g.rotate(-.06); g.scale(s, s);
+      const txt = opts[landed].toUpperCase() + "!"; g.font = `${R * .12}px Bungee`;
+      const bw = Math.max(R * .8, g.measureText(txt).width + R * .32), bh = R * .2;
+      g.fillStyle = "#a92a16";
+      for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(sd * bw / 2, -bh * .3); g.lineTo(sd * (bw / 2 + R * .12), -bh * .3); g.lineTo(sd * (bw / 2 + R * .07), bh * .2); g.lineTo(sd * (bw / 2 + R * .12), bh * .7); g.lineTo(sd * bw / 2, bh * .7); g.fill(); }
+      g.fillStyle = "#f3b23a"; g.fillRect(-bw / 2, -bh / 2, bw, bh);
+      g.strokeStyle = CONFIG.ink; g.lineWidth = 2; g.strokeRect(-bw / 2 + 4, -bh / 2 + 4, bw - 8, bh - 8);
+      g.fillStyle = CONFIG.ink; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 0, R * .012);
+      g.restore();
+    }
+  }
+
+  // ticket + stamp
+  if (winT >= 0) {
+    const t = now - winT - .25, s = spring(t * 1.15);
+    const top = Math.min(cy + R * .12, H - 66 - ticket.offsetHeight);
+    ticket.style.top = top + "px";
+    ticket.style.opacity = clamp(t * 5);
+    ticket.style.transform = `translate(-50%, ${(1 - s) * 70}vh) rotate(${-2.5 + (1 - s) * -10}deg)`;
+    const st = clamp((t - .75) / .18);
+    stamp.style.opacity = st > 0 ? 1 : 0;
+    stamp.style.transform = `rotate(-14deg) scale(${1 + (1 - st) * 1.4})`;
+  } else ticket.style.opacity = 0;
+  drawConfetti(dt);
+}
+
+// ---------- one loop drives everything ----------
+let now = 0, last = performance.now();
+function frame(ms) {
+  const dt = Math.min(.05, (ms - last) / 1000); last = ms; now = ms / 1000;
+  const steps = Math.max(1, Math.round(dt * 1200)), h = dt / steps;
+  const A0 = A;
+  for (let k = 1; k <= steps; k++) {
+    if (phase === "drag") { A = A0 + (dragA - A0) * k / steps; physics(h, true); }
+    else physics(h, phase === "creep" || phase === "flip" || phase === "won" || phase === "landed");
+  }
+  if (phase === "drag") w = dt > 0 ? (dragA - A0) / dt : 0;
+  director();
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
+</script>
+</body>
+</html>
