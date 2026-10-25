@@ -37,6 +37,7 @@ Saw a drop in a video? Its number is the folder.
 | 28 | [🌧️ Foggy Window](28-foggy-window) | Wipe the fogged glass to see the neon city, then the fog writes her name and a heart by itself |
 | 29 | [❤️ Heartbeat](29-heartbeat) | Hold the screen and the pulse races, then the ECG line flatlines and redraws itself as her name ending in a heart |
 | 30 | [🎡 Date Wheel](30-date-wheel) | Flick the game-show wheel, it lands on sushi, then creeps one more peg and every slice flips to all of them, with me |
+| 31 | [🫧 Bubble Wrap](31-bubble-wrap) | Pop a glossy sheet of bubble wrap, every bubble shows one printed letter, and the sheet ends up saying i'd pop every bubble for you, Delly |
 
 ## How to use a drop
 1. Open its folder → download `index.html`

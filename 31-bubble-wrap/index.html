@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>handle with love</title>
+<meta name="description" content="A sheet of bubble wrap with a message printed underneath. Pop it to read it. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=DM+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#c92a3c;color:#fff1e4}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+header{position:fixed;top:0;left:0;right:0;height:var(--top,74px);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:none;z-index:2}
+.k{margin:0 0 6px;font:500 9.5px/1 "DM Mono",ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,236,224,.62)}
+h1{margin:0;font:800 23px/1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.025em;color:#fff1e4}
+h1 span{font-weight:500;opacity:.7}
+.count{text-align:right;transform-origin:100% 50%}
+.count b{display:block;font:500 25px/1 "DM Mono",ui-monospace,monospace;letter-spacing:-.02em;color:#fff1e4;font-variant-numeric:tabular-nums}
+.count small{display:block;margin-top:6px;font:500 9.5px/1 "DM Mono",ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,236,224,.62)}
+.hint{position:fixed;left:0;right:0;bottom:30px;margin:0 auto;padding:0;border:0;background:none;display:block;text-align:center;pointer-events:none;z-index:3;
+  font:500 10px/1 "DM Mono",ui-monospace,monospace;letter-spacing:.22em;text-transform:uppercase;color:#fff1e4}
+.hint.on{pointer-events:auto;cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+.credit{position:fixed;left:0;right:0;bottom:11px;text-align:center;z-index:3;font:400 10.5px "DM Mono",ui-monospace,monospace;color:rgba(255,236,224,.55)}
+.credit a{color:inherit}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<header>
+  <div><p class="k">fragile · this side up</p><h1>handle with love<span>.</span></h1></div>
+  <div class="count" id="count"><b id="num">000</b><small>pops</small></div>
+</header>
+<button class="hint" id="hint">tap or drag to pop</button>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<script>
+// ===== Bubble Wrap · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&msg=i'd%20pop%20every%20bubble%20for%20you,&hue=355
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name: P.get("name") || "Delly",                          // last line, with a small heart
+  msg: P.get("msg") || "i'd pop every bubble for you,",    // printed under the bubbles
+  hue: +(P.get("hue") || 355),                             // paper colour (0-360): 355 cherry, 20 orange, 210 blue
+  ink: "#fff1e4",                                          // letter print colour
+  print: "fragile · handle with love · ",                  // faint pattern on the paper
+  doneHint: "every single one ♥",
+  resetHint: "wrap a new sheet",
+  bubble: 0.4,       // bubble radius as a share of the grid step
+  sound: true,       // little pop sounds (and a buzz on phones)
+};
+
+// ---------- setup ----------
+const $ = id => document.getElementById(id);
+const cv = $("c"), X = cv.getContext("2d"), hint = $("hint"), num = $("num"), count = $("count");
+const HSL = (s, l, a = 1) => `hsla(${CONFIG.hue},${s}%,${l}%,${a})`;
+document.body.style.background = HSL(66, 49);
+const mk = (w, h) => { const c = document.createElement("canvas"); c.width = Math.ceil(w); c.height = Math.ceil(h); return c; };
+let rs = 9;                                                   // seeded random so every sheet wrinkles the same
+const rnd = () => (rs = (rs * 16807) % 2147483647) / 2147483647;
+
+let W, H, D, pitch, R, vp, sTop, bot, cells, msgCells, heartCell, paper, blur, film, dome, spec, shade, craters;
+let pops = 0, done = false, tDone = 0, bump = 0, sheetId = 0;
+const puffs = [], hearts = [];
+window.__pops = []; window.__cells = [];
+
+function lines() {
+  const max = Math.max(4, Math.floor(W / pitch) - 1), out = [];
+  for (const wd of CONFIG.msg.trim().split(/\s+/)) {
+    const l = out.length ? out[out.length - 1] : null;
+    if (l !== null && (l + " " + wd).length <= max) out[out.length - 1] = l + " " + wd; else out.push(wd);
+  }
+  const nm = CONFIG.name.trim() ? CONFIG.name.trim() + " ♥" : "♥";
+  out.push(nm.length <= max ? nm : nm.slice(0, max));
+  return out;
+}
+
+function layout() {
+  D = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * D; cv.height = H * D;
+  sTop = W < 420 ? 82 : 76; bot = H - 52;
+  document.documentElement.style.setProperty("--top", sTop + "px");
+  pitch = Math.max(36, Math.min(56, W / 9.8)); vp = pitch * Math.sqrt(3) / 2;
+  R = Math.max(5, Math.floor((bot - sTop - pitch * .25) / vp));
+  const y0 = sTop + (bot - sTop - (R - 1) * vp) / 2, cc = W / 2;
+  cells = [];
+  for (let r = 0; r < R; r++) {
+    const off = r % 2 ? .5 : 0, n = Math.ceil(W / pitch / 2) + 1;
+    for (let c = -n; c <= n; c++) {
+      const x = cc + (c + off) * pitch;
+      if (x < -pitch * .5 || x > W + pitch * .5) continue;
+      cells.push({ x, y: y0 + r * vp, r, c, ch: "", s: 0, t: 0, w: 0, wt: -9, k: (cells.length * 7) % 6, a: rnd() * 6.28 });
+    }
+  }
+  const L = lines(), r0 = Math.max(0, Math.floor((R - L.length) / 2));
+  msgCells = []; heartCell = null;
+  L.forEach((ln, i) => {
+    const r = r0 + i, off = r % 2 ? .5 : 0, c0 = Math.round(-(ln.length - 1) / 2 - off);
+    [...ln].forEach((ch, j) => {
+      const cell = cells.find(q => q.r === r && q.c === c0 + j);
+      if (!cell || ch === " ") return;
+      cell.ch = ch; msgCells.push(cell); if (ch === "♥") heartCell = cell;
+    });
+  });
+  window.__cells = msgCells.map(q => ({ x: +q.x.toFixed(1), y: +q.y.toFixed(1), r: q.r, ch: q.ch }));
+  window.__pitch = pitch;
+  paint();
+}
+
+// ---------- painting the static layers ----------
+function heartPath(c, x, y, s) {
+  c.beginPath(); c.moveTo(x, y + s * .35);
+  c.bezierCurveTo(x - s * 1.1, y - s * .35, x - s * .55, y - s * 1.05, x, y - s * .45);
+  c.bezierCurveTo(x + s * .55, y - s * 1.05, x + s * 1.1, y - s * .35, x, y + s * .35);
+  c.closePath();
+}
+
+function paint() {
+  rs = 9;
+  const r = pitch * CONFIG.bubble;
+  // paper: dyed sheet with grain, a faint print, and the message in letterpress ink
+  paper = mk(W * D, H * D); let c = paper.getContext("2d"); c.scale(D, D);
+  c.fillStyle = HSL(66, 49); c.fillRect(0, 0, W, H);
+  const g = c.createRadialGradient(W / 2, H * .45, 0, W / 2, H * .45, Math.hypot(W, H) * .62);
+  g.addColorStop(0, HSL(72, 54, .9)); g.addColorStop(.6, HSL(66, 47, 0)); g.addColorStop(1, HSL(70, 30, .55));
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.font = `500 8.5px "DM Mono", monospace`; c.fillStyle = HSL(70, 32, .32);
+  const line = CONFIG.print.toUpperCase().repeat(30);
+  for (let y = sTop + 6, i = 0; y < bot + 10; y += 15, i++) c.fillText(line, -((i * 37) % 160), y);
+  for (const q of cells) {
+    if (!q.ch) continue;
+    if (q.ch === "♥") {
+      heartPath(c, q.x, q.y + r * .12, r * .52);
+      c.fillStyle = HSL(70, 26, .5); c.save(); c.translate(0, 1.4); c.fill(); c.restore();
+      c.fillStyle = CONFIG.ink; c.fill(); continue;
+    }
+    const p = /[a-z]/.test(q.ch) ? 1 : .86;
+    c.font = `800 ${(pitch * .62 * p).toFixed(1)}px "Bricolage Grotesque", sans-serif`;
+    c.textAlign = "center"; c.textBaseline = "alphabetic";
+    const by = q.y + pitch * .2;
+    c.fillStyle = HSL(70, 26, .5); c.fillText(q.ch, q.x, by + 1.4);
+    c.fillStyle = CONFIG.ink; c.fillText(q.ch, q.x, by);
+  }
+  const id = c.getImageData(0, 0, paper.width, paper.height), d = id.data;   // ink + paper grain
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (rnd() - .5) * 14; d[i] += n; d[i + 1] += n; d[i + 2] += n;
+    if (d[i + 1] > 180 && rnd() < .05) { d[i] -= 30; d[i + 1] -= 50; d[i + 2] -= 45; }
+  }
+  c.putImageData(id, 0, 0);
+
+  // what you see through an unpopped bubble: blurred, a bit brighter
+  blur = mk(W * D, H * D); c = blur.getContext("2d");
+  c.filter = `blur(${(5.6 * D).toFixed(1)}px) brightness(1.06)`; c.drawImage(paper, 0, 0);
+
+  // the plastic film: flat sheet with long soft wrinkles and sealed edges
+  film = mk(W * D, H * D); c = film.getContext("2d"); c.scale(D, D);
+  c.save(); c.beginPath(); c.rect(0, sTop, W, bot - sTop); c.clip();
+  c.fillStyle = "rgba(255,248,246,.075)"; c.fillRect(0, sTop, W, bot - sTop);
+  c.filter = `blur(${5 * D}px)`;
+  for (let i = 0; i < 16; i++) {
+    const x = rnd() * W, y = sTop + rnd() * (bot - sTop), a = -.6 + rnd() * 1.2, l = 120 + rnd() * 260;
+    c.strokeStyle = i % 3 ? `rgba(255,255,255,${.03 + rnd() * .05})` : HSL(80, 11, .04 + rnd() * .04);
+    c.lineWidth = 6 + rnd() * 22; c.beginPath(); c.moveTo(x - Math.cos(a) * l, y - Math.sin(a) * l);
+    c.quadraticCurveTo(x + (rnd() - .5) * 80, y + (rnd() - .5) * 80, x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke();
+  }
+  c.filter = "none";
+  for (let i = 0; i < 9; i++) {                                   // fine creases
+    let x = rnd() * W, y = sTop + rnd() * (bot - sTop), a = rnd() * 6.28;
+    c.beginPath(); c.moveTo(x, y);
+    for (let k = 0; k < 5; k++) { a += (rnd() - .5) * .7; x += Math.cos(a) * 14; y += Math.sin(a) * 14; c.lineTo(x, y); }
+    c.strokeStyle = "rgba(255,255,255,.16)"; c.lineWidth = .7; c.stroke();
+    c.translate(.8, .8); c.strokeStyle = HSL(80, 11, .12); c.stroke(); c.translate(-.8, -.8);
+  }
+  c.restore();
+  for (const [y, s] of [[sTop, 1], [bot, -1]]) {                     // heat-sealed edge strips
+    c.fillStyle = HSL(80, 11, .18); c.fillRect(0, s > 0 ? y - 3 : y, W, 3);
+    const e = c.createLinearGradient(0, y, 0, y + 9 * s);
+    e.addColorStop(0, "rgba(255,255,255,.34)"); e.addColorStop(.25, "rgba(255,255,255,.12)"); e.addColorStop(1, "rgba(255,255,255,.04)");
+    c.fillStyle = e; c.fillRect(0, s > 0 ? y : y - 9, W, 9);
+    c.fillStyle = "rgba(255,255,255,.5)"; c.fillRect(0, s > 0 ? y : y - 1, W, 1);
+  }
+
+  // one bubble: cast shadow + caustic on the paper, the dome, its highlight
+  const S = Math.ceil(r * 2 + 16), h = S / 2;
+  shade = mk(S * D, S * D); c = shade.getContext("2d"); c.scale(D, D);
+  c.filter = `blur(${2.2 * D}px)`;
+  c.fillStyle = HSL(80, 11, .34); c.beginPath(); c.ellipse(h + r * .1, h + r * .16, r * 1.0, r * .95, 0, 0, 7); c.fill();
+  c.filter = `blur(${1.4 * D}px)`;
+  c.strokeStyle = "rgba(255,236,226,.55)"; c.lineWidth = r * .14; c.beginPath(); c.arc(h + r * .08, h + r * .1, r * .74, .25, 1.45); c.stroke();
+
+  dome = mk(S * D, S * D); c = dome.getContext("2d"); c.scale(D, D);
+  let gr = c.createRadialGradient(h - r * .3, h - r * .34, r * .05, h, h, r);
+  gr.addColorStop(0, "rgba(255,255,255,.34)"); gr.addColorStop(.45, "rgba(255,250,248,.16)");
+  gr.addColorStop(.82, "rgba(255,240,236,.08)"); gr.addColorStop(.94, HSL(80, 11, .18)); gr.addColorStop(1, HSL(80, 11, .32));
+  c.fillStyle = gr; c.beginPath(); c.arc(h, h, r, 0, 7); c.fill();
+  c.lineWidth = 1; c.strokeStyle = "rgba(255,255,255,.55)"; c.beginPath(); c.arc(h, h, r - .5, 3.3, 5.2); c.stroke();
+  c.strokeStyle = "rgba(255,255,255,.18)"; c.beginPath(); c.arc(h, h, r - .5, 5.2, 9.58); c.stroke();
+  c.filter = `blur(${.9 * D}px)`;
+  c.strokeStyle = "rgba(255,255,255,.4)"; c.lineWidth = r * .1; c.beginPath(); c.arc(h, h, r * .8, .2, 1.4); c.stroke();
+  spec = mk(S * D, S * D); const sc = spec.getContext("2d"); sc.scale(D, D);
+  sc.filter = `blur(${.8 * D}px)`; sc.fillStyle = "rgba(255,255,255,.92)";
+  sc.beginPath(); sc.ellipse(h - r * .36, h - r * .4, r * .27, r * .14, -.75, 0, 7); sc.fill();
+  sc.fillStyle = "rgba(255,255,255,.55)"; sc.beginPath(); sc.arc(h + r * .02, h - r * .62, r * .06, 0, 7); sc.fill();
+  sc.fillStyle = "rgba(255,255,255,.35)"; sc.beginPath(); sc.ellipse(h + r * .42, h + r * .36, r * .1, r * .05, -.75, 0, 7); sc.fill();
+  c.filter = "none"; c.drawImage(spec, 0, 0, S, S);
+
+  // popped bubbles: six crumpled craters, each with its own folds
+  craters = [];
+  for (let v = 0; v < 6; v++) {
+    const cr = mk(S * D, S * D); c = cr.getContext("2d"); c.scale(D, D);
+    const n = 13, pts = [];
+    for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rnd() * .3, rr = r * (.78 + rnd() * .22); pts.push([h + Math.cos(a) * rr, h + Math.sin(a) * rr]); }
+    c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.closePath();
+    c.fillStyle = "rgba(255,246,244,.13)"; c.fill();
+    c.strokeStyle = HSL(80, 11, .22); c.lineWidth = 1.6; c.stroke();
+    c.save(); c.translate(-.6, -.6); c.strokeStyle = "rgba(255,255,255,.5)"; c.lineWidth = .8; c.stroke(); c.restore();
+    for (let k = 0; k < 6; k++) {                                   // folds running from the rim inwards
+      const a = rnd() * 6.283, r1 = r * (.7 + rnd() * .25), r2 = r * (.1 + rnd() * .35), b = a + (rnd() - .5) * 1.4;
+      const x1 = h + Math.cos(a) * r1, y1 = h + Math.sin(a) * r1, x2 = h + Math.cos(b) * r2, y2 = h + Math.sin(b) * r2;
+      const mx = (x1 + x2) / 2 + (rnd() - .5) * r * .3, my = (y1 + y2) / 2 + (rnd() - .5) * r * .3;
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(mx, my); c.lineTo(x2, y2);
+      c.strokeStyle = "rgba(255,255,255,.42)"; c.lineWidth = .9; c.stroke();
+      c.save(); c.translate(.9, .9); c.strokeStyle = HSL(80, 11, .2); c.stroke(); c.restore();
+      if (k < 2) { c.beginPath(); c.moveTo(x1, y1); c.lineTo(mx, my); c.lineTo(h + Math.cos(a + .5) * r1, h + Math.sin(a + .5) * r1); c.closePath(); c.fillStyle = "rgba(255,255,255,.07)"; c.fill(); }
+    }
+    const ta = rnd() * 6.283;                                        // the slit where the air got out
+    c.beginPath(); c.moveTo(h + Math.cos(ta) * r * .55, h + Math.sin(ta) * r * .55); c.lineTo(h + Math.cos(ta + .35) * r * .88, h + Math.sin(ta + .35) * r * .88);
+    c.strokeStyle = HSL(80, 11, .35); c.lineWidth = 1.2; c.stroke();
+    craters.push(cr);
+  }
+}
+
+// ---------- sound ----------
+let AC = null, noise = null;
+function audio() {
+  if (!CONFIG.sound || AC) return;
+  try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+  noise = AC.createBuffer(1, AC.sampleRate * .08, AC.sampleRate);
+  const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+}
+let lastSnd = -1;
+function popSound(delay) {
+  if (!AC || AC.state !== "running") return;
+  const t = AC.currentTime + delay; if (t - lastSnd < .025) return; lastSnd = t;
+  const n = AC.createBufferSource(); n.buffer = noise;
+  const f = AC.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1400 + Math.random() * 1600; f.Q.value = 1.4;
+  const g = AC.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.55, t + .002); g.gain.exponentialRampToValueAtTime(.001, t + .05);
+  n.connect(f).connect(g).connect(AC.destination); n.start(t); n.stop(t + .08);
+  const o = AC.createOscillator(), og = AC.createGain(); o.frequency.setValueAtTime(260 + Math.random() * 80, t); o.frequency.exponentialRampToValueAtTime(80, t + .05);
+  og.gain.setValueAtTime(.3, t); og.gain.exponentialRampToValueAtTime(.001, t + .06);
+  o.connect(og).connect(AC.destination); o.start(t); o.stop(t + .07);
+}
+
+// ---------- popping ----------
+const SQUASH = .06, BURST = .2;                 // seconds pressed in before it gives, then the snap
+function pop(q, now) {
+  if (q.s) return;
+  q.s = 1; q.t = now; pops++; bump = 1;
+  window.__pops.push(+((now / 1000) + SQUASH).toFixed(3));
+  for (const o of cells) {                      // neighbours jiggle
+    const d = Math.hypot(o.x - q.x, o.y - q.y);
+    if (o !== q && !o.s && d < pitch * 1.7) { o.w = .07 * (1 - d / (pitch * 1.7)); o.wt = now + SQUASH * 1000; }
+  }
+  popSound(SQUASH);
+  if (navigator.vibrate) try { navigator.vibrate(6); } catch (e) {}
+}
+function popNear(x, y, rad, now) {
+  for (const q of cells) if (!q.s && Math.hypot(q.x - x, q.y - y) < rad) pop(q, now);
+}
+let down = false, lx = 0, ly = 0;
+addEventListener("pointerdown", e => {
+  if (e.target === hint) return;
+  audio(); if (AC && AC.state === "suspended") AC.resume();
+  down = true; lx = e.clientX; ly = e.clientY;
+  const now = performance.now(); let best = null, bd = pitch * .55;
+  for (const q of cells) { const d = Math.hypot(q.x - lx, q.y - ly); if (!q.s && d < bd) { bd = d; best = q; } }
+  if (best) pop(best, now);
+});
+addEventListener("pointermove", e => {
+  if (!down) return;
+  const x = e.clientX, y = e.clientY, now = performance.now(), n = Math.max(1, Math.ceil(Math.hypot(x - lx, y - ly) / 4));
+  for (let i = 1; i <= n; i++) popNear(lx + (x - lx) * i / n, ly + (y - ly) * i / n, pitch * .44, now);
+  lx = x; ly = y;
+});
+addEventListener("pointerup", () => { down = false; });
+addEventListener("pointercancel", () => { down = false; });
+hint.addEventListener("click", () => {
+  if (!done) return;
+  for (const q of cells) { q.s = 0; q.w = 0; } done = false; pops = 0; puffs.length = hearts.length = 0;
+  hint.classList.remove("on"); hint.textContent = "tap or drag to pop";
+});
+
+// ---------- one frame ----------
+function puffAt(q, now) {
+  for (let i = 0; i < 7; i++) {
+    const a = rnd() * 6.283, v = 30 + rnd() * 90;
+    puffs.push({ x: q.x + Math.cos(a) * pitch * .25, y: q.y + Math.sin(a) * pitch * .25, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 12, s: 1.5 + rnd() * 2.5, t: now, life: 300 + rnd() * 320 });
+  }
+  puffs.push({ ring: 1, x: q.x, y: q.y, t: now, life: 260 });
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  const r = pitch * CONFIG.bubble, S = Math.ceil(r * 2 + 16), h = S / 2;
+  X.setTransform(D, 0, 0, D, 0, 0);
+  X.drawImage(paper, 0, 0, W, H);
+  const band = ((now / 1000) * .09 % 1.8 - .4) * (W + H);      // slow gloss sweeping across the sheet
+  for (const q of cells) if (q.s !== 2) X.drawImage(shade, q.x - h, q.y - h, S, S);
+  X.drawImage(film, 0, 0, W, H);
+  for (const q of cells) {
+    const age = (now - q.t) / 1000;
+    if (q.s === 1 && age >= SQUASH + BURST) q.s = 2;
+    if (q.s === 2) { drawCrater(q, 1); continue; }
+    let sx = 1, sy = 1, dy = 0, al = 1;
+    if (q.s === 1) {
+      if (age < SQUASH) { const k = age / SQUASH; sx = 1 + .12 * k; sy = 1 - .32 * k * k; dy = r * .12 * k; }
+      else {
+        if (!q.puffed) { q.puffed = 1; puffAt(q, now); }
+        const v = (age - SQUASH) / BURST;
+        drawCrater(q, 1 + .16 * Math.sin(Math.PI * Math.min(1, v * 1.4)) * (1 - v));
+        sx = 1.12 + .2 * v; sy = .68 - .5 * v; dy = r * .12; al = Math.max(0, 1 - v * 2.6);
+        if (al <= 0) continue;
+      }
+    } else if (q.w > 0 && now > q.wt) {
+      const wa = (now - q.wt) / 1000, e = q.w * Math.exp(-wa * 10);
+      if (e < .002) q.w = 0; else { sx = 1 + e * Math.sin(wa * 42); sy = 1 - e * Math.sin(wa * 42); }
+    }
+    q.puffed = q.s === 1 ? q.puffed : 0;
+    const rx = r * sx, ry = r * sy, cy = q.y + dy;
+    X.save(); X.globalAlpha = al;
+    X.beginPath(); X.ellipse(q.x, cy, rx, ry, 0, 0, 7); X.clip();
+    const m = 1.16, sr = r / m;                                   // lens: magnified, softened paper
+    X.drawImage(blur, (q.x - sr) * D, (q.y - sr) * D, sr * 2 * D, sr * 2 * D, q.x - rx, cy - ry, rx * 2, ry * 2);
+    X.restore();
+    X.globalAlpha = al; X.drawImage(dome, q.x - h * sx, cy - h * sy, S * sx, S * sy);
+    const g = Math.exp(-((((q.x + q.y) - band) / 120) ** 2));
+    if (g > .02) { X.globalAlpha = al * g * .8; X.drawImage(spec, q.x - h * sx, cy - h * sy, S * sx, S * sy); }
+    X.globalAlpha = 1;
+  }
+  // gloss band over the whole film
+  X.save(); X.beginPath(); X.rect(0, sTop, W, bot - sTop); X.clip();
+  const gl = X.createLinearGradient(band / 2 - 160, band / 2 - 160, band / 2 + 160, band / 2 + 160);
+  gl.addColorStop(0, "rgba(255,255,255,0)"); gl.addColorStop(.5, "rgba(255,255,255,.07)"); gl.addColorStop(1, "rgba(255,255,255,0)");
+  X.fillStyle = gl; X.fillRect(0, sTop, W, bot - sTop); X.restore();
+
+  // air puffs
+  for (let i = puffs.length - 1; i >= 0; i--) {
+    const p = puffs[i], k = (now - p.t) / p.life;
+    if (k >= 1) { puffs.splice(i, 1); continue; }
+    if (p.ring) {
+      X.strokeStyle = `rgba(255,255,255,${.5 * (1 - k)})`; X.lineWidth = 1.5 * (1 - k) + .3;
+      X.beginPath(); X.arc(p.x, p.y, r * (.85 + .75 * Math.sqrt(k)), 0, 7); X.stroke(); continue;
+    }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 1 - 4 * dt; p.vy *= 1 - 4 * dt;
+    X.fillStyle = `rgba(255,252,250,${.55 * (1 - k) * (1 - k)})`;
+    X.beginPath(); X.arc(p.x, p.y, p.s * (1 + k * 1.6), 0, 7); X.fill();
+  }
+
+  // the message is out: the heart starts beating
+  if (!done && msgCells.length && msgCells.every(q => q.s === 2)) {
+    done = true; tDone = now; window.__done = +(now / 1000).toFixed(3);
+    hint.textContent = CONFIG.doneHint;
+  }
+  if (done) {
+    const a = (now - tDone) / 1000;
+    msgCells.forEach((q, i) => {                                 // a warm glow runs through the words once
+      const k = Math.exp(-(((a - .15 - i * .045) / .13) ** 2));
+      if (k < .02) return;
+      const g = X.createRadialGradient(q.x, q.y, 0, q.x, q.y, r * 1.1);
+      g.addColorStop(0, `rgba(255,236,222,${.4 * k})`); g.addColorStop(1, "rgba(255,236,222,0)");
+      X.fillStyle = g; X.beginPath(); X.arc(q.x, q.y, r * 1.1, 0, 7); X.fill();
+    });
+    if (heartCell) {
+      const b = (a % .9) / .9, beat = Math.exp(-b * 8) * .32 + (b > .2 ? Math.exp(-(b - .2) * 8) * .2 : 0);
+      const s = r * .52 * (1 + beat) * Math.min(1, a * 4);
+      X.save(); X.shadowColor = "rgba(255,214,204,.95)"; X.shadowBlur = 10 + beat * 50;
+      heartPath(X, heartCell.x, heartCell.y + r * .12, s); X.fillStyle = CONFIG.ink; X.fill(); X.restore();
+      if (Math.floor(Math.max(0, a - dt) / .9) !== Math.floor(a / .9) || !hearts.length && a < dt * 1.5)
+        for (let i = 0; i < 2; i++) hearts.push({ x: heartCell.x + (rnd() - .5) * r * 1.2, y: heartCell.y - r * .4, vx: (rnd() - .5) * 40, t: now, life: 1700 + rnd() * 700, s: 4 + rnd() * 3.5 });
+    }
+    if (a > 2.4 && !hint.classList.contains("on")) { hint.classList.add("on"); hint.textContent = CONFIG.resetHint; }
+  }
+  for (let i = hearts.length - 1; i >= 0; i--) {
+    const p = hearts[i], k = (now - p.t) / p.life;
+    if (k >= 1) { hearts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y -= 46 * dt;
+    X.globalAlpha = Math.sin(Math.PI * k) * .9; heartPath(X, p.x + Math.sin(k * 9) * 4, p.y, p.s); X.fillStyle = CONFIG.ink; X.fill(); X.globalAlpha = 1;
+  }
+
+  num.textContent = String(pops).padStart(3, "0");
+  bump *= Math.exp(-dt * 12); count.style.transform = `scale(${1 + bump * .08})`;
+  requestAnimationFrame(frame);
+}
+function drawCrater(q, s) {
+  const r = pitch * CONFIG.bubble, S = Math.ceil(r * 2 + 16) * s;
+  X.save(); X.translate(q.x, q.y); X.rotate(q.a); X.drawImage(craters[q.k], -S / 2, -S / 2, S, S); X.restore();
+}
+
+addEventListener("resize", () => { if (Math.abs(innerWidth - W) > 2 || Math.abs(innerHeight - H) > 60) layout(); });
+document.fonts.load('800 30px "Bricolage Grotesque"').then(() => document.fonts.ready).then(() => { layout(); requestAnimationFrame(frame); });
+</script>
+</body>
+</html>
