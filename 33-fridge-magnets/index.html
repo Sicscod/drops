@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>left on the fridge</title>
+<meta name="description" content="A fridge door full of plastic alphabet magnets. Drag a few and they spell it out. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@700&family=Kalam&family=Geist+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#b7d6c6;color:#24372f}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+canvas.grab{cursor:grabbing}
+.k{position:fixed;top:30px;left:16px;margin:0;pointer-events:none;z-index:2;font:500 9.5px/1 "Geist Mono",ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--ink,#24372f);opacity:.62}
+.hint{position:fixed;left:0;right:0;bottom:32px;margin:0 auto;padding:0;border:0;background:none;display:block;text-align:center;pointer-events:none;z-index:3;
+  font:500 10px/1 "Geist Mono",ui-monospace,monospace;letter-spacing:.22em;text-transform:uppercase;color:var(--ink,#24372f)}
+.hint.on{pointer-events:auto;cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+.credit{position:fixed;left:0;right:0;bottom:12px;text-align:center;z-index:3;font:400 10.5px "Geist Mono",ui-monospace,monospace;color:var(--ink,#24372f);opacity:.6}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<p class="k" id="kick">left this on the fridge</p>
+<button class="hint" id="hint">drag a letter onto its spot</button>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:700 20px Fredoka">a</span><span class="pre" style="font:20px Kalam">a</span>
+<script>
+// ===== Fridge Magnets · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&line=you%20%2B%20me%20%3D%20%E2%99%A5&hue=158
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name: P.get("name") || "Delly",                 // second row of magnets
+  line: P.get("line") || "you + me = ♥",          // first row (♥ becomes a heart magnet)
+  hue: +(P.get("hue") || 158),                    // fridge enamel (0-360): 158 mint, 200 sky, 40 butter, 350 rose
+  note: ["groceries", "milk", "oranges", "coffee (the good one)", "flowers for {name}"],  // the paper under the magnet
+  colors: ["#e3412f", "#2d6ad8", "#f0782a", "#1f8a52", "#7a4fd4"],   // magnets in the line, in order
+  heart: "#e3412f",                               // the heart magnet
+  spare: "kazrb",                                 // extra letters lying around on the door
+  spareColors: ["#f3b51b", "#2d6ad8", "#f3b51b", "#1f8a52", "#e3412f"],
+  autoAfter: 3,      // after this many letters are in place, the rest fly in by themselves
+  doneHint: "↺ mix them up",
+  sound: true,       // plastic clack on every snap (and a tiny buzz on phones)
+};
+
+// ---------- setup ----------
+const $ = id => document.getElementById(id);
+const cv = $("c"), X = cv.getContext("2d"), hint = $("hint");
+const ink = `hsl(${CONFIG.hue},26%,20%)`;
+document.documentElement.style.setProperty("--ink", ink);
+document.body.style.background = `hsl(${CONFIG.hue},30%,80%)`;
+const mk = (w, h) => { const c = document.createElement("canvas"); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; };
+let seed = 33; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const ease = u => 1 - Math.pow(1 - clamp(u, 0, 1), 3);
+const FONT = s => `700 ${s}px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif`;
+
+let W, H, D, S, door, hw, bg, slots = [], mags = [], noteBox, ready = false;
+let drag = null, drops = 0, autoAt = 0, auto = false, done = false, tDone = 0, last = 0, z = 1, lastTouch = 0;
+window.__clacks = []; window.__mags = mags; window.__slots = slots;
+
+// ---------- colour helpers ----------
+function rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, n >> 8 & 255, n & 255]; }
+function shade(h, k) { // k<0 darker, k>0 lighter
+  const c = rgb(h).map(v => Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+// ---------- glyph masks ----------
+function heartPath(g, x, y, w, h) {
+  g.beginPath();
+  g.moveTo(x + w * .5, y + h);
+  g.bezierCurveTo(x + w * .18, y + h * .78, x - w * .02, y + h * .52, x + w * .02, y + h * .28);
+  g.bezierCurveTo(x + w * .06, y + h * .04, x + w * .36, y - h * .06, x + w * .5, y + h * .2);
+  g.bezierCurveTo(x + w * .64, y - h * .06, x + w * .94, y + h * .04, x + w * .98, y + h * .28);
+  g.bezierCurveTo(x + w * 1.02, y + h * .52, x + w * .82, y + h * .78, x + w * .5, y + h);
+  g.closePath();
+}
+function metrics(ch, s) {
+  if (ch === "♥") return { l: 0, r: s * .74, a: s * .66, d: 0 };
+  const g = mk(4, 4).getContext("2d"); g.font = FONT(s);
+  const m = g.measureText(ch), sw = s * .015;
+  return { l: m.actualBoundingBoxLeft + sw, r: m.actualBoundingBoxRight + sw, a: m.actualBoundingBoxAscent + sw, d: m.actualBoundingBoxDescent + sw };
+}
+function mask(ch, s) {
+  const m = metrics(ch, s), w = m.l + m.r, h = m.a + m.d, pad = Math.ceil(s * .3);
+  const c = mk((w + pad * 2) * D, (h + pad * 2) * D), g = c.getContext("2d");
+  g.scale(D, D); g.fillStyle = g.strokeStyle = "#fff";
+  if (ch === "♥") { heartPath(g, pad, pad, w, h); g.fill(); }
+  else { g.font = FONT(s); g.lineJoin = "round"; g.lineWidth = s * .03; g.fillText(ch, pad + m.l, pad + m.a); g.strokeText(ch, pad + m.l, pad + m.a); }
+  return { c, w, h, pad, m };
+}
+function tint(src, fill, blur = 0, extra = 0) {
+  const c = mk(src.width + extra * 2, src.height + extra * 2), g = c.getContext("2d");
+  if (blur) g.filter = `blur(${blur}px)`;
+  g.drawImage(src, extra, extra); g.filter = "none";
+  g.globalCompositeOperation = "source-in"; g.fillStyle = fill; g.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+function rim(src, dx, dy, fill, blur) { // the edge of the glyph that a shifted copy doesn't cover
+  const c = mk(src.width, src.height), g = c.getContext("2d");
+  g.drawImage(src, 0, 0); g.globalCompositeOperation = "destination-out"; g.drawImage(src, dx, dy);
+  g.globalCompositeOperation = "source-in"; g.fillStyle = fill; g.fillRect(0, 0, c.width, c.height);
+  if (!blur) return c;
+  const b = mk(c.width, c.height), bg2 = b.getContext("2d"); bg2.filter = `blur(${blur}px)`; bg2.drawImage(c, 0, 0); return b;
+}
+
+// a chunky glossy plastic letter, pre-rendered once
+function sprite(ch, col, s) {
+  const M = mask(ch, s), mc = M.c, cw = mc.width, chh = mc.height, d = s * .075 * D;
+  const out = mk(cw, chh), g = out.getContext("2d");
+  // moulded side wall, seen a little from above
+  const wall = tint(mc, shade(col, -.42)), edge = tint(mc, "rgba(0,0,0,.35)");
+  g.drawImage(edge, d * .32 + D * .6, d + D * .8);
+  for (let k = d; k >= 0.5; k -= .5) g.drawImage(wall, k * .32, k);
+  // face
+  const face = mk(cw, chh), f = face.getContext("2d");
+  const top = M.pad * D, bot = (M.pad + M.h) * D;
+  const gr = f.createLinearGradient(0, top, 0, bot);
+  gr.addColorStop(0, shade(col, .2)); gr.addColorStop(.45, col); gr.addColorStop(1, shade(col, -.14));
+  f.drawImage(tint(mc, gr), 0, 0);
+  f.globalCompositeOperation = "source-atop";
+  // rounded "tube" shading: interior brighter than the edges
+  const soft = tint(mc, "#fff", s * .07 * D);
+  f.globalAlpha = .16; f.drawImage(soft, -s * .03 * D, -s * .04 * D);
+  f.globalAlpha = .42; f.drawImage(rim(mc, -s * .05 * D, -s * .06 * D, shade(col, -.5), s * .03 * D), 0, 0);
+  f.globalAlpha = .7; f.drawImage(rim(mc, s * .035 * D, s * .045 * D, "#fff", s * .018 * D), 0, 0);
+  f.globalAlpha = .85; f.drawImage(rim(mc, D * .7, D * 1, "rgba(255,255,255,.9)", 0), 0, 0);
+  // gloss: the top third catches the window
+  f.globalAlpha = 1;
+  const gl = f.createLinearGradient(0, top, 0, top + (bot - top) * .55);
+  gl.addColorStop(0, "rgba(255,255,255,.34)"); gl.addColorStop(1, "rgba(255,255,255,0)");
+  f.fillStyle = gl; f.fillRect(0, 0, cw, chh);
+  f.globalAlpha = .9; f.drawImage(rim(rim(mc, s * .05 * D, s * .07 * D, "#fff", 0), -s * .012 * D, -s * .014 * D, "rgba(255,255,255,.55)", D * .6), 0, 0);
+  f.globalAlpha = 1;
+  g.drawImage(face, 0, 0);
+  // shadows (tight contact + soft)
+  const sp = Math.ceil(s * .35 * D);
+  const tight = tint(mc, "rgba(16,30,24,1)", D * 1.4, sp), softS = tint(mc, "rgba(16,30,24,1)", s * .1 * D, sp);
+  return { c: out, tight, soft: softS, sp, w: M.w, h: M.h, pad: M.pad, m: M.m, mask: mc };
+}
+
+// ---------- the door ----------
+function buildDoor() {
+  bg = mk(W * D, H * D); const g = bg.getContext("2d"); g.scale(D, D);
+  const h = CONFIG.hue, L = 80;
+  const en = (dl, a = 1, sat = 30) => `hsla(${h},${sat}%,${L + dl}%,${a})`;
+  // curve across the door: shadowed at the left, broad highlight, rolls off towards the handle side
+  let gr = g.createLinearGradient(0, 0, door, 0);
+  [[0, -9], [.06, -4], [.3, 4], [.55, 2], [.82, -2], [.96, -6], [1, -10]].forEach(([o, dl]) => gr.addColorStop(o, en(dl)));
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  gr = g.createLinearGradient(0, 0, 0, H);
+  gr.addColorStop(0, "rgba(255,255,255,.12)"); gr.addColorStop(.5, "rgba(255,255,255,0)"); gr.addColorStop(1, `hsla(${h},30%,22%,.14)`);
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  // brushed grain
+  let s = 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < H * 1.6; i++) {
+    const y = r() * H, x = r() * W - 40, len = 40 + r() * W * .7;
+    g.fillStyle = r() < .5 ? `rgba(255,255,255,${.03 + r() * .05})` : `hsla(${h},30%,25%,${.015 + r() * .03})`;
+    g.fillRect(x, y, len, .6);
+  }
+  // window reflection, very soft
+  g.save(); g.filter = `blur(${Math.round(W * .035)}px)`; g.fillStyle = "rgba(255,255,255,.2)";
+  g.translate(W * .1, -H * .05); g.transform(1, 0, -.22, 1, 0, 0);
+  g.fillRect(0, 0, W * .17, H * .5); g.fillRect(W * .2, 0, W * .17, H * .5);
+  g.fillStyle = "rgba(255,255,255,.1)"; g.fillRect(-W * .02, H * .53, W * .41, H * .3);
+  g.restore();
+  // freezer seam at the top
+  const sy = 14;
+  g.fillStyle = en(-6); g.fillRect(0, 0, W, sy);
+  g.fillStyle = `hsla(${h},25%,18%,.55)`; g.fillRect(0, sy, W, 2.5);
+  g.fillStyle = "rgba(255,255,255,.55)"; g.fillRect(0, sy + 2.5, W, 1);
+  gr = g.createLinearGradient(0, sy + 3, 0, sy + 22); gr.addColorStop(0, `hsla(${h},30%,25%,.13)`); gr.addColorStop(1, `hsla(${h},30%,25%,0)`);
+  g.fillStyle = gr; g.fillRect(0, sy + 3, W, 19);
+  // handle: brushed aluminium bar on standoffs, with its shadow on the enamel
+  const hx = W - hw - 6;
+  g.save(); g.filter = "blur(7px)"; g.fillStyle = `hsla(${h},30%,18%,.32)`; g.fillRect(hx - 9, 0, hw * .9, H); g.restore();
+  gr = g.createLinearGradient(hx, 0, hx + hw, 0);
+  [[0, "#6d7470"], [.12, "#c9cfcb"], [.3, "#f4f7f5"], [.42, "#aab1ad"], [.7, "#8a918d"], [.86, "#dfe4e1"], [1, "#5d6460"]].forEach(([o, c]) => gr.addColorStop(o, c));
+  g.fillStyle = gr; g.fillRect(hx, 0, hw, H);
+  for (let i = 0; i < H; i += 2) { g.fillStyle = `rgba(255,255,255,${.04 + r() * .06})`; g.fillRect(hx, i, hw, .7); }
+  gr = g.createLinearGradient(hx + hw, 0, W, 0); gr.addColorStop(0, en(-14)); gr.addColorStop(1, en(-24));
+  g.fillStyle = gr; g.fillRect(hx + hw, 0, W - hx - hw, H);
+  // grocery note under a dome magnet
+  const { w: nw, h: nh } = noteBox;
+  g.save(); g.translate(noteBox.x + nw / 2, noteBox.y + nh / 2); g.rotate(.06);
+  g.save(); g.filter = "blur(6px)"; g.fillStyle = `hsla(${h},30%,15%,.28)`; g.fillRect(-nw / 2 + 4, -nh / 2 + 7, nw, nh); g.restore();
+  gr = g.createLinearGradient(-nw / 2, -nh / 2, nw / 2, nh / 2);
+  gr.addColorStop(0, "#fffdf6"); gr.addColorStop(.6, "#f7f2e4"); gr.addColorStop(1, "#ece5d2");
+  g.fillStyle = gr; g.fillRect(-nw / 2, -nh / 2, nw, nh);
+  g.strokeStyle = "rgba(70,110,170,.18)"; g.lineWidth = .8;
+  const lh = nh / 6.6;
+  for (let i = 1; i < 6; i++) { g.beginPath(); g.moveTo(-nw / 2 + 6, -nh / 2 + lh * (i + 1.3)); g.lineTo(nw / 2 - 6, -nh / 2 + lh * (i + 1.3)); g.stroke(); }
+  g.strokeStyle = "rgba(210,70,70,.25)"; g.beginPath(); g.moveTo(-nw / 2 + 16, -nh / 2); g.lineTo(-nw / 2 + 16, nh / 2); g.stroke();
+  g.fillStyle = "#2b3a6b"; g.textBaseline = "alphabetic";
+  const items = CONFIG.note.map((t, i) => (i ? "– " : "") + t.replace("{name}", CONFIG.name));
+  let fs = lh * .9; g.font = `${fs}px Kalam, cursive`;
+  while (Math.max(...items.slice(1).map(t => g.measureText(t).width)) > nw - 30 && fs > 7) { fs -= .25; g.font = `${fs}px Kalam, cursive`; }
+  items.forEach((t, i) => {
+    g.font = i ? `${fs}px Kalam, cursive` : `700 ${Math.min(lh * 1.05, fs * 1.35)}px Kalam, cursive`;
+    g.fillText(t, -nw / 2 + 21, -nh / 2 + lh * (i + 1.2));
+  });
+  // dome magnet
+  const mr = nw * .1, my = -nh / 2 + 2;
+  g.save(); g.filter = "blur(3px)"; g.fillStyle = "rgba(10,20,15,.45)"; g.beginPath(); g.arc(3, my + 5, mr, 0, 7); g.fill(); g.restore();
+  gr = g.createRadialGradient(-mr * .35, my - mr * .4, mr * .1, 0, my, mr);
+  gr.addColorStop(0, "#ff9a86"); gr.addColorStop(.35, "#e3412f"); gr.addColorStop(1, "#8f1f14");
+  g.fillStyle = gr; g.beginPath(); g.arc(0, my, mr, 0, 7); g.fill();
+  g.fillStyle = "rgba(255,255,255,.75)"; g.beginPath(); g.ellipse(-mr * .38, my - mr * .42, mr * .28, mr * .16, -.6, 0, 7); g.fill();
+  g.restore();
+  // fine enamel grain
+  const id = g.getImageData(0, 0, bg.width, bg.height), p = id.data;
+  for (let i = 0; i < p.length; i += 4) { const n = (r() - .5) * 7; p[i] += n; p[i + 1] += n; p[i + 2] += n; }
+  g.putImageData(id, 0, 0);
+}
+
+// ---------- layout ----------
+function layout() {
+  const old = { W, H };
+  D = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * D; cv.height = H * D;
+  hw = clamp(W * .045, 16, 26); door = W - hw - 6;
+  // fit the two rows across the door
+  const rows = [CONFIG.line, CONFIG.name].map(t => [...t.trim()]).filter(r => r.length);
+  const rowW = (row, s) => {
+    let w = 0, prev = false;
+    for (const ch of row) { if (ch === " ") { w += s * .3; prev = false; continue; } const m = metrics(ch, s); if (prev) w += s * .09; w += m.l + m.r; prev = true; }
+    return w;
+  };
+  const widest = Math.max(...rows.map(r => rowW(r, 100))) / 100;
+  S = Math.min(72, (door - 32) * .92 / widest, H * .12);
+  const nw = Math.min(146, W * .28); noteBox = { x: door - nw - 12, y: 40, w: nw, h: nw * 1.02 };
+  const cy = H * .52, b1 = Math.max(cy - S * (rows.length > 1 ? .31 : -.33), noteBox.y + noteBox.h + S * 1.02);
+  slots.length = 0;
+  rows.forEach((row, ri) => {
+    const base = b1 + ri * S * 1.16;
+    let x = (door - rowW(row, S)) / 2, prev = false;
+    for (const ch of row) {
+      if (ch === " ") { x += S * .3; prev = false; continue; }
+      const m = metrics(ch, S); if (prev) x += S * .09;
+      slots.push({ ch, x: x + (m.l + m.r) / 2, y: base + (m.d - m.a) / 2, m: null });
+      x += m.l + m.r; prev = true;
+    }
+  });
+  buildDoor();
+  // build magnets (once) or re-skin them after a resize
+  const fresh = !mags.length;
+  if (fresh) {
+    slots.forEach((s, i) => mags.push({ ch: s.ch, col: s.ch === "♥" ? CONFIG.heart : CONFIG.colors[i % CONFIG.colors.length] }));
+    [...CONFIG.spare].forEach((ch, i) => mags.push({ ch, col: CONFIG.spareColors[i % CONFIG.spareColors.length], spare: true }));
+  }
+  for (const m of mags) {
+    m.sp = sprite(m.ch, m.col, m.spare ? S * .9 : S);
+    if (fresh) Object.assign(m, { x: 0, y: 0, rot: 0, lift: 0, tilt: 0, w: 0, wv: 0, sq: 0, vx: 0, px: 0, z: z++, slot: null, tw: null });
+    else { m.x *= W / old.W; m.y *= H / old.H; }
+  }
+  if (fresh) scatter(false);
+  for (const s of slots) s.m = null;
+  for (const m of mags) if (m.slot) { const s = slots[m.slot.i]; if (s && s.ch === m.ch) { s.m = m; m.slot = s; m.x = s.x; m.y = s.y; } else m.slot = null; }
+  slots.forEach((s, i) => s.i = i);
+  ready = true;
+}
+
+// seeded scatter around the door, away from the rows and the note
+function scatter(animate, now = 0) {
+  seed = 33; const pts = [];
+  const top = 58, rowTop = slots.length ? Math.min(...slots.map(s => s.y)) - S * .95 : H * .4;
+  const rowBot = slots.length ? Math.max(...slots.map(s => s.y)) + S * .95 : H * .6, low = H - 74;
+  const ok = (x, y, md) => {
+    if (y > rowTop && y < rowBot) return false;
+    if (x > noteBox.x - S * .45 && y < noteBox.y + noteBox.h + S * .45) return false;
+    return pts.every(p => Math.hypot(p.x - x, p.y - y) > md);
+  };
+  const order = mags.map((m, i) => i).sort((a, b) => a - b);
+  for (const i of order) {
+    let x, y, md = S * 1.05, tries = 0;
+    do {
+      x = S * .55 + rnd() * (door - S * 1.1);
+      y = rnd() < (rowTop - top) / ((rowTop - top) + (low - rowBot)) ? top + S * .4 + rnd() * Math.max(1, rowTop - top - S * .4) : rowBot + rnd() * Math.max(1, low - rowBot);
+      if (++tries % 120 === 0) md *= .85;
+    } while (!ok(x, y, md) && tries < 900);
+    pts.push({ x, y });
+    const m = mags[i], rot = (rnd() - .5) * 1.1;
+    if (animate) fly(m, x, y, rot, now + i * 45, null);
+    else { m.x = x; m.y = y; m.rot = rot; }
+  }
+}
+
+// ---------- motion ----------
+function fly(m, x, y, rot, t0, slot, quick = false) {
+  if (m.slot) { m.slot.m = null; m.slot = null; }
+  if (slot) slot.m = m;
+  m.tw = { t0, pre: quick ? 0 : 150, dur: quick ? 230 : 520, fx: m.x, fy: m.y, fr: m.rot, x, y, rot, slot, arc: quick ? 0 : 1, fl: m.lift };
+  m.z = z++;
+}
+let ac = null;
+function clack(m, v = 1) {
+  m.wv += (m.x > W / 2 ? -1 : 1) * (2.6 + 1.6 * v) * (rnd() < .5 ? 1 : .8);
+  m.sq = .55 + .45 * v;
+  window.__clacks.push(+(performance.now() / 1000).toFixed(3));
+  if (!CONFIG.sound || !ac) return;
+  try {
+    const t = ac.currentTime, len = .07, buf = ac.createBuffer(1, ac.sampleRate * len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) { const u = i / ac.sampleRate; d[i] = (Math.random() * 2 - 1) * Math.exp(-u * 90) + Math.sin(u * 2 * Math.PI * 1850) * Math.exp(-u * 70) * .6 + Math.sin(u * 2 * Math.PI * 3100) * Math.exp(-u * 110) * .35; }
+    const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), gn = ac.createGain();
+    src.buffer = buf; bp.type = "bandpass"; bp.frequency.value = 2400; bp.Q.value = .9; gn.gain.value = .35 * v;
+    src.connect(bp).connect(gn).connect(ac.destination); src.start(t);
+    const o = ac.createOscillator(), og = ac.createGain(); o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(70, t + .06);
+    og.gain.setValueAtTime(.25 * v, t); og.gain.exponentialRampToValueAtTime(.001, t + .08); o.connect(og).connect(ac.destination); o.start(t); o.stop(t + .1);
+    if (navigator.vibrate) navigator.vibrate(8);
+  } catch (e) {}
+}
+
+function hitTest(x, y) {
+  const list = mags.filter(m => !m.tw || m.tw.slot === null).sort((a, b) => b.z - a.z);
+  for (const m of list) {
+    const r = -(m.rot + m.tilt), dx = x - m.x, dy = y - m.y;
+    const lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r);
+    if (Math.abs(lx) < m.sp.w / 2 + 10 && Math.abs(ly) < m.sp.h / 2 + 10) return m;
+  }
+  return null;
+}
+function landSpot(m) {
+  let best = null, bd = Math.max(S * 1.7, 90);
+  for (const s of slots) if (!s.m && s.ch === m.ch) { const d = Math.hypot(s.x - m.x, s.y - m.y); if (d < bd) { bd = d; best = s; } }
+  return best;
+}
+function startAuto(now) {
+  auto = true; let k = 0;
+  for (const s of slots) {
+    if (s.m) continue;
+    let best = null, bd = 1e9;
+    for (const m of mags) if (!m.spare && m.ch === s.ch && !m.slot && m !== (drag && drag.m) && !(m.tw && m.tw.slot)) { const d = Math.hypot(s.x - m.x, s.y - m.y); if (d < bd) { bd = d; best = m; } }
+    if (best) fly(best, s.x, s.y, 0, now + k++ * 150, s);
+  }
+  hint.textContent = "the rest know the way";
+}
+
+// ---------- input ----------
+cv.addEventListener("pointerdown", e => {
+  if (!ready) return;
+  lastTouch = performance.now();
+  if (CONFIG.sound && !ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (err) {} }
+  if (ac && ac.state === "suspended") ac.resume();
+  const m = hitTest(e.clientX, e.clientY); if (!m) return;
+  if (m.tw) m.tw = null;
+  if (m.slot) { m.slot.m = null; m.slot = null; }
+  drag = { m, ox: m.x - e.clientX, oy: m.y - e.clientY, tx: m.x, ty: m.y };
+  m.z = z++; cv.classList.add("grab");
+});
+addEventListener("pointermove", e => { if (drag) { drag.tx = e.clientX + drag.ox; drag.ty = e.clientY + drag.oy; } });
+const release = () => {
+  if (!drag) return;
+  const m = drag.m; drag = null; cv.classList.remove("grab");
+  m.x = clamp(m.x, 10, door - 10); m.y = clamp(m.y, 30, H - 50);
+  const s = !m.spare && landSpot(m), now = performance.now();
+  drops++;
+  if (s) fly(m, s.x, s.y, 0, now, s, true);
+  else m.tw = { t0: now, pre: 0, dur: 140, fx: m.x, fy: m.y, fr: m.rot, x: m.x, y: m.y, rot: m.rot + m.tilt * .6, slot: null, arc: 0, fl: m.lift };
+  m.tilt *= .4;
+};
+addEventListener("pointerup", release); addEventListener("pointercancel", release);
+hint.addEventListener("click", () => {
+  if (!done) return;
+  done = false; auto = false; autoAt = 0; drops = 0; hint.classList.remove("on"); hint.textContent = "drag a letter onto its spot";
+  scatter(true, performance.now());
+});
+
+// ---------- frame ----------
+function frame(now) {
+  const dt = Math.min(.05, last ? (now - last) / 1000 : 1 / 60); last = now;
+  X.setTransform(D, 0, 0, D, 0, 0);
+  X.drawImage(bg, 0, 0, W, H);
+  // slow sheen drifting over the enamel
+  const sx = door * (.35 + .25 * Math.sin(now / 4200));
+  const sh = X.createLinearGradient(sx - 160, 0, sx + 160, H * .35);
+  sh.addColorStop(0, "rgba(255,255,255,0)"); sh.addColorStop(.5, "rgba(255,255,255,.07)"); sh.addColorStop(1, "rgba(255,255,255,0)");
+  X.fillStyle = sh; X.fillRect(0, 0, door, H);
+
+  // drag
+  if (drag) {
+    const m = drag.m, k = 1 - Math.exp(-dt * 32);
+    m.x += (clamp(drag.tx, 8, door - 8) - m.x) * k; m.y += (clamp(drag.ty, 24, H - 40) - m.y) * k;
+    m.lift += (1 - m.lift) * (1 - Math.exp(-dt * 16));
+  }
+  // tweens
+  for (const m of mags) {
+    const t = m.tw; if (!t) continue;
+    const u = (now - t.t0) / 1000 * 1000;
+    if (u < 0) continue;
+    if (u < t.pre) { m.lift = Math.max(m.lift, ease(u / t.pre)); continue; }
+    const v = clamp((u - t.pre) / t.dur, 0, 1), e = t.arc ? (v < .5 ? 2 * v * v : 1 - Math.pow(-2 * v + 2, 2) / 2) : ease(v);
+    const dist = Math.hypot(t.x - t.fx, t.y - t.fy);
+    m.x = t.fx + (t.x - t.fx) * e; m.y = t.fy + (t.y - t.fy) * e - Math.sin(Math.PI * e) * Math.min(90, dist * .28) * t.arc;
+    m.rot = t.fr + (t.rot - t.fr) * e + Math.sin(Math.PI * e) * .35 * t.arc * (t.x > t.fx ? 1 : -1);
+    const startL = t.pre ? 1 : t.fl;
+    m.lift = v < .78 ? startL : startL * (1 - (v - .78) / .22);
+    if (v >= 1) {
+      m.tw = null; m.lift = 0; m.x = t.x; m.y = t.y; m.rot = t.rot;
+      if (t.slot) { m.slot = t.slot; t.slot.m = m; }
+      clack(m, t.slot ? 1 : .55);
+    }
+  }
+  // physics: tilt from velocity, wobble spring, squash
+  for (const m of mags) {
+    const vx = (m.x - m.px) / dt; m.px = m.x;
+    m.vx += (vx - m.vx) * (1 - Math.exp(-dt * 14));
+    const moving = drag && drag.m === m || (m.tw && now >= m.tw.t0);
+    const tt = moving ? clamp(m.vx * .0006, -.32, .32) : 0;
+    m.tilt += (tt - m.tilt) * (1 - Math.exp(-dt * (moving ? 10 : 14)));
+    m.wv += (-170 * m.w - 9 * m.wv) * dt; m.w += m.wv * dt;
+    m.sq *= Math.exp(-dt * 11);
+    if (!m.tw && !(drag && drag.m === m)) m.lift *= Math.exp(-dt * 20);
+  }
+  // idle nudge: a letter wiggles if nobody has touched the door yet
+  if (!lastTouch && now > 3000 && Math.floor(now / 2600) !== Math.floor((now - dt * 1000) / 2600)) {
+    const free = mags.filter(m => !m.slot && !m.spare); if (free.length) { const m = free[Math.floor(rnd() * free.length)]; m.wv += 4; }
+  }
+  // auto finish
+  const placed = slots.filter(s => s.m && s.m.slot === s).length;
+  if (!auto && !done && (placed >= Math.min(CONFIG.autoAfter, slots.length) || drops >= CONFIG.autoAfter + 2)) {
+    if (!autoAt) autoAt = now + 380;
+    if (now >= autoAt && !drag) startAuto(now);
+  }
+  if (!done && placed === slots.length && slots.length) { done = true; tDone = now; }
+  if (done && now - tDone > 900 && !hint.classList.contains("on")) { hint.classList.add("on"); hint.textContent = CONFIG.doneHint; }
+
+  // ghost spots while dragging
+  if (drag && !drag.m.spare) {
+    for (const s of slots) if (!s.m && s.ch === drag.m.ch) {
+      const sp = drag.m.sp; X.globalAlpha = .2 * Math.min(1, drag.m.lift * 1.5);
+      X.drawImage(sp.ghost || (sp.ghost = tint(sp.mask, `hsl(${CONFIG.hue},28%,32%)`)), s.x - sp.pad - sp.w / 2, s.y - sp.pad - sp.h / 2, sp.mask.width / D, sp.mask.height / D);
+      X.globalAlpha = 1;
+    }
+  }
+  // magnets
+  const order = [...mags].sort((a, b) => (a.lift > .02) - (b.lift > .02) || a.z - b.z);
+  for (const m of order) {
+    const sp = m.sp, L = m.lift;
+    let sc = 1 + .085 * L;
+    if (done && m.ch === "♥" && m.slot) { const a = ((now - tDone) / 1000) % 1.1, beat = Math.exp(-a * 9) * .1 + (a > .22 ? Math.exp(-(a - .22) * 9) * .06 : 0); sc += beat * Math.min(1, (now - tDone) / 600); }
+    const rot = m.rot + m.tilt + m.w, sqx = 1 + .07 * m.sq, sqy = 1 - .07 * m.sq;
+    const cwid = sp.c.width / D, chei = sp.c.height / D, ox = -sp.pad - sp.w / 2, oy = -sp.pad - sp.h / 2;
+    const sw = sp.soft.width / D, shh = sp.soft.height / D, so = sp.sp / D;
+    // shadows on the enamel: tight when it sits, big and soft when it lifts
+    X.save(); X.translate(m.x + S * (.03 + .14 * L), m.y + S * (.05 + .3 * L)); X.rotate(rot); X.scale(sc * sqx * (1 + .05 * L), sc * sqy * (1 + .05 * L));
+    X.globalAlpha = .55 * (1 - L) * (1 - L); X.drawImage(sp.tight, ox - so, oy - so, sw, shh);
+    X.globalAlpha = .24 + .14 * L; X.drawImage(sp.soft, ox - so + S * .02, oy - so + S * .04, sw, shh);
+    X.restore();
+    X.save(); X.translate(m.x, m.y - S * .04 * L); X.rotate(rot); X.scale(sc * sqx, sc * sqy);
+    X.globalAlpha = 1; X.drawImage(sp.c, ox, oy, cwid, chei);
+    X.restore();
+  }
+  X.globalAlpha = 1;
+  requestAnimationFrame(frame);
+}
+
+addEventListener("resize", () => { if (Math.abs(innerWidth - W) > 2 || Math.abs(innerHeight - H) > 60) layout(); });
+Promise.all([document.fonts.load('700 40px Fredoka'), document.fonts.load('20px Kalam'), document.fonts.load('500 10px "Geist Mono"')])
+  .then(() => document.fonts.ready).then(() => { layout(); requestAnimationFrame(frame); });
+</script>
+</body>
+</html>

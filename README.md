@@ -39,6 +39,7 @@ Saw a drop in a video? Its number is the folder.
 | 30 | [🎡 Date Wheel](30-date-wheel) | Flick the game-show wheel, it lands on sushi, then creeps one more peg and every slice flips to all of them, with me |
 | 31 | [🫧 Bubble Wrap](31-bubble-wrap) | Pop a glossy sheet of bubble wrap, every bubble shows one printed letter, and the sheet ends up saying i'd pop every bubble for you, Delly |
 | 32 | [🕯️ Make a Wish](32-make-a-wish) | Blow out real-looking candles on a tiny cake and the smoke writes her name in the air |
+| 33 | [🧲 Fridge Magnets](33-fridge-magnets) | Drag glossy plastic letter magnets on a fridge door and they snap into place and spell you + me = ♥ Delly |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
