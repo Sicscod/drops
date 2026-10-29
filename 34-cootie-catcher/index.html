@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>the fortune teller</title>
+<meta name="description" content="A paper fortune teller on a school desk. Pick a colour, pick a number, read your fortune. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@700&family=Nanum+Pen+Script&family=Courier+Prime:wght@400;700&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#c99a62;color:#3b2616}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+header{position:fixed;top:0;left:0;right:0;padding:22px 16px 0;text-align:center;pointer-events:none;z-index:2}
+.k{margin:0;font:700 10px/1 "Courier Prime",ui-monospace,monospace;letter-spacing:.24em;text-transform:uppercase;color:#4a2f1a;opacity:.72}
+.k b{color:#b5322e;font-weight:700}
+h1{margin:9px 0 0;font:700 clamp(25px,7.2vw,31px)/1 "Gaegu",cursive;letter-spacing:.01em;color:#3a2414;text-shadow:0 1px 0 rgba(255,236,200,.35)}
+.credit{position:fixed;left:0;right:0;bottom:12px;text-align:center;z-index:3;font:400 11px "Courier Prime",ui-monospace,monospace;color:#5a3e28}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<header><p class="k">the fortune teller · <b id="no">nº 1</b></p><h1 id="hint">pick a colour</h1></header>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:700 20px Gaegu">a</span><span class="pre" style="font:20px 'Nanum Pen Script'">a</span>
+<script>
+// ===== Cootie Catcher · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly   (fortune Nº 3 is rigged, no matter what number she picks)
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name: P.get("name") || "Delly",                         // who the rigged fortune is about
+  fortunes: P.get("fortunes")                             // ?fortunes=one|two|three  (the honest ones)
+    ? P.get("fortunes").split("|").map(s => s.trim()).filter(Boolean)
+    : ["you'll get boba today",
+       "someone can't stop thinking about you",
+       "your hair looks extra good today",
+       "a nap is in your near future",
+       "you're the funniest one in the group chat"],
+  last: P.get("last") || "you're going on a date with me, {name} ♥",   // the rigged one
+  rigOn: Math.max(1, +(P.get("rig") || 3)),               // which round gets the rigged fortune
+  colours: [["red", "#d8473f"], ["blue", "#3f78c9"], ["mint", "#3fa77f"], ["lemon", "#e3ad21"]],
+  paper: "#f8f3e8",                                       // the fortune teller paper
+  ink: "#2a4b9b",                                         // ballpoint for the honest fortunes
+  loveInk: "#c3282f",                                     // red pen for the rigged one
+  pump: 0.27,                                             // seconds per open/close
+  tilt: 0.44,                                             // camera tilt (radians)
+  sound: true
+};
+
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+const $hint = document.getElementById("hint"), $no = document.getElementById("no");
+const clamp = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const ease = x => { x = clamp(x); return x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3)/2; };
+const easeOut = x => 1 - Math.pow(1 - clamp(x), 3);
+const spring = x => x <= 0 ? 0 : 1 - Math.exp(-7*x) * Math.cos(10*x);
+const mix = (a, b, t) => a + (b - a)*t;
+
+let W, H, DPR, s, cx, cy, bg, shc, shg, grainPat, hatch = [], paperBox;
+
+// ---------- textures ----------
+function makeCanvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+function grainTexture() {
+  const c = makeCanvas(160, 160), x = c.getContext("2d"), d = x.createImageData(160, 160);
+  for (let i = 0; i < d.data.length; i += 4) {
+    const v = 236 + Math.random()*19 - (Math.random() < .03 ? 26 : 0);
+    d.data[i] = v; d.data[i+1] = v - 3; d.data[i+2] = v - 9; d.data[i+3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+  for (let i = 0; i < 40; i++) {                              // paper fibres
+    x.strokeStyle = `rgba(150,120,90,${.05 + Math.random()*.07})`; x.lineWidth = .6;
+    const a = Math.random()*6.3, px = Math.random()*160, py = Math.random()*160, l = 4 + Math.random()*10;
+    x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + Math.cos(a+1)*l*.5, py + Math.sin(a+1)*l*.5, px + Math.cos(a)*l, py + Math.sin(a)*l); x.stroke();
+  }
+  return g.createPattern(c, "repeat");
+}
+function hatchTexture(col) {                                  // coloured pencil scribble
+  const c = makeCanvas(220, 220), x = c.getContext("2d");
+  x.strokeStyle = col; x.lineCap = "round";
+  for (let i = 0; i < 260; i++) {
+    const y = -60 + i*1.35 + Math.random()*1.4, k = .55 + Math.random()*.1;
+    x.globalAlpha = .18 + Math.random()*.26; x.lineWidth = 1.1 + Math.random()*1.4;
+    x.beginPath(); x.moveTo(-20, y); x.lineTo(240, y - 260*k + Math.random()*6); x.stroke();
+  }
+  x.globalCompositeOperation = "destination-out";             // tooth of the paper
+  for (let i = 0; i < 2600; i++) { x.globalAlpha = Math.random()*.5; x.fillRect(Math.random()*220, Math.random()*220, 1.2, 1.2); }
+  return g.createPattern(c, "repeat");
+}
+
+// ---------- the desk (rendered once per resize) ----------
+function hash(i, j) { const n = Math.sin(i*127.1 + j*311.7)*43758.5453; return n - Math.floor(n); }
+function vnoise(x, y) {
+  const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx*fx*(3 - 2*fx), v = fy*fy*(3 - 2*fy);
+  return mix(mix(hash(i, j), hash(i+1, j), u), mix(hash(i, j+1), hash(i+1, j+1), u), v);
+}
+function buildDesk() {
+  const w = Math.ceil(W*DPR/2), h = Math.ceil(H*DPR/2), sc = 2/DPR;
+  const wood = makeCanvas(w, h), wx = wood.getContext("2d"), d = wx.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const X = x*sc, Y = y*sc, ang = .1;
+    const gx = X*Math.cos(ang) + Y*Math.sin(ang), gy = Y*Math.cos(ang) - X*Math.sin(ang);
+    const warp = vnoise(gx*.004, gy*.02)*9 + vnoise(gx*.012, gy*.05)*2.2;
+    const ring = gy*.045 + warp, r = ring - Math.floor(ring);
+    const band = Math.pow(Math.abs(Math.sin(r*Math.PI)), 6);
+    const fib = vnoise(gx*.02, gy*1.3)*.5 + vnoise(gx*.06, gy*2.7)*.5;
+    let t = .25 + band*.45 + fib*.22 + (vnoise(gx*.002, gy*.006) - .5)*.35;
+    const i = (y*w + x)*4;
+    d.data[i] = mix(226, 176, t); d.data[i+1] = mix(184, 126, t); d.data[i+2] = mix(126, 74, t); d.data[i+3] = 255;
+  }
+  wx.putImageData(d, 0, 0);
+  bg = makeCanvas(W*DPR, H*DPR); const b = bg.getContext("2d");
+  b.imageSmoothingQuality = "high"; b.drawImage(wood, 0, 0, W*DPR, H*DPR);
+  b.scale(DPR, DPR);
+  // varnish sheen + a plank seam
+  b.fillStyle = "rgba(60,30,10,.18)"; b.fillRect(0, cy - s*2.15, W, 1.2);
+  b.fillStyle = "rgba(255,230,190,.16)"; b.fillRect(0, cy - s*2.15 + 1.2, W, 1);
+
+  // the notebook page
+  const pw = Math.min(W*.9, 520), ph = H, pa = -.03;
+  const px = W/2 + s*.05, py = cy + s*.25 + ph/2 - s*1.25;
+  paperBox = { x: px, y: py, w: pw, h: ph, a: pa, line: Math.max(24, Math.round(s*.29)) };
+  b.save(); b.translate(px, py); b.rotate(pa);
+  b.shadowColor = "rgba(60,30,10,.28)"; b.shadowBlur = 14; b.shadowOffsetX = 5; b.shadowOffsetY = 7;
+  b.fillStyle = "#fbf8f1"; b.fillRect(-pw/2, -ph/2, pw, ph); b.shadowColor = "transparent";
+  b.fillStyle = grainPat; b.globalAlpha = .55; b.globalCompositeOperation = "multiply"; b.fillRect(-pw/2, -ph/2, pw, ph);
+  b.globalAlpha = 1; b.globalCompositeOperation = "source-over";
+  const L = paperBox.line, top = -ph/2;
+  b.strokeStyle = "rgba(92,140,205,.42)"; b.lineWidth = 1;
+  for (let y = top + L*2.2; y < ph/2; y += L) { b.beginPath(); b.moveTo(-pw/2, y); b.lineTo(pw/2, y); b.stroke(); }
+  b.strokeStyle = "rgba(220,90,100,.55)"; b.beginPath(); b.moveTo(-pw/2 + pw*.13, top); b.lineTo(-pw/2 + pw*.13, ph/2); b.stroke();
+  for (let k = 0; k < 3; k++) {                                // punch holes (the desk shows through)
+    const hy = top + L*3 + k*ph*.28; b.save(); b.beginPath(); b.arc(-pw/2 + pw*.055, hy, 6.5, 0, 7); b.clip();
+    b.drawImage(wood, (px - pw/2 + pw*.055 - 8)/sc, (py + hy - 8)/sc, 16/sc, 16/sc, -pw/2 + pw*.055 - 8, hy - 8, 16, 16);
+    b.fillStyle = "rgba(40,20,5,.25)"; b.fill(); b.restore();
+  }
+  // the left edge is torn from the spiral: a few ragged bits
+  b.fillStyle = "#fbf8f1";
+  for (let y = top; y < ph/2; y += 7) { b.beginPath(); b.arc(-pw/2 - 1, y + Math.random()*3, 1.4 + Math.random()*1.6, 0, 7); b.fill(); }
+  // margin doodle: a little arrow-heart in pencil
+  b.save(); b.translate(-pw/2 + pw*.068, top + L*7.2); b.rotate(-.2);
+  b.strokeStyle = "rgba(70,70,80,.55)"; b.lineWidth = 1.3; b.lineCap = "round";
+  heartPath(b, 0, 0, 9); b.stroke();
+  b.beginPath(); b.moveTo(-13, 9); b.lineTo(13, -9); b.moveTo(13, -9); b.lineTo(8, -9); b.moveTo(13, -9); b.lineTo(12, -4); b.stroke();
+  b.restore();
+  b.restore();
+
+  // a yellow pencil
+  b.save(); b.translate(W - Math.max(26, W*.07), cy - s*.2); b.rotate(1.78);
+  const len = Math.min(230, H*.4), wd = 11;
+  b.shadowColor = "rgba(50,25,8,.35)"; b.shadowBlur = 8; b.shadowOffsetX = 6; b.shadowOffsetY = 5;
+  b.fillStyle = "#e9b53b"; b.fillRect(-len/2, -wd/2, len, wd); b.shadowColor = "transparent";
+  const lg = b.createLinearGradient(0, -wd/2, 0, wd/2);
+  lg.addColorStop(0, "rgba(255,240,190,.55)"); lg.addColorStop(.35, "rgba(255,255,255,0)"); lg.addColorStop(.36, "rgba(120,70,0,.12)"); lg.addColorStop(.7, "rgba(120,70,0,.05)"); lg.addColorStop(.71, "rgba(90,50,0,.22)"); lg.addColorStop(1, "rgba(90,50,0,.3)");
+  b.fillStyle = lg; b.fillRect(-len/2, -wd/2, len, wd);
+  b.fillStyle = "#e7c9a0"; b.beginPath(); b.moveTo(len/2, -wd/2); b.lineTo(len/2 + 22, -1.2); b.lineTo(len/2 + 22, 1.2); b.lineTo(len/2, wd/2); b.fill();
+  b.fillStyle = "rgba(120,80,40,.25)"; b.beginPath(); b.moveTo(len/2, wd*.1); b.lineTo(len/2 + 22, 1.2); b.lineTo(len/2, wd/2); b.fill();
+  b.fillStyle = "#3a3a40"; b.beginPath(); b.moveTo(len/2 + 15, -2.6); b.lineTo(len/2 + 25, 0); b.lineTo(len/2 + 15, 2.6); b.fill();
+  b.fillStyle = "#b9b4a8"; b.fillRect(-len/2 - 14, -wd/2 - .5, 14, wd + 1);
+  b.fillStyle = "rgba(255,255,255,.4)"; for (let k = 0; k < 3; k++) b.fillRect(-len/2 - 12 + k*4.5, -wd/2 - .5, 1.2, wd + 1);
+  b.fillStyle = "#e58b8f"; b.beginPath(); b.roundRect(-len/2 - 30, -wd/2, 17, wd, [4, 0, 0, 4]); b.fill();
+  b.fillStyle = "rgba(255,255,255,.25)"; b.fillRect(-len/2 - 28, -wd/2 + 1.5, 14, 2);
+  b.restore();
+
+  // daylight from a window: warm patch, two soft mullion shadows, vignette
+  const lgt = b.createRadialGradient(W*.12, -H*.05, 10, W*.2, H*.1, Math.max(W, H)*1.05);
+  lgt.addColorStop(0, "rgba(255,246,222,.42)"); lgt.addColorStop(.55, "rgba(255,236,200,.1)"); lgt.addColorStop(1, "rgba(255,230,190,0)");
+  b.globalCompositeOperation = "soft-light"; b.fillStyle = lgt; b.fillRect(0, 0, W, H);
+  b.globalCompositeOperation = "multiply"; b.filter = `blur(${Math.round(s*.28)}px)`;
+  b.fillStyle = "rgba(150,110,80,.22)";
+  b.save(); b.translate(W*.55, H*.5); b.rotate(.62);
+  b.fillRect(-W*.05, -H, s*.32, H*2); b.fillRect(-H*1.2, H*.08, H*2.4, s*.26); b.restore();
+  b.filter = "none";
+  const vg = b.createRadialGradient(W/2, H*.45, Math.min(W, H)*.35, W/2, H*.5, Math.max(W, H)*.8);
+  vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(70,35,10,.32)");
+  b.fillStyle = vg; b.fillRect(0, 0, W, H);
+  b.globalCompositeOperation = "source-over";
+}
+function heartPath(c, x, y, r) {
+  c.beginPath(); c.moveTo(x, y + r*.9);
+  c.bezierCurveTo(x - r*1.5, y - r*.1, x - r*.9, y - r*1.25, x, y - r*.45);
+  c.bezierCurveTo(x + r*.9, y - r*1.25, x + r*1.5, y - r*.1, x, y + r*.9);
+}
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  s = Math.min(W*.255, H*.2, 150); cx = W/2; cy = Math.max(H*.39, 92 + s*1.05);
+  shc = makeCanvas(Math.ceil(W*DPR/2), Math.ceil(H*DPR/2)); shg = shc.getContext("2d");
+  if (!grainPat) { grainPat = grainTexture(); hatch = CONFIG.colours.map(c => hatchTexture(c[1])); }
+  buildDesk();
+}
+
+// ---------- 3D paper ----------
+const SG = [[-1, -1], [1, -1], [1, 1], [-1, 1]];                // TL, TR, BR, BL quadrants
+const NUM = { X: [8, 1, 4, 5], Y: [7, 2, 3, 6] };               // number on each inner face
+const L3 = norm([-.62, -.32, .72]);                              // light: window up-left
+function norm(v) { const l = Math.hypot(v[0], v[1], v[2]); return [v[0]/l, v[1]/l, v[2]/l]; }
+function sub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function cross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function rotAxis(p, o, axis, an) {                              // Rodrigues around the line o + t*axis
+  const k = norm(axis), v = sub(p, o), c = Math.cos(an), si = Math.sin(an), kv = cross(k, v), kd = dot(k, v);
+  return [o[0] + v[0]*c + kv[0]*si + k[0]*kd*(1-c), o[1] + v[1]*c + kv[1]*si + k[1]*kd*(1-c), o[2] + v[2]*c + kv[2]*si + k[2]*kd*(1-c)];
+}
+function pyramid(q, uX, uY) {                                   // local corner coordinates of one pocket
+  const [sx, sy] = SG[q], e = .045*s, gx = .05*s*uX, gy = .05*s*uY;
+  const pa = e + .58*s*uX, pb = e + .58*s*uY, h = s*(.86 + .12*Math.max(uX, uY));
+  const w = (a, b, z) => [sx*(a + gx), sy*(b + gy), z];
+  return { I: w(0, 0, 0), A: w(s, 0, 0), C: w(s, s, 0), B: w(0, s, 0), P: w(pa, pb, h) };
+}
+let ROT = -.07, LIFT = 0;
+function project(p) {
+  const c = Math.cos(ROT), si = Math.sin(ROT);
+  const x = p[0]*c - p[1]*si, y = p[0]*si + p[1]*c, z = p[2] + LIFT;
+  const ct = Math.cos(CONFIG.tilt), st = Math.sin(CONFIG.tilt), D = s*6.5;
+  const y2 = y*ct - z*st, z2 = y*st + z*ct, k = D/(D - z2);
+  return [cx + x*k, cy + y2*k, z2];
+}
+function world(p) { const c = Math.cos(ROT), si = Math.sin(ROT); return [p[0]*c - p[1]*si, p[0]*si + p[1]*c, p[2] + LIFT]; }
+const CAM = () => [0, Math.sin(CONFIG.tilt)*s*6.5, Math.cos(CONFIG.tilt)*s*6.5];
+
+function affine(t, q) {
+  const du1 = t[1][0]-t[0][0], dv1 = t[1][1]-t[0][1], du2 = t[2][0]-t[0][0], dv2 = t[2][1]-t[0][1];
+  const dx1 = q[1][0]-q[0][0], dy1 = q[1][1]-q[0][1], dx2 = q[2][0]-q[0][0], dy2 = q[2][1]-q[0][1];
+  const det = du1*dv2 - du2*dv1 || 1e-6;
+  const a = (dx1*dv2 - dx2*dv1)/det, c = (dx2*du1 - dx1*du2)/det;
+  const b = (dy1*dv2 - dy2*dv1)/det, d = (dy2*du1 - dy1*du2)/det;
+  return [a, b, c, d, q[0][0] - a*t[0][0] - c*t[0][1], q[0][1] - b*t[0][0] - d*t[0][1]];
+}
+function triPath(q, grow) {
+  const mx = (q[0][0]+q[1][0]+q[2][0])/3, my = (q[0][1]+q[1][1]+q[2][1])/3;
+  g.beginPath();
+  q.forEach((p, i) => { const dx = p[0]-mx, dy = p[1]-my, l = Math.hypot(dx, dy) || 1, X = p[0] + dx/l*grow, Y = p[1] + dy/l*grow; i ? g.lineTo(X, Y) : g.moveTo(X, Y); });
+  g.closePath();
+}
+function drawFace(pts3, tex, painter, center, opt = {}) {
+  const sp = pts3.map(project);
+  let n = norm(cross(sub(world(pts3[1]), world(pts3[0])), sub(world(pts3[2]), world(pts3[0]))));
+  const cen = world([(pts3[0][0]+pts3[1][0]+pts3[2][0])/3, (pts3[0][1]+pts3[1][1]+pts3[2][1])/3, (pts3[0][2]+pts3[1][2]+pts3[2][2])/3]);
+  if (center && dot(n, sub(cen, world(center))) < 0) n = n.map(v => -v);
+  const facing = dot(n, sub(CAM(), cen));
+  if (!opt.both && facing <= 0) return;
+  g.save(); g.setTransform(DPR, 0, 0, DPR, 0, 0); triPath(sp, .6); g.clip();
+  const m = affine(tex, sp);
+  g.setTransform(DPR*m[0], DPR*m[1], DPR*m[2], DPR*m[3], DPR*m[4], DPR*m[5]);
+  painter(tex, facing > 0);
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  let lam = dot(facing > 0 ? n : n.map(v => -v), L3);             // daylight on the paper
+  lam = clamp(lam*.5 + .5) + (opt.ao || 0);
+  g.fillStyle = lam > .74 ? `rgba(255,250,238,${(lam - .74)*.8})` : `rgba(70,40,18,${(.74 - lam)*.95})`;
+  g.fill();
+  g.restore();
+  g.save(); g.setTransform(DPR, 0, 0, DPR, 0, 0);                 // folded edges
+  g.strokeStyle = "rgba(95,70,45,.32)"; g.lineWidth = .8; g.lineJoin = "round";
+  g.beginPath(); g.moveTo(sp[0][0], sp[0][1]); g.lineTo(sp[1][0], sp[1][1]); g.lineTo(sp[2][0], sp[2][1]); g.closePath(); g.stroke();
+  g.restore();
+}
+
+// ---------- what is drawn on the paper ----------
+function paperBase(x0, y0, x1, y1) {
+  g.fillStyle = CONFIG.paper; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+}
+function grainOver(x0, y0, x1, y1, a = .6) {
+  g.globalCompositeOperation = "multiply"; g.globalAlpha = a; g.fillStyle = grainPat; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+  g.globalCompositeOperation = "source-over"; g.globalAlpha = 1;
+}
+function pencilText(txt, x, y, size, col, rot = 0) {
+  g.save(); g.translate(x, y); g.rotate(rot);
+  g.font = `700 ${size}px Gaegu, cursive`; g.textAlign = "center"; g.textBaseline = "middle";
+  const A = g.globalAlpha; g.fillStyle = col; g.globalAlpha = A*.9; g.fillText(txt, 0, 0);
+  g.globalAlpha = A*.35; g.fillText(txt, .7, -.5);
+  g.restore(); g.globalAlpha = 1;
+}
+function darker(hex, k) {
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, gg = n >> 8 & 255, b = n & 255;
+  return `rgb(${r*k|0},${gg*k|0},${b*k|0})`;
+}
+function outerPainter(q) {
+  const [sx, sy] = SG[q], col = CONFIG.colours[q % CONFIG.colours.length];
+  return () => {
+    const x0 = Math.min(0, sx*s) - 4, x1 = Math.max(0, sx*s) + 4, y0 = Math.min(0, sy*s) - 4, y1 = Math.max(0, sy*s) + 4;
+    paperBase(x0, y0, x1, y1);
+    g.save(); g.beginPath(); g.rect(sx > 0 ? s*.09 : -s*.91, sy > 0 ? s*.09 : -s*.91, s*.82, s*.82); g.clip();
+    g.globalAlpha = .82; g.fillStyle = hatch[q]; g.fillRect(x0, y0, x1 - x0, y1 - y0); g.restore(); g.globalAlpha = 1;
+    // the other diagonal crease of the square
+    g.strokeStyle = "rgba(120,90,60,.2)"; g.lineWidth = .9; g.beginPath(); g.moveTo(sx*s, 0); g.lineTo(0, sy*s); g.stroke();
+    pencilText(col[0], sx*s*.56, sy*s*.56, s*.27, darker(col[1], .55), -.08 + q*.05);
+    if (q === 1) doodleStar(sx*s*.8, sy*s*.22, s*.07);
+    if (q === 3) { g.strokeStyle = "rgba(60,60,75,.6)"; g.lineWidth = 1.2; heartPath(g, sx*s*.24, sy*s*.82, s*.06); g.stroke(); }
+    grainOver(x0, y0, x1, y1);
+  };
+}
+function doodleStar(x, y, r) {
+  g.strokeStyle = "rgba(60,60,75,.6)"; g.lineWidth = 1.1; g.beginPath();
+  for (let i = 0; i <= 5; i++) { const a = -Math.PI/2 + i*Math.PI*.8; i ? g.lineTo(x + Math.cos(a)*r, y + Math.sin(a)*r) : g.moveTo(x + Math.cos(a)*r, y + Math.sin(a)*r); }
+  g.stroke();
+}
+function incenter(t) {
+  const a = Math.hypot(t[1][0]-t[2][0], t[1][1]-t[2][1]), b = Math.hypot(t[0][0]-t[2][0], t[0][1]-t[2][1]), c = Math.hypot(t[0][0]-t[1][0], t[0][1]-t[1][1]);
+  const p = a + b + c, x = (a*t[0][0] + b*t[1][0] + c*t[2][0])/p, y = (a*t[0][1] + b*t[1][1] + c*t[2][1])/p;
+  const area = Math.abs((t[1][0]-t[0][0])*(t[2][1]-t[0][1]) - (t[2][0]-t[0][0])*(t[1][1]-t[0][1]))/2;
+  return [x, y, 2*area/p];
+}
+function bbox(t) { const xs = t.map(p => p[0]), ys = t.map(p => p[1]); return [Math.min(...xs) - 4, Math.min(...ys) - 4, Math.max(...xs) + 4, Math.max(...ys) + 4]; }
+function innerPainter(q, dir, na = 1) {
+  const col = CONFIG.colours[(q + (dir === "X" ? 1 : 2)) % CONFIG.colours.length][1], n = NUM[dir][q];
+  return (t) => {
+    const [x0, y0, x1, y1] = bbox(t); paperBase(x0, y0, x1, y1);
+    const [ix, iy, r] = incenter(t);
+    const bm = [(t[0][0] + t[1][0])/2, (t[0][1] + t[1][1])/2];   // fold at the base gets a soft shadow
+    const gr = g.createLinearGradient(bm[0], bm[1], t[2][0], t[2][1]);
+    gr.addColorStop(0, "rgba(90,60,30,.28)"); gr.addColorStop(.45, "rgba(90,60,30,0)");
+    g.fillStyle = gr; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    if (na > 0) { g.globalAlpha = na; pencilText(String(n), ix, iy + r*.06, r*1.55, col, (n % 3 - 1)*.1); g.globalAlpha = 1; }
+    grainOver(x0, y0, x1, y1);
+  };
+}
+function pocketPainter(text, love) {
+  return (t) => {
+    const [x0, y0, x1, y1] = bbox(t); g.fillStyle = "#f3ecdc"; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    const [ix, iy, r] = incenter(t);
+    g.fillStyle = love ? CONFIG.loveInk : CONFIG.ink; g.font = `${r*.42}px "Nanum Pen Script", cursive`; g.textAlign = "center"; g.textBaseline = "middle";
+    const words = text.replace("♥", "").split(" "), lines = []; let cur = "";
+    for (const w of words) { if ((cur + " " + w).trim().length > 9 && cur) { lines.push(cur); cur = w; } else cur = (cur + " " + w).trim(); }
+    lines.push(cur);
+    lines.slice(0, 6).forEach((l, i) => g.fillText(l, ix, iy + (i - (Math.min(lines.length, 6) - 1)/2)*r*.42));
+    if (love) { g.fillStyle = CONFIG.loveInk; heartPath(g, ix + r*.9, iy - r*.6, r*.22); g.fill(); }
+    grainOver(x0, y0, x1, y1, .5);
+  };
+}
+function flapBackPainter(q, dir) {
+  const col = CONFIG.colours[(q + (dir === "X" ? 1 : 2)) % CONFIG.colours.length][1], n = NUM[dir][q];
+  return (t) => {
+    const [x0, y0, x1, y1] = bbox(t); paperBase(x0, y0, x1, y1);
+    const [ix, iy, r] = incenter(t);
+    g.save(); g.translate(ix, iy); g.scale(-1, 1); g.globalAlpha = .08; pencilText(String(n), 0, r*.06, r*1.55, col, 0); g.restore();
+    g.globalAlpha = 1; grainOver(x0, y0, x1, y1);
+  };
+}
+
+// ---------- game state ----------
+const st = {
+  stage: "pick", uX: 0, uY: 0, dir: "", queue: [], cur: null, round: 1,
+  colour: -1, spelled: 0, flap: null, flapT: 0, flapClose: 0,
+  text: "", love: false, textT: -1, textDur: 1, oldText: null, oldT: 0, hearts: [], snapT: -9, hop: 0
+};
+function nextDir(d) { return d === "X" ? "Y" : "X"; }
+function startColour(q, t) {
+  st.colour = q; st.spelled = 0;
+  const word = CONFIG.colours[q][0];
+  if (st.dir) st.queue.push({ to: "", soft: true });
+  let d = "";
+  for (let i = 0; i < word.length; i++) { d = nextDir(d); st.queue.push({ to: d, letter: true }); }
+  st.stage = "spell";
+  if (st.text) { st.oldText = { text: st.text, love: st.love }; st.oldT = t; st.text = ""; }
+  if (st.flap) { st.flapClose = t; }
+  st.hearts = [];
+  setHint(word.split("").map(() => "_").join(" "));
+}
+function fortuneFor() {
+  if (st.round === CONFIG.rigOn) return { text: CONFIG.last.replace(/\{name\}/g, CONFIG.name), love: true };
+  const i = (st.round - 1 - (st.round > CONFIG.rigOn ? 1 : 0)) % CONFIG.fortunes.length;
+  return { text: CONFIG.fortunes[i], love: false };
+}
+let hintCache = "";
+function setHint(h) { if (h !== hintCache) { $hint.textContent = h; hintCache = h; } }
+
+// ---------- sound: dry paper snap ----------
+let ac = null;
+function audio() {
+  if (!CONFIG.sound) return null;
+  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (ac.state === "suspended") ac.resume();
+  return ac;
+}
+function snapSound(v = 1) {
+  const a = ac; if (!a || a.state !== "running") return;
+  const sr = a.sampleRate, n = sr*.14 | 0, buf = a.createBuffer(1, n, sr), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) {
+    const t = i/sr, crack = t < .012 ? (Math.random()*2 - 1)*Math.exp(-t*240) : 0;
+    d[i] = ((Math.random()*2 - 1)*Math.exp(-t*55)*.55 + crack + Math.sin(2*Math.PI*(120 + 300*Math.exp(-t*60))*t)*Math.exp(-t*38)*.45)*v;
+  }
+  const src = a.createBufferSource(), bp = a.createBiquadFilter(), gn = a.createGain();
+  src.buffer = buf; bp.type = "bandpass"; bp.frequency.value = 2300 + Math.random()*600; bp.Q.value = .6; gn.gain.value = .5;
+  src.connect(bp); bp.connect(gn); gn.connect(a.destination); src.start();
+}
+
+// ---------- input ----------
+let faces2d = [];
+function pointIn(p, t) {
+  const s1 = (t[1][0]-t[0][0])*(p[1]-t[0][1]) - (t[1][1]-t[0][1])*(p[0]-t[0][0]);
+  const s2 = (t[2][0]-t[1][0])*(p[1]-t[1][1]) - (t[2][1]-t[1][1])*(p[0]-t[1][0]);
+  const s3 = (t[0][0]-t[2][0])*(p[1]-t[2][1]) - (t[0][1]-t[2][1])*(p[0]-t[2][0]);
+  return (s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0);
+}
+function nearestQuadrant(x, y) {
+  let best = 0, bd = 1e9;
+  for (let q = 0; q < 4; q++) {
+    const [sx, sy] = SG[q], p = project([sx*s*.5, sy*s*.5, s*.3]), d = Math.hypot(p[0] - x, p[1] - y);
+    if (d < bd) { bd = d; best = q; }
+  }
+  return best;
+}
+function onTap(x, y) {
+  audio();
+  const t = performance.now()/1000;
+  if (st.stage === "pick" || st.stage === "done") { startColour(nearestQuadrant(x, y), t); return; }
+  if (st.stage === "number") {
+    let best = null, bd = 1e9;
+    for (const f of faces2d) {
+      const c = [(f.sp[0][0] + f.sp[1][0] + f.sp[2][0])/3, (f.sp[0][1] + f.sp[1][1] + f.sp[2][1])/3];
+      const d = pointIn([x, y], f.sp) ? -1 : Math.hypot(c[0] - x, c[1] - y);
+      if (d < bd) { bd = d; best = f; }
+    }
+    if (!best) return;
+    const fo = fortuneFor();
+    st.flap = { q: best.q, dir: st.dir, n: NUM[st.dir][best.q], text: fo.text, love: fo.love };
+    st.flapT = t; st.flapClose = 0; st.stage = "reveal";
+    st.text = fo.text; st.love = fo.love; st.textT = t + .42; st.textDur = Math.min(1.35, .35 + fo.text.length*.023);
+    st.oldText = null; snapSound(.6);
+    setHint(fo.love ? "no take-backs ♥" : `nº ${st.flap.n} says…`);
+    if (fo.love) st.hearts = Array.from({ length: 7 }, (_, i) => ({ a: i/7*6.28 + Math.random()*.5, r: .8 + Math.random()*.5, d: i*.09 + Math.random()*.05, z: .7 + Math.random()*.5 }));
+    return;
+  }
+  if (st.stage === "reveal") {
+    if (st.flap && st.flap.love) st.round = 0;
+    st.round++; $no.textContent = "nº " + st.round;
+    startColour(nearestQuadrant(x, y), t);
+  }
+}
+cv.addEventListener("pointerdown", e => { e.preventDefault(); onTap(e.clientX, e.clientY); });
+
+// ---------- the loop ----------
+let last = performance.now()/1000;
+function frame(nowMs) {
+  const t = performance.now()/1000, dt = Math.min(.05, t - last); last = t;
+
+  // pumping
+  if (!st.cur && st.queue.length) { st.cur = { ...st.queue.shift(), from: st.dir, t0: t }; }
+  if (st.cur) {
+    const c = st.cur, dur = c.to === "" ? .3 : CONFIG.pump, p = clamp((t - c.t0)/dur);
+    let uF, uT;
+    if (!c.from) { uF = 0; uT = ease(p); }
+    else if (!c.to) { uF = 1 - ease(p); uT = 0; }
+    else { uF = 1 - ease(p*2); uT = ease(p*2 - 1); }
+    const set = (d, v) => { if (d === "X") st.uX = v; else if (d === "Y") st.uY = v; };
+    st.uX = st.uY = 0; set(c.from, uF); set(c.to, uT);
+    if (p >= 1) {
+      st.dir = c.to; st.cur = null; st.snapT = t; snapSound(c.to ? 1 : .55);
+      if (c.letter) {
+        st.spelled++; const w = CONFIG.colours[st.colour][0];
+        setHint(w.split("").map((ch, i) => i < st.spelled ? ch : "_").join(" "));
+        if (!st.queue.length) { st.stage = "number"; }
+      }
+      if (c.to === "" && !st.queue.length) st.stage = "pick";
+    }
+  } else if (st.stage === "number" && t - st.snapT > .45) setHint("pick a number");
+  else if (st.stage === "reveal" && st.textT > 0 && t > st.textT + st.textDur + 1.1 && !st.love) setHint("tap a colour · again");
+
+  // the little hop of each snap, and an idle wiggle that invites a tap
+  const sn = t - st.snapT;
+  LIFT = sn < .5 ? Math.sin(Math.min(1, sn/.18)*Math.PI)*s*.035*(sn < .18 ? 1 : 0) : 0;
+  let wig = 0;
+  if (st.stage === "pick" && !st.cur) { const k = (t % 3.2) - 2.2; if (k > 0 && k < .6) wig = Math.sin(k/.6*Math.PI)*.22*Math.sin(k*20); }
+  ROT = -.07 + Math.sin(t*.7)*.006 + (sn < .4 ? Math.sin(sn*30)*Math.exp(-sn*10)*.012 : 0);
+  const uX = Math.max(st.uX, wig > 0 ? wig : 0), uY = Math.max(st.uY, wig < 0 ? -wig : 0);
+  const over = sn < .35 && st.dir ? Math.sin(sn*22)*Math.exp(-sn*12)*.07 : 0;   // the paper springs past and settles
+  const UX = st.dir === "X" && !st.cur ? uX + over : uX, UY = st.dir === "Y" && !st.cur ? uY + over : uY;
+
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.drawImage(bg, 0, 0, W, H);
+  drawFortune(t);
+
+  const pyr = [0, 1, 2, 3].map(q => pyramid(q, UX, UY));
+  // flap angle
+  let fa = 0;
+  if (st.flap) {
+    fa = spring((t - st.flapT)/.6)*1.8;
+    if (st.flapClose) { const k = clamp((t - st.flapClose)/.22); fa *= 1 - ease(k); if (k >= 1) st.flap = null; }
+  }
+
+  drawShadow(pyr, fa);
+
+  // gap floor between the halves (the inside of the fold)
+  if (UX > .02 || UY > .02) {
+    const gx = .05*s*UX, gy = .05*s*UY, ex = UX > .02 ? gx : 0, ey = UY > .02 ? gy : 0;
+    g.save(); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.fillStyle = "rgba(120,92,62,.55)";
+    const pts = UX >= UY ? [[-ex, -s - gy, 0], [ex, -s - gy, 0], [ex, s + gy, 0], [-ex, s + gy, 0]] : [[-s - gx, -ey, 0], [s + gx, -ey, 0], [s + gx, ey, 0], [-s - gx, ey, 0]];
+    g.beginPath(); pts.map(project).forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.fill(); g.restore();
+  }
+
+  // pockets, back to front
+  const order = [0, 1, 2, 3].map(q => {
+    const P = pyr[q], c = [(P.I[0] + P.C[0])/2, (P.I[1] + P.C[1])/2, P.P[2]*.35];
+    return { q, z: project(c)[2], c };
+  }).sort((a, b) => a.z - b.z);
+  faces2d = [];
+  const openDir = UX > .55 ? "X" : UY > .55 ? "Y" : "";
+  let flapDraw = null;
+  for (const { q, c } of order) {
+    const P = pyr[q], [sx, sy] = SG[q], e = .045*s;
+    const tO = { I: [0, 0], A: [sx*s, 0], C: [sx*s, sy*s], B: [0, sy*s], P: [sx*e, sy*e] };
+    const tX = [[sx*.05*s, 0], [sx*.05*s, sy*s], [sx*(.05*s + e + .58*s), sy*e]];
+    const tY = [[0, sy*.05*s], [sx*s, sy*.05*s], [sx*e, sy*(.05*s + e + .58*s)]];
+    for (const dir of ["X", "Y"]) {
+      const tri = dir === "X" ? [P.I, P.B, P.P] : [P.I, P.A, P.P], tex = dir === "X" ? tX : tY;
+      const isFlap = st.flap && st.flap.q === q && st.flap.dir === dir && fa > .001;
+      if (isFlap) {
+        drawFace(tri, tex, pocketPainter(st.flap.text, st.flap.love), c, { ao: -.04 });
+        const axis = sub(tri[1], tri[0]);
+        let tip = rotAxis(tri[2], tri[0], axis, .1);
+        const sgn = tip[2] > tri[2][2] ? 1 : -1;
+        tip = rotAxis(tri[2], tri[0], axis, sgn*fa);
+        flapDraw = { tri: [tri[0], tri[1], tip], tex, q, dir, c };
+      } else drawFace(tri, tex, innerPainter(q, dir), c);
+      if (dir === openDir) faces2d.push({ q, sp: tri.map(project) });
+    }
+    drawFace([P.A, P.C, P.P], [tO.A, tO.C, tO.P], outerPainter(q), c);
+    drawFace([P.C, P.B, P.P], [tO.C, tO.B, tO.P], outerPainter(q), c);
+  }
+  if (flapDraw) {
+    const f = flapDraw, front = innerPainter(f.q, f.dir, clamp(1 - fa/.8)), back = flapBackPainter(f.q, f.dir);
+    drawFace(f.tri, f.tex, (tx, facing) => facing ? front(tx) : back(tx), null, { both: true });
+  }
+  requestAnimationFrame(frame);
+}
+
+function drawShadow(pyr, fa) {
+  const sc = shc.width/W;
+  shg.setTransform(1, 0, 0, 1, 0, 0); shg.clearRect(0, 0, shc.width, shc.height);
+  shg.setTransform(sc, 0, 0, sc, 0, 0); shg.fillStyle = "#000";
+  const groundPt = p => { const w = world(p), k = w[2]/L3[2], gp = [w[0] - L3[0]*k, w[1] - L3[1]*k, 0];
+    const ct = Math.cos(CONFIG.tilt), st2 = Math.sin(CONFIG.tilt), D = s*6.5, y2 = gp[1]*ct, z2 = gp[1]*st2, kk = D/(D - z2);
+    return [cx + gp[0]*kk, cy + y2*kk]; };
+  for (const P of pyr) for (const tri of [[P.I, P.A, P.P], [P.A, P.C, P.P], [P.C, P.B, P.P], [P.B, P.I, P.P], [P.I, P.A, P.C], [P.I, P.C, P.B]]) {
+    const q = tri.map(groundPt); shg.beginPath(); shg.moveTo(q[0][0], q[0][1]); shg.lineTo(q[1][0], q[1][1]); shg.lineTo(q[2][0], q[2][1]); shg.fill();
+  }
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = "multiply";
+  g.filter = `blur(${(s*.09*DPR).toFixed(1)}px)`; g.globalAlpha = .36; g.drawImage(shc, 0, 0, cv.width, cv.height);
+  g.filter = `blur(${(s*.025*DPR).toFixed(1)}px)`; g.globalAlpha = .3 - LIFT/s*2; g.drawImage(shc, 0, 0, cv.width, cv.height);
+  g.filter = "none"; g.globalAlpha = 1; g.globalCompositeOperation = "source-over"; g.restore();
+}
+
+// handwritten fortune on the notebook page, written in as if by pen
+function wrap(text, maxW) {
+  const words = text.split(" "), lines = []; let cur = "";
+  for (const w of words) { const tryL = cur ? cur + " " + w : w; if (g.measureText(tryL.replace("♥", "  ")).width > maxW && cur) { lines.push(cur); cur = w; } else cur = tryL; }
+  lines.push(cur); return lines;
+}
+function drawFortune(t) {
+  const B = paperBox, L = B.line;
+  const left = -B.w/2 + B.w*.13 + 12, maxW = B.w*.87 - 30;
+  const firstLine = Math.ceil((cy + s*1.28 - (B.y - B.h/2))/L - 2.2);
+  const baseY = k => -B.h/2 + L*2.2 + (firstLine + k)*L - L*.14;
+  const fs = Math.round(L*1.32);
+  g.save(); g.translate(B.x, B.y); g.rotate(B.a);
+  g.font = `${fs}px "Nanum Pen Script", cursive`; g.textBaseline = "alphabetic"; g.textAlign = "left";
+  const write = (text, love, prog, alpha) => {
+    const lines = wrap(text, maxW); const total = lines.reduce((a, l) => a + l.length, 0);
+    let shown = prog*total;
+    g.globalAlpha = alpha; g.fillStyle = love ? CONFIG.loveInk : CONFIG.ink; g.strokeStyle = g.fillStyle;
+    lines.forEach((ln, k) => {
+      const y = baseY(k), x = left + (k % 2 ? 6 : 0);
+      const n = Math.max(0, Math.min(ln.length, shown)); shown -= ln.length;
+      if (n <= 0) return;
+      const full = n >= ln.length, part = ln.slice(0, Math.ceil(n));
+      const wPart = g.measureText(part.replace("♥", "")).width, frac = n - Math.floor(n);
+      g.save(); g.beginPath(); g.rect(x - 4, y - fs, full ? 9999 : wPart - (1 - frac)*fs*.35 + 2, fs*1.4); g.clip();
+      let xx = x;
+      for (const seg of ln.split(/(♥)/)) {
+        if (seg === "♥") { heartPath(g, xx + fs*.32, y - fs*.32, fs*.28); g.fill(); xx += fs*.7; continue; }
+        g.fillText(seg, xx, y); xx += g.measureText(seg).width;
+      }
+      g.restore();
+      // a squiggle under the name in the rigged one
+      if (love && full) {
+        const i = ln.indexOf(CONFIG.name);
+        if (i >= 0) {
+          const nx = x + g.measureText(ln.slice(0, i)).width, nw = g.measureText(CONFIG.name).width;
+          const u = easeOut((t - st.textT - st.textDur)/.45); if (u > 0) {
+            g.lineWidth = 2; g.lineCap = "round"; g.beginPath();
+            for (let j = 0; j <= 24*u; j++) { const px = nx + nw*j/24, py = y + 6 + Math.sin(j*1.1)*2; j ? g.lineTo(px, py) : g.moveTo(px, py); }
+            g.stroke();
+          }
+        }
+      }
+    });
+    return lines.length;
+  };
+  if (st.oldText) { const a = 1 - clamp((t - st.oldT)/.35); if (a > 0) write(st.oldText.text, st.oldText.love, 1, a); }
+  if (st.text && t > st.textT) {
+    const n = write(st.text, st.love, clamp((t - st.textT)/st.textDur), 1);
+    if (st.love) {                                                        // little pen hearts pop around it
+      for (const h of st.hearts) {
+        const k = spring((t - st.textT - st.textDur - h.d)/.5); if (k <= 0) continue;
+        const hx = left + maxW*.5 + Math.cos(h.a)*maxW*.5*h.r, hy = baseY(0) + (n - 1)*L*.5 - fs*.3 + Math.sin(h.a)*L*(n*.5 + .9)*h.r*.9;
+        g.save(); g.translate(hx, hy); g.rotate(Math.cos(h.a)*.3); g.scale(k*h.z, k*h.z);
+        g.globalAlpha = .85; g.lineWidth = 1.6; heartPath(g, 0, 0, fs*.2); g.stroke(); g.restore();
+      }
+    }
+  }
+  g.restore(); g.globalAlpha = 1;
+}
+
+addEventListener("resize", resize);
+resize();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { hintCache = ""; });
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
