@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ink drop</title>
+<meta name="description" content="A tall glass of water. Tap to drop ink, watch it bloom, and wait for what it writes. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,300;1,9..144,600&family=DM+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#e4dbd3;color:#3a2a2c}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+.k{position:fixed;top:22px;left:18px;right:18px;display:flex;justify-content:space-between;margin:0;pointer-events:none;z-index:2;
+  font:500 9px/1 "DM Mono",ui-monospace,monospace;letter-spacing:.22em;text-transform:uppercase;color:#6e5f57}
+.msg{position:fixed;left:0;right:0;margin:0;text-align:center;pointer-events:none;z-index:3;padding:0 16px;opacity:0;
+  font:italic 300 19px/1.2 "Fraunces",Georgia,serif;font-variation-settings:"opsz" 40;color:#3b2228;letter-spacing:.005em}
+.hint{position:fixed;left:0;right:0;bottom:40px;margin:0;text-align:center;pointer-events:none;z-index:3;
+  font:500 9px/1 "DM Mono",ui-monospace,monospace;letter-spacing:.26em;text-transform:uppercase;color:#5c4d46}
+.credit{position:fixed;left:0;right:0;bottom:14px;text-align:center;z-index:3;font:400 10px "DM Mono",ui-monospace,monospace;color:#6e5f57;opacity:.8}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<p class="k"><span id="k1"></span><span id="k2"></span></p>
+<p class="msg" id="msg"></p>
+<p class="hint" id="hint"></p>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:italic 600 20px 'Fraunces'">a</span><span class="pre" style="font:italic 300 20px 'Fraunces'">a</span><span class="pre" style="font:500 20px 'DM Mono'">a</span>
+<script>
+// ===== Ink Drop · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly&msg=you%20got%20under%20my%20skin&hue=348
+const P = new URLSearchParams(location.search);
+const num = (k, d) => { const v = parseFloat(P.get(k)); return isFinite(v) ? v : d; };
+const CONFIG = {
+  name: (P.get("name") || "Delly").slice(0, 14),   // what the ink writes
+  msg: P.get("msg") ?? "you got under my skin",    // the small line under the glass
+  hue: num("hue", 348),        // main ink colour 0-360: 348 crimson, 300 plum, 215 ink blue, 15 rust
+  inks: [0, -128, -24, 12],    // hue shift of each next drop: crimson, ink blue, magenta, red
+  drops: 3,                    // drops before the ink starts writing
+  wait: 1.6,                   // seconds after the last drop before it gathers
+  hint: "tap to drop ink",
+  label: ["ink in water · studio", "100 mm  f/2.8"],
+  bubbles: 16,                 // tiny bubbles on the glass
+  auto: P.has("auto"),         // drops ink by itself (for a screen on a shelf)
+  sound: true,                 // a soft plip per drop and a swell when the name forms
+};
+
+// ---------- setup ----------
+const $ = id => document.getElementById(id);
+const cv = $("c"), X = cv.getContext("2d");
+const mk = (w, h) => { const c = document.createElement("canvas"); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; };
+let seed = 36; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const sm = u => (u = clamp(u, 0, 1), u * u * (3 - 2 * u));
+const io = u => (u = clamp(u, 0, 1), u < .5 ? 4 * u * u * u : 1 - Math.pow(2 - 2 * u, 3) / 2);
+const SERIF = '"Fraunces", Georgia, serif';
+$("k1").textContent = CONFIG.label[0]; $("k2").textContent = CONFIG.label[1];
+$("hint").textContent = CONFIG.hint; $("msg").textContent = CONFIG.msg;
+
+function hsl(h, s, l) {                        // -> [r,g,b] 0..1
+  h = ((h % 360) + 360) % 360 / 60; const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(h % 2 - 1)), m = l - c / 2;
+  const [r, g, b] = h < 1 ? [c, x, 0] : h < 2 ? [x, c, 0] : h < 3 ? [0, c, x] : h < 4 ? [0, x, c] : h < 5 ? [x, 0, c] : [c, 0, x];
+  return [r + m, g + m, b + m];
+}
+// each ink: its colour and how strongly it absorbs red / green / blue light
+const INKS = CONFIG.inks.map((o, i) => {
+  const rgb = hsl(CONFIG.hue + o, i === 1 ? .78 : .86, i === 1 ? .34 : .4);
+  return { rgb, abs: rgb.map(c => -Math.log(Math.max(.03, c))), css: rgb.map(c => Math.round(c * 255)) };
+});
+
+// ---------- sound (synthesized, starts on the first touch) ----------
+let ac = null;
+function audio() {
+  if (!CONFIG.sound) return null;
+  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (ac.state === "suspended") ac.resume();
+  return ac;
+}
+function plip(k) {
+  if (!ac) return; const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.frequency.setValueAtTime(1500 + 120 * k, t); o.frequency.exponentialRampToValueAtTime(380, t + .1);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.2, t + .004); g.gain.exponentialRampToValueAtTime(.0001, t + .28);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + .3);
+}
+function swell() {
+  if (!ac) return; const t = ac.currentTime;
+  [57, 64, 68, 71, 76].forEach((m, i) => {
+    const o = ac.createOscillator(), g = ac.createGain(); o.type = i ? "sine" : "triangle";
+    o.frequency.value = 440 * Math.pow(2, (m - 69) / 12);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.035, t + 1.8 + i * .2); g.gain.exponentialRampToValueAtTime(.0001, t + 6);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 6.1);
+  });
+}
+
+// ---------- layout ----------
+let W, H, DPR, G, bgC;
+const lens = s => 1.25 * s - .25 * s * s * s;          // a water cylinder magnifies the middle, squeezes the edges
+const unlens = v => { let s = v; for (let i = 0; i < 6; i++) s -= (lens(s) - v) / (1.25 - .75 * s * s); return clamp(s, -1, 1); };
+function layout() {
+  W = innerWidth; H = innerHeight; DPR = Math.min(2, devicePixelRatio || 1);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  const gh = Math.min(H * .69, 820), gw = Math.min(W * .6, gh * .62, 340);
+  const gTop = H * .105, gBot = gTop + gh, cx = W / 2, ry = gw * .075, th = Math.max(4, gw * .034);
+  const surf = gTop + gh * .14, base = gBot - gh * .075;
+  const wx0 = cx - gw / 2 + th, wx1 = cx + gw / 2 - th, hw = (wx1 - wx0) / 2;
+  G = { gh, gw, gTop, gBot, cx, ry, th, surf, base, wx0, wx1, hw, y0: surf - ry * .6, y1: base + ry * .6, horizon: gBot - gh * .2 };
+  $("msg").style.top = (gBot + Math.min(34, (H - gBot) * .3)) + "px";
+  paintBg(); simInit();
+}
+
+function paintBg() {
+  bgC = mk(W * DPR, H * DPR); const b = bgC.getContext("2d"); b.scale(DPR, DPR);
+  const hz = G.horizon;
+  let g = b.createLinearGradient(0, 0, 0, H);           // seamless paper: wall, soft sweep, table
+  g.addColorStop(0, "#d9cfc8"); g.addColorStop(hz / H * .55, "#e3d9d1"); g.addColorStop((hz - 30) / H, "#ddd2ca");
+  g.addColorStop(hz / H, "#d6cac1"); g.addColorStop((hz + 26) / H, "#e6ddd5"); g.addColorStop(1, "#ece4dd");
+  b.fillStyle = g; b.fillRect(0, 0, W, H);
+  g = b.createRadialGradient(W * .22, H * .2, 0, W * .22, H * .2, Math.max(W, H) * .7);   // softbox spill from the left
+  g.addColorStop(0, "rgba(255,250,244,.55)"); g.addColorStop(1, "rgba(255,250,244,0)");
+  b.fillStyle = g; b.fillRect(0, 0, W, H);
+  g = b.createRadialGradient(W / 2, H * .5, Math.min(W, H) * .3, W / 2, H * .5, Math.max(W, H) * .78);
+  g.addColorStop(0, "rgba(60,40,35,0)"); g.addColorStop(1, "rgba(60,40,35,.2)");
+  b.fillStyle = g; b.fillRect(0, 0, W, H);
+  const n = mk(160, 160), nx = n.getContext("2d"), d = nx.createImageData(160, 160);   // fine paper grain
+  for (let i = 0; i < d.data.length; i += 4) { const v = rnd() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 14; }
+  nx.putImageData(d, 0, 0); b.fillStyle = b.createPattern(n, "repeat"); b.fillRect(0, 0, W, H);
+}
+
+// ---------- fluid (velocity grid + three absorbance channels at 2x) ----------
+let NX, NY, U, V, U2, V2, PR, DV, CU, DX, DY, A, A2, BU;
+function simInit() {
+  NX = 64; NY = clamp(Math.round(NX * (G.y1 - G.y0) / (G.wx1 - G.wx0)), 60, 150);
+  const n = NX * NY; [U, V, U2, V2, PR, DV, CU, BU] = [0, 0, 0, 0, 0, 0, 0, 0].map(() => new Float32Array(n));
+  DX = NX * 2; DY = NY * 2; A = [0, 1, 2].map(() => new Float32Array(DX * DY)); A2 = [0, 1, 2].map(() => new Float32Array(DX * DY));
+  np = 0; img = null;
+}
+function samp(f, x, y, nx, ny) {
+  x -= .5; y -= .5;
+  x = x < 0 ? 0 : x > nx - 1.001 ? nx - 1.001 : x; y = y < 0 ? 0 : y > ny - 1.001 ? ny - 1.001 : y;
+  const i = x | 0, j = y | 0, fx = x - i, fy = y - j, k = i + j * nx;
+  return (f[k] * (1 - fx) + f[k + 1] * fx) * (1 - fy) + (f[k + nx] * (1 - fx) + f[k + nx + 1] * fx) * fy;
+}
+let buoy = 1, calm = 0, fade = .01;
+function step(dt) {
+  const nx = NX, ny = NY;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {       // heavy ink sinks
+    const a = 2 * i + 2 * j * DX; let d = 0;
+    for (let c = 0; c < 3; c++) { const f = A[c]; d += f[a] + f[a + 1] + f[a + DX] + f[a + DX + 1]; }
+    V[i + j * nx] += 15 * buoy * d * dt;
+  }
+  for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) { const k = i + j * nx; CU[k] = .5 * (V[k + 1] - V[k - 1] - U[k + nx] + U[k - nx]); }
+  const eps = 15 * (1 - calm);
+  for (let j = 2; j < ny - 2; j++) for (let i = 2; i < nx - 2; i++) {        // keep the curls curly
+    const k = i + j * nx; let fx = Math.abs(CU[k + nx]) - Math.abs(CU[k - nx]), fy = Math.abs(CU[k + 1]) - Math.abs(CU[k - 1]);
+    const l = Math.hypot(fx, fy) + 1e-5, c = CU[k] * eps * dt / l;
+    U[k] += fx * c; V[k] -= fy * c;
+  }
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const k = i + j * nx, x = i + .5 - U[k] * dt, y = j + .5 - V[k] * dt;
+    U2[k] = samp(U, x, y, nx, ny); V2[k] = samp(V, x, y, nx, ny);
+  }
+  [U, U2] = [U2, U]; [V, V2] = [V2, V];
+  const damp = Math.exp(-(0.35 + 2.2 * calm) * dt);
+  for (let k = 0; k < nx * ny; k++) { U[k] *= damp; V[k] *= damp; }
+  for (let j = 0; j < ny; j++) { U[j * nx] = 0; U[nx - 1 + j * nx] = 0; }
+  for (let i = 0; i < nx; i++) { V[i] = 0; V[i + (ny - 1) * nx] = 0; }
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const k = i + j * nx;
+    const uL = i > 0 ? U[k - 1] : -U[k], uR = i < nx - 1 ? U[k + 1] : -U[k], vT = j > 0 ? V[k - nx] : -V[k], vB = j < ny - 1 ? V[k + nx] : -V[k];
+    DV[k] = .5 * (uR - uL + vB - vT);
+  }
+  for (let it = 0; it < 22; it++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const k = i + j * nx, p = PR[k];
+    PR[k] = ((i > 0 ? PR[k - 1] : p) + (i < nx - 1 ? PR[k + 1] : p) + (j > 0 ? PR[k - nx] : p) + (j < ny - 1 ? PR[k + nx] : p) - DV[k]) * .25;
+  }
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const k = i + j * nx, p = PR[k];
+    U[k] -= .5 * ((i < nx - 1 ? PR[k + 1] : p) - (i > 0 ? PR[k - 1] : p));
+    V[k] -= .5 * ((j < ny - 1 ? PR[k + nx] : p) - (j > 0 ? PR[k - nx] : p));
+  }
+  const keep = Math.exp(-fade * dt);
+  for (let j = 0; j < DY; j++) for (let i = 0; i < DX; i++) {          // carry the ink
+    const k = i + j * DX, vx = (i + .5) / 2, vy = (j + .5) / 2;
+    const x = (vx - samp(U, vx, vy, nx, ny) * dt) * 2, y = (vy - samp(V, vx, vy, nx, ny) * dt) * 2;
+    for (let c = 0; c < 3; c++) A2[c][k] = samp(A[c], x, y, DX, DY) * keep;
+  }
+  [A, A2] = [A2, A];
+}
+
+// ---------- particles: ink filaments, later the heart and the name ----------
+const MAXP = 16000;
+const PX = new Float32Array(MAXP), PY = new Float32Array(MAXP), PC = new Uint8Array(MAXP), PS = new Uint8Array(MAXP),
+  TS = new Float32Array(MAXP), DU = new Float32Array(MAXP), TX = new Float32Array(MAXP), TY = new Float32Array(MAXP),
+  SX = new Float32Array(MAXP), SY = new Float32Array(MAXP), SP = new Float32Array(MAXP), PH = new Float32Array(MAXP), DK = new Int32Array(MAXP);
+let np = 0;
+const toX = x => G.cx + lens(2 * x / NX - 1) * G.hw, toY = y => G.y0 + y / NY * (G.y1 - G.y0);
+
+// ---------- drops, ripples, splashes, bubbles ----------
+const drops = [], rings = [], spl = [];
+let nDrops = 0, lastHit = -1, gatherAt = -1, swelled = false, T0 = performance.now(), msgOn = -1;
+function tap(x, user) {
+  if (user) audio();
+  const s = clamp((x - G.cx) / G.hw, -.62, .62);
+  drops.push({ x: G.cx + s * G.hw, t0: now(), k: nDrops % INKS.length, done: false });
+  nDrops++;
+}
+const now = () => (performance.now() - T0) / 1000;
+cv.addEventListener("pointerdown", e => { e.preventDefault(); tap(e.clientX, true); });
+
+function impact(d, t) {
+  const ink = INKS[d.k], cu = (unlens((d.x - G.cx) / G.hw) + 1) / 2 * NX, cj = (G.surf - G.y0) / (G.y1 - G.y0) * NY + 1;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {         // the drop punches down: a little vortex ring
+    const r2 = ((i + .5 - cu) ** 2) / 7 + ((j + .5 - cj - 2) ** 2) / 10; if (r2 > 9) continue;
+    const w = Math.exp(-r2); V[i + j * NX] += 58 * w; U[i + j * NX] += (rnd() - .5) * 10 * w;
+  }
+  for (let j = 0; j < DY; j++) for (let i = 0; i < DX; i++) {
+    const r2 = ((i + .5 - 2 * cu) ** 2 + (j + .5 - 2 * cj - 3) ** 2) / 20; if (r2 > 9) continue;
+    const w = Math.exp(-r2) * 3.6;
+    for (let c = 0; c < 3; c++) A[c][i + j * DX] += ink.abs[c] * w;
+  }
+  const n = Math.min(4200, MAXP - np);
+  for (let q = 0; q < n; q++) {
+    const a = rnd() * 6.283, r = Math.sqrt(-2 * Math.log(rnd() + 1e-6)) * .9;
+    PX[np] = cu + Math.cos(a) * r * 1.2; PY[np] = cj + 1 + Math.abs(Math.sin(a) * r) * 1.4; PC[np] = d.k; PS[np] = 0; PH[np] = rnd() * 6.283; np++;
+  }
+  rings.push({ x: d.x, t0: t }); d.hit = t; d.cu = cu; d.cj = cj;
+  for (let q = 0; q < 7; q++) spl.push({ x: d.x, y: G.surf, vx: (rnd() - .5) * 90, vy: -60 - rnd() * 120, r: .8 + rnd() * 1.2 });
+  lastHit = t; plip(d.k);
+}
+
+const bubbles = [];
+function makeBubbles() {
+  bubbles.length = 0;
+  for (let i = 0; i < CONFIG.bubbles; i++) bubbles.push({ s: (rnd() * 2 - 1) * .92, v: .15 + .82 * rnd(), r: .6 + rnd() * rnd() * 2.4, rise: 0, ph: rnd() * 6.3 });
+  for (let i = 0; i < 4; i++) bubbles.push({ s: (rnd() * 2 - 1) * .7, v: rnd(), r: 1.3 + rnd() * 1.4, rise: 9 + rnd() * 8, ph: rnd() * 6.3 });
+}
+
+// ---------- the ending: heart + name as point targets ----------
+function targets() {
+  const w = Math.ceil(G.wx1 - G.wx0), h = Math.ceil(G.y1 - G.y0), m = mk(w, h), c = m.getContext("2d");
+  const hcY = (G.surf - G.y0) + (G.base - G.surf) * .27, hs = Math.min(G.hw * .5, (G.base - G.surf) * .17) / 16;
+  const heart = () => { c.beginPath(); for (let a = 0; a <= 6.2832; a += .02) { const x = 16 * Math.sin(a) ** 3, y = -(13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)); c.lineTo(w / 2 + x * hs, hcY + y * hs); } c.closePath(); };
+  c.fillStyle = "#000"; heart(); c.fill();
+  const fill = c.getImageData(0, 0, w, h).data; c.clearRect(0, 0, w, h);
+  c.lineWidth = Math.max(5, hs * 2.4); c.strokeStyle = "#000"; heart(); c.stroke();
+  const edge = c.getImageData(0, 0, w, h).data; c.clearRect(0, 0, w, h);
+  let fs = 100; c.font = `italic 600 ${fs}px ${SERIF}`;
+  fs = Math.min(fs * (w * .84) / c.measureText(CONFIG.name).width, (G.base - G.surf) * .22);
+  c.font = `italic 600 ${fs}px ${SERIF}`; c.textAlign = "center"; c.textBaseline = "alphabetic";
+  const nY = (G.surf - G.y0) + (G.base - G.surf) * .69;
+  c.lineWidth = fs * .035; c.strokeStyle = "#000"; c.fillText(CONFIG.name, w / 2, nY); c.strokeText(CONFIG.name, w / 2, nY);
+  const txt = c.getImageData(0, 0, w, h).data;
+  const hp = [], tp = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const k = (x + y * w) * 4 + 3;
+    if (fill[k] > 128 || edge[k] > 128) hp.push(x, y, edge[k] > 128 && fill[k] < 250 ? 1 : 0);
+    if (txt[k] > 100) tp.push(x, y);
+  }
+  return { hp, tp, ox: G.wx0, oy: G.y0, w, hcY, hs, nY, fs };
+}
+
+function gather(t) {
+  const T = targets();
+  const tot = Math.min(MAXP, Math.max(np, 13000));
+  for (let src = np; np < tot; np++) {                              // too few drops? the ink stretches
+    const q = (rnd() * src) | 0; PX[np] = PX[q] + (rnd() - .5) * 3; PY[np] = PY[q] + (rnd() - .5) * 3; PC[np] = PC[q]; PS[np] = 0; PH[np] = rnd() * 6.283;
+  }
+  const nh = Math.round(tot * .36), nn = tot - nh;
+  const rank = [0, 3, 1.8, 2.6].map(v => v / 2.6);                  // reds to the heart, blues to the name
+  const idx = Array.from({ length: tot }, (_, i) => i).sort((a, b) => (rank[PC[a]] + PH[a] * .09) - (rank[PC[b]] + PH[b] * .09));
+  const pick = (arr, step, n, wantEdge) => {                       // n random target points, edge points twice as likely
+    const out = [], cnt = arr.length / step;
+    while (out.length < n * 2) { const q = ((rnd() * cnt) | 0) * step; if (step === 3 && !arr[q + 2] && rnd() < .6) continue; out.push(arr[q] + T.ox + (rnd() - .5) * .8, arr[q + 1] + T.oy + (rnd() - .5) * .8); }
+    return out;
+  };
+  const groups = [[idx.slice(0, nh), pick(T.hp, 3, nh), 0], [idx.slice(nh), pick(T.tp, 2, nn), 1]];
+  for (const [ps, tg, g] of groups) {
+    ps.sort((a, b) => PX[a] - PX[b]);
+    const order = Array.from({ length: ps.length }, (_, i) => i).sort((a, b) => tg[2 * a] - tg[2 * b]);
+    for (let q = 0; q < ps.length; q++) {
+      const i = ps[q], o = order[q], tx = tg[2 * o], ty = tg[2 * o + 1];
+      TX[i] = tx; TY[i] = ty; PS[i] = 1;
+      const ux = (tx - T.ox) / T.w;
+      if (g === 0) { TS[i] = t + .45 * rnd() + .5 * Math.min(1, Math.hypot(tx - G.cx, ty - T.oy - T.hcY) / (T.hs * 17)); DU[i] = 1.6 + .5 * rnd(); }
+      else { TS[i] = t + 1.25 + 1.05 * ux + .3 * rnd(); DU[i] = 1.45 + .45 * rnd(); }
+      SP[i] = (rnd() < .5 ? -1 : 1) * (1.6 + rnd() * 1.8);
+      const di = clamp(Math.round((unlens((tx - G.cx) / G.hw) + 1) * NX - .5), 0, DX - 1), dj = clamp(Math.round((ty - G.y0) / (G.y1 - G.y0) * DY - .5), 0, DY - 1);
+      DK[i] = di + dj * DX;
+    }
+  }
+  msgOn = t + 3.4;
+}
+
+// ---------- water image (ink + cylinder shading), drawn with multiply ----------
+let img = null, imgC = null, colI, colF, colS, rowJ, rowF;
+const LUT = new Float32Array(1201); for (let i = 0; i <= 1200; i++) LUT[i] = Math.exp(-i / 100);
+let meanT = [1, 1, 1];
+function waterImage() {
+  const w = Math.max(8, Math.round(G.wx1 - G.wx0)), h = Math.max(8, Math.round(G.y1 - G.y0));
+  if (!img || img.width !== w || img.height !== h) {
+    imgC = mk(w, h); img = imgC.getContext("2d").createImageData(w, h);
+    colI = new Int32Array(w); colF = new Float32Array(w); colS = new Float32Array(w); rowJ = new Int32Array(h); rowF = new Float32Array(h);
+    for (let x = 0; x < w; x++) {
+      const v = ((x + .5) / w) * 2 - 1, s = unlens(v); let d = (s + 1) / 2 * DX - .5; d = clamp(d, 0, DX - 1.001);
+      colI[x] = d | 0; colF[x] = d - (d | 0);
+      const e = Math.abs(v); colS[x] = 1 - .5 * sm((e - .8) / .2) - .07 * sm((e - .45) / .5) + .05 * Math.exp(-(((v + .55) / .12) ** 2));
+    }
+    for (let y = 0; y < h; y++) { let d = (y + .5) / h * DY - .5; d = clamp(d, 0, DY - 1.001); rowJ[y] = d | 0; rowF[y] = d - (d | 0); }
+  }
+  const D = img.data, [A0, A1, A2_] = A; let sr = 0, sg = 0, sb = 0, p = 0;
+  for (let y = 0; y < h; y++) {
+    const j = rowJ[y] * DX, fy = rowF[y], gy = 1 - fy;
+    for (let x = 0; x < w; x++, p += 4) {
+      const k = colI[x] + j, fx = colF[x], gx = 1 - fx, s = colS[x];
+      const w00 = gx * gy, w10 = fx * gy, w01 = gx * fy, w11 = fx * fy;
+      const a0 = A0[k] * w00 + A0[k + 1] * w10 + A0[k + DX] * w01 + A0[k + DX + 1] * w11;
+      const a1 = A1[k] * w00 + A1[k + 1] * w10 + A1[k + DX] * w01 + A1[k + DX + 1] * w11;
+      const a2 = A2_[k] * w00 + A2_[k + 1] * w10 + A2_[k + DX] * w01 + A2_[k + DX + 1] * w11;
+      const t0 = LUT[Math.min(1200, (a0 * 100) | 0)], t1 = LUT[Math.min(1200, (a1 * 100) | 0)], t2 = LUT[Math.min(1200, (a2 * 100) | 0)];
+      sr += t0; sg += t1; sb += t2;
+      D[p] = 255 * Math.min(1, t0 * s * .975); D[p + 1] = 255 * Math.min(1, t1 * s * .99); D[p + 2] = 255 * Math.min(1, t2 * s); D[p + 3] = 255;
+    }
+  }
+  const n = w * h; meanT = [sr / n, sg / n, sb / n];
+  imgC.getContext("2d").putImageData(img, 0, 0);
+}
+
+// ---------- drawing ----------
+function ell(x, y, rx, ry, a0 = 0, a1 = 6.2832) { X.beginPath(); X.ellipse(x, y, Math.max(.1, rx), Math.max(.1, ry), 0, a0, a1); }
+function waterClip() {
+  const { cx, hw, surf, base, ry } = G; X.beginPath();
+  X.ellipse(cx, surf, hw, ry, 0, Math.PI, 0); X.lineTo(cx + hw, base); X.ellipse(cx, base, hw, ry, 0, 0, Math.PI); X.closePath();
+}
+
+function draw(t) {
+  const { cx, gw, gTop, gBot, ry, th, surf, base, wx0, wx1, hw } = G, gx0 = cx - gw / 2, gx1 = cx + gw / 2;
+  X.setTransform(DPR, 0, 0, DPR, 0, 0); X.globalCompositeOperation = "source-over"; X.globalAlpha = 1;
+  X.drawImage(bgC, 0, 0, W, H);
+
+  // shadow + caustic on the table (the caustic takes the colour of the water)
+  const sy = gBot - ry * .6;
+  let g = X.createRadialGradient(cx + gw * .3, sy, 0, cx + gw * .3, sy, gw * 1.1);
+  g.addColorStop(0, "rgba(70,50,45,.38)"); g.addColorStop(.6, "rgba(70,50,45,.14)"); g.addColorStop(1, "rgba(70,50,45,0)");
+  X.save(); X.translate(0, sy); X.scale(1, .2); X.translate(0, -sy); X.fillStyle = g; X.fillRect(cx - gw, sy - gw * 1.2, gw * 3, gw * 2.4); X.restore();
+  const tint = meanT.map(v => Math.round(255 * Math.min(1, .25 + .9 * v * v)));
+  const kx = cx + gw * .55, ky = gBot + ry * .1, krx = gw * .42, kry = ry * .9;
+  X.save(); ell(kx, ky, krx, kry); X.clip();
+  g = X.createRadialGradient(kx, ky, 0, kx, ky, krx);
+  g.addColorStop(0, `rgba(${tint},.75)`); g.addColorStop(.55, `rgba(${tint},.35)`); g.addColorStop(1, `rgba(${tint},0)`);
+  X.fillStyle = g; X.fillRect(kx - krx, ky - kry, krx * 2, kry * 2);
+  X.strokeStyle = `rgba(${tint.map(v => Math.min(255, v + 30))},.55)`; X.lineWidth = .8; X.globalAlpha = .6;
+  for (let q = 0; q < 5; q++) {
+    X.beginPath();
+    for (let x = -krx; x <= krx; x += 3) {
+      const y = (q - 2) * kry * .3 + Math.sin(x * .09 + t * 1.4 + q * 1.7) * 2.2 + Math.sin(x * .031 - t * .8 + q) * 3;
+      x === -krx ? X.moveTo(kx + x, ky + y) : X.lineTo(kx + x, ky + y);
+    }
+    X.stroke();
+  }
+  X.globalAlpha = 1; X.restore();
+
+  // the glass body: what's behind, seen through glass and water
+  X.save(); X.beginPath(); X.rect(gx0, gTop, gw, gBot - gTop); X.clip();
+  X.fillStyle = "rgba(205,214,216,.12)"; X.fillRect(gx0, gTop, gw, gBot - gTop);
+  X.restore();
+  X.save(); waterClip(); X.clip();
+  const sh = G.gh * .05;          // the sweep behind the glass shows up higher and squeezed: refraction
+  X.drawImage(bgC, (wx0 - gw * .32) * DPR, (surf - ry + sh) * DPR, (wx1 - wx0 + gw * .64) * DPR, (base - surf + 2 * ry) * DPR * 1.1,
+    wx0, surf - ry, wx1 - wx0, (base - surf + 2 * ry));
+  waterImage();
+  X.globalCompositeOperation = "multiply";
+  X.drawImage(imgC, wx0, G.y0, wx1 - wx0, G.y1 - G.y0);
+  // particles: fine ink filaments, later the heart and the name
+  const a1 = .055, a2 = .3;
+  for (let k = 0; k < INKS.length; k++) {
+    const c = INKS[k].css;
+    for (let bin = 0; bin < 5; bin++) {
+      X.fillStyle = `rgba(${c},${(a1 + (a2 - a1) * bin / 4).toFixed(3)})`;
+      for (let i = 0; i < np; i++) {
+        if (PC[i] !== k) continue;
+        let x, y, b = 0;
+        if (PS[i] === 2 || (PS[i] === 1 && t >= TS[i])) {
+          const u = clamp((t - TS[i]) / DU[i], 0, 1), e = io(u);
+          b = Math.min(4, (e * 4.4) | 0);
+          if (b !== bin) continue;
+          const ox = SX[i] - TX[i], oy = SY[i] - TY[i], an = SP[i] * e, cs = Math.cos(an), sn = Math.sin(an), f = 1 - e;
+          x = TX[i] + (ox * cs - oy * sn) * f + Math.sin(t * 1.1 + PH[i]) * .45 * e;
+          y = TY[i] + (ox * sn + oy * cs) * f + Math.cos(t * .9 + PH[i] * 1.3) * .45 * e;
+        } else { if (bin) continue; x = toX(PX[i]); y = toY(PY[i]); }
+        X.fillRect(x - .65, y - .65, 1.3, 1.3);
+      }
+    }
+  }
+  X.globalCompositeOperation = "source-over";
+  // bubbles
+  for (const b of bubbles) {
+    const y = b.rise ? base - ((b.v * (base - surf) + t * b.rise) % (base - surf - 6)) : surf + 8 + b.v * (base - surf - 14);
+    const x = cx + lens(b.s) * hw + (b.rise ? Math.sin(t * 1.3 + b.ph) * 1.6 : 0), r = b.r;
+    X.beginPath(); X.arc(x, y, r, 0, 6.2832); X.fillStyle = "rgba(255,255,255,.22)"; X.fill();
+    X.lineWidth = .7; X.strokeStyle = "rgba(55,50,58,.42)"; X.stroke();
+    X.fillStyle = "rgba(255,255,255,.9)"; X.fillRect(x - r * .45, y - r * .5, Math.max(.6, r * .45), Math.max(.6, r * .45));
+  }
+  X.restore();
+
+  // water surface: meniscus, rings
+  X.save(); ell(cx, surf, hw, ry); X.clip();
+  g = X.createLinearGradient(0, surf - ry, 0, surf + ry);
+  g.addColorStop(0, "rgba(255,255,255,.05)"); g.addColorStop(.7, "rgba(255,253,250,.32)"); g.addColorStop(1, "rgba(255,255,255,.12)");
+  X.fillStyle = g; X.fillRect(wx0, surf - ry, wx1 - wx0, 2 * ry);
+  for (const r of rings) for (let q = 0; q < 3; q++) {
+    const age = t - r.t0 - q * .14; if (age <= 0 || age > 1.8) continue;
+    const rad = age * (70 - q * 12) + 2, al = (1 - age / 1.8) ** 1.5;
+    ell(r.x, surf, rad, rad * ry / hw * 1.1); X.lineWidth = 1.2; X.strokeStyle = `rgba(255,255,255,${.75 * al})`; X.stroke();
+    ell(r.x, surf + 1, rad * 1.03, rad * ry / hw * 1.1); X.lineWidth = .8; X.strokeStyle = `rgba(60,45,45,${.25 * al})`; X.stroke();
+  }
+  X.restore();
+  ell(cx, surf, hw, ry, Math.PI, 0); X.lineWidth = .9; X.strokeStyle = "rgba(70,60,62,.28)"; X.stroke();
+  ell(cx, surf, hw, ry, 0, Math.PI); X.lineWidth = 1.4; X.strokeStyle = "rgba(60,52,55,.45)"; X.stroke();
+  ell(cx, surf + 2.2, hw * .99, ry, .15, Math.PI - .15); X.lineWidth = 1.2; X.strokeStyle = "rgba(255,255,255,.7)"; X.stroke();
+  for (const sgn of [-1, 1]) {      // the meniscus climbs the wall
+    const x = cx + sgn * hw; X.beginPath(); X.moveTo(x - sgn * 9, surf + ry * .25); X.quadraticCurveTo(x - sgn * 1.5, surf + ry * .1, x, surf - 5);
+    X.lineWidth = 1.6; X.strokeStyle = "rgba(255,255,255,.75)"; X.stroke();
+  }
+
+  // glass walls: dark refraction edges, a bright inner line, softbox reflections
+  for (const [x0, sgn] of [[gx0, 1], [gx1, -1]]) {
+    g = X.createLinearGradient(x0, 0, x0 + sgn * th * 2.2, 0);
+    g.addColorStop(0, "rgba(38,36,40,.62)"); g.addColorStop(.3, "rgba(70,68,72,.3)"); g.addColorStop(.48, "rgba(255,255,255,.55)"); g.addColorStop(.62, "rgba(60,58,62,.22)"); g.addColorStop(1, "rgba(60,58,62,0)");
+    X.fillStyle = g; X.fillRect(Math.min(x0, x0 + sgn * th * 2.2), gTop, th * 2.2, gBot - gTop - ry);
+  }
+  const spec = (x, w, a, y0, y1) => {
+    g = X.createLinearGradient(x - w, 0, x + w, 0);
+    g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(.5, `rgba(255,255,255,${a})`); g.addColorStop(1, "rgba(255,255,255,0)");
+    X.fillStyle = g; X.fillRect(x - w, y0, 2 * w, y1 - y0);
+  };
+  spec(gx0 + gw * .15, gw * .045, .6, gTop + ry * 2, gBot - ry * 2.5);
+  spec(gx0 + gw * .23, gw * .012, .45, gTop + ry * 3, gBot - ry * 3);
+  spec(gx1 - gw * .11, gw * .01, .5, gTop + ry * 2, gBot - ry * 2.5);
+  // thick base
+  X.save(); X.beginPath(); X.moveTo(gx0, base); X.ellipse(cx, base, gw / 2, ry, 0, Math.PI, 0, true); X.lineTo(gx1, gBot - ry); X.ellipse(cx, gBot - ry, gw / 2, ry, 0, 0, Math.PI); X.closePath(); X.clip();
+  g = X.createLinearGradient(0, base - ry, 0, gBot);
+  g.addColorStop(0, "rgba(255,255,255,.5)"); g.addColorStop(.35, "rgba(190,196,198,.25)"); g.addColorStop(.75, "rgba(255,255,255,.55)"); g.addColorStop(1, "rgba(80,76,80,.35)");
+  X.fillStyle = g; X.fillRect(gx0, base - ry, gw, gBot - base + ry);
+  X.fillStyle = `rgba(${tint},.35)`; X.fillRect(cx - gw * .3, gBot - ry * 1.7, gw * .6, ry * .5);
+  X.restore();
+  ell(cx, base, hw, ry, 0, Math.PI); X.lineWidth = 1; X.strokeStyle = "rgba(60,55,58,.35)"; X.stroke();
+  ell(cx, gBot - ry, gw / 2, ry, 0, Math.PI); X.lineWidth = 1.3; X.strokeStyle = "rgba(40,36,40,.55)"; X.stroke();
+  ell(cx, gBot - ry - 2, gw / 2 - 3, ry * .9, .2, Math.PI - .2); X.lineWidth = 1; X.strokeStyle = "rgba(255,255,255,.6)"; X.stroke();
+  // rim
+  ell(cx, gTop + ry, gw / 2, ry); X.lineWidth = 1.2; X.strokeStyle = "rgba(45,42,46,.5)"; X.stroke();
+  ell(cx, gTop + ry + 1.6, gw / 2 - th * .7, ry * .9, Math.PI, 0); X.lineWidth = 1; X.strokeStyle = "rgba(255,255,255,.75)"; X.stroke();
+  ell(cx, gTop + ry - 1, gw / 2 - 1, ry, .25, Math.PI - .25); X.lineWidth = 1.2; X.strokeStyle = "rgba(255,255,255,.65)"; X.stroke();
+  X.lineWidth = 1; X.strokeStyle = "rgba(40,38,42,.45)";
+  X.beginPath(); X.moveTo(gx0 + .5, gTop + ry); X.lineTo(gx0 + .5, gBot - ry); X.moveTo(gx1 - .5, gTop + ry); X.lineTo(gx1 - .5, gBot - ry); X.stroke();
+
+  // falling drops and splashes
+  for (const d of drops) {
+    if (d.done) continue;
+    const u = t - d.t0, y = -24 + .5 * DROPG * u * u, c = INKS[d.k].css;
+    const st = Math.min(1.6, 1 + u * 1.4);
+    X.save(); X.translate(d.x, y); X.scale(1 / Math.sqrt(st), st);
+    X.beginPath(); X.moveTo(0, -7); X.bezierCurveTo(3.5, -2, 4.6, 1.5, 4.6, 3); X.arc(0, 3, 4.6, 0, Math.PI); X.bezierCurveTo(-4.6, 1.5, -3.5, -2, 0, -7);
+    X.fillStyle = `rgb(${c.map(v => v * .55 | 0)})`; X.fill();
+    X.fillStyle = "rgba(255,255,255,.7)"; X.fillRect(-2.4, 0, 1.4, 2.2);
+    X.restore();
+  }
+  for (const s of spl) { X.beginPath(); X.arc(s.x, s.y, s.r, 0, 6.2832); X.fillStyle = "rgba(255,255,255,.85)"; X.fill(); X.lineWidth = .5; X.strokeStyle = "rgba(60,50,55,.4)"; X.stroke(); }
+}
+
+// ---------- the one loop ----------
+let DROPG = 3000, last = performance.now(), autoK = 0;
+const AUTO = [1.0, 2.2, 3.4];
+function frame(nowMs) {
+  const dt = clamp((nowMs - last) / 1000, .001, .05); last = nowMs; const t = now();
+  DROPG = 2 * (G.surf + 24) / (.4 * .4);
+  if (CONFIG.auto && autoK < AUTO.length && t >= AUTO[autoK]) { tap(G.cx + [-.35, .3, -.05][autoK] * G.hw); autoK++; }
+  for (const d of drops) if (!d.done && -24 + .5 * DROPG * (t - d.t0) ** 2 >= G.surf) { d.done = true; impact(d, t); }
+  for (let i = spl.length - 1; i >= 0; i--) { const s = spl[i]; s.vy += 900 * dt; s.x += s.vx * dt; s.y += s.vy * dt; if (s.y > G.surf && s.vy > 0) spl.splice(i, 1); }
+  // gather after enough drops (or after a long pause)
+  if (gatherAt < 0 && nDrops && drops.every(d => d.done) && lastHit > 0 && (nDrops >= CONFIG.drops ? t - lastHit > CONFIG.wait : t - lastHit > 6)) { gatherAt = t; gather(t); }
+  if (gatherAt >= 0) {
+    const g = t - gatherAt; buoy = 1 - sm(g / 1.5); calm = sm((g - .8) / 3); fade = .01 + .32 * sm(g / 2);
+    if (!swelled && g > 1.4) { swelled = true; swell(); }
+  }
+  for (const d of drops) if (d.hit && t - d.hit < .9) {           // the last of the drop keeps bleeding in: a thin stem
+    const ink = INKS[d.k].abs, w = .5 * (1 - (t - d.hit) / .9) * dt * 30, i = Math.round(2 * d.cu), j = Math.round(2 * d.cj + 1);
+    for (let q = -1; q <= 1; q++) for (let c = 0; c < 3; c++) A[c][clamp(i + q, 0, DX - 1) + j * DX] += ink[c] * w * (q ? .5 : 1);
+  }
+  step(dt);
+  for (let i = 0; i < np; i++) {
+    if (PS[i] === 1 && t >= TS[i]) { SX[i] = toX(PX[i]); SY[i] = toY(PY[i]); PS[i] = 2; }
+    if (PS[i] === 2) {
+      if (t > TS[i] + DU[i] * .85) { const k = DK[i], ink = INKS[PC[i]].abs; for (let c = 0; c < 3; c++) A[c][k] += ink[c] * .0035; }
+      continue;
+    }
+    const x = PX[i], y = PY[i];
+    PX[i] = clamp(x + samp(U, x, y, NX, NY) * dt + (rnd() - .5) * .05, .3, NX - .3);
+    PY[i] = clamp(y + samp(V, x, y, NX, NY) * dt + (rnd() - .5) * .05, .3, NY - .3);
+  }
+  draw(t);
+  const hint = $("hint").style; hint.opacity = nDrops ? Math.max(0, 1 - (t - drops[0].t0) * 2) : .55 + .45 * Math.sin(t * 2.4) ** 2;
+  if (msgOn > 0) $("msg").style.opacity = sm((t - msgOn) / 1.2);
+  requestAnimationFrame(frame);
+}
+addEventListener("resize", () => { layout(); makeBubbles(); gatherAt = -1; msgOn = -1; $("msg").style.opacity = 0; });
+layout(); makeBubbles();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
