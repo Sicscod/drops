@@ -43,6 +43,7 @@ Saw a drop in a video? Its number is the folder.
 | 34 | [📝 Cootie Catcher](34-cootie-catcher) | A paper fortune teller on a school desk snaps open, a pen writes your fortune, and the third one is rigged for Delly |
 | 35 | [🔒 Love Lock](35-love-lock) | A brass love lock on a bridge at golden hour. Roll the dials to your date, it snaps shut and the key goes in the river |
 | 36 | [🖋️ Ink Drop](36-ink-drop) | Tap ink into a glass of water, it blooms in crimson and blue curls, then settles into a heart and her name |
+| 37 | [🔴 Laser Cat](37-laser-cat) | A cartoon cat chases your finger's laser dot, pounces, bonks the wall and purrs. ?fur=&speed=&dot= |
 
 ## How to use a drop
 1. Open its folder → download `index.html`

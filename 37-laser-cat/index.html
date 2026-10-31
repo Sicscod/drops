@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>laser cat</title>
+<meta name="description" content="A chunky cat in a dark living room. Your finger is the laser pointer. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Geist+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#1c1719;color:#efe2d0}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:none}
+.k,.n{position:fixed;top:22px;margin:0;pointer-events:none;z-index:2;font:500 9.5px/1 "Geist Mono",ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;color:#efe2d0;opacity:.55}
+.k{left:16px}
+.n{right:16px;opacity:.8;transform-origin:100% 50%}
+.n b{font-weight:500;color:#ffd9a8}
+.hint{position:fixed;left:0;right:0;bottom:34px;margin:0;text-align:center;pointer-events:none;z-index:2;font:500 10px/1 "Geist Mono",ui-monospace,monospace;letter-spacing:.22em;text-transform:uppercase;color:#efe2d0}
+.credit{position:fixed;left:0;right:0;bottom:13px;text-align:center;z-index:3;font:400 10.5px "Geist Mono",ui-monospace,monospace;color:#efe2d0;opacity:.5}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<p class="k" id="label">living room · 2:14 am</p>
+<p class="n" id="count">pounces: <b>0</b></p>
+<p class="hint" id="hint">drag anywhere · you're the laser</p>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:700 20px Kalam">a</span><span class="pre" style="font:400 20px Kalam">a</span>
+<script>
+// ===== Laser Cat · free code by @sicscod.drops =====
+// Try: yoursite/?fur=black&speed=1.3&dot=%2300ff88
+const P = new URLSearchParams(location.search);
+const FURS = {   // fur, stripes / shade, belly, eyes, inner ear, nose
+  orange: { fur: "#ec8b3e", dark: "#c3622a", light: "#f8cf9c", eye: "#a6d65a", ear: "#f0a19b", nose: "#e2747c", stripes: true },
+  black:  { fur: "#332c2f", dark: "#221d1f", light: "#4b4246", eye: "#f4c64a", ear: "#8a5a60", nose: "#7a5157", stripes: false },
+  grey:   { fur: "#989ba6", dark: "#6e717d", light: "#d2d3d9", eye: "#f1b64c", ear: "#e8a3a7", nose: "#d98490", stripes: true },
+  white:  { fur: "#f3eee5", dark: "#d8ccbb", light: "#ffffff", eye: "#71b8e8", ear: "#f2a7af", nose: "#ee8f9b", stripes: false },
+};
+const hex = v => v && /^#?[0-9a-f]{3,8}$/i.test(v) ? (v[0] === "#" ? v : "#" + v) : null;
+const CONFIG = {
+  fur: FURS[P.get("fur")] ? P.get("fur") : "orange",   // orange | black | grey | white
+  speed: Math.min(2.5, Math.max(.4, +(P.get("speed") || 1))),  // how fast the cat runs (1 = normal house cat)
+  dot: hex(P.get("dot")) || "#ff2d2d",                  // laser colour
+  pounceRange: 175,       // px: how close the dot has to be before it crouches
+  wiggle: [.5, .85],      // seconds of butt wiggle before a pounce (random in this range)
+  bonkSpeed: 210,         // px/s: hitting the wall faster than this = bonk + stars
+  sitAfter: .7,           // seconds the dot has to sit still on the cat before it gives up and purrs
+  purr: "...prrr",
+  label: "living room · 2:14 am",
+};
+document.getElementById("label").textContent = CONFIG.label;
+const C = FURS[CONFIG.fur], INK = "#1d1412";
+
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const countEl = document.getElementById("count"), hintEl = document.getElementById("hint");
+let W = 0, H = 0, DPR = 1, S = 1, floorY = 0, zMin = 0, zMax = 0, bg = null, vig = null;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = (v, target, rate, dt) => v + (target - v) * (1 - Math.exp(-rate * dt));
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return (s - Math.floor(s)) * 2 - 1; };
+
+// ---------- the room (drawn once per resize, a little wobbly like ink on paper) ----------
+function wob(c, pts, seed, amp = 1.2) {
+  c.beginPath();
+  pts.forEach(([x, y], i) => { const ox = hash(seed + i * 3.1) * amp, oy = hash(seed + i * 7.3) * amp; i ? c.lineTo(x + ox, y + oy) : c.moveTo(x + ox, y + oy); });
+}
+function line(c, x1, y1, x2, y2, seed, n = 6, amp = 1) {
+  const pts = []; for (let i = 0; i <= n; i++) pts.push([lerp(x1, x2, i / n), lerp(y1, y2, i / n)]);
+  wob(c, pts, seed, amp); c.stroke();
+}
+function ellPts(cx, cy, rx, ry, n = 28) { const p = []; for (let i = 0; i <= n; i++) { const a = i / n * Math.PI * 2; p.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]); } return p; }
+function buildRoom() {
+  bg = document.createElement("canvas"); bg.width = W * DPR; bg.height = H * DPR;
+  const c = bg.getContext("2d"); c.scale(DPR, DPR); c.lineJoin = c.lineCap = "round";
+  // wall
+  let g = c.createLinearGradient(0, 0, 0, floorY);
+  g.addColorStop(0, "#1f1a22"); g.addColorStop(1, "#2d2329"); c.fillStyle = g; c.fillRect(0, 0, W, floorY);
+  c.fillStyle = "rgba(255,230,200,.022)";
+  for (let x = 0; x < W; x += 28) c.fillRect(x, 0, 12, floorY);
+  // window with the moon
+  const wx = W * .08, wy = H * .1, ww = Math.min(W * .3, 190), wh = floorY - wy - H * .07;
+  g = c.createLinearGradient(0, wy, 0, wy + wh); g.addColorStop(0, "#14203a"); g.addColorStop(1, "#253556");
+  c.fillStyle = g; c.fillRect(wx, wy, ww, wh);
+  c.fillStyle = "#f3ead2"; c.beginPath(); c.arc(wx + ww * .68, wy + wh * .26, ww * .1, 0, 7); c.fill();
+  c.fillStyle = "#253556"; c.beginPath(); c.arc(wx + ww * .72, wy + wh * .23, ww * .085, 0, 7); c.fill();
+  c.fillStyle = "rgba(243,234,210,.7)";
+  [[.2, .2], [.35, .55], [.15, .7], [.5, .4]].forEach(([a, b]) => c.fillRect(wx + ww * a, wy + wh * b, 1.6, 1.6));
+  c.strokeStyle = "#4a3934"; c.lineWidth = 7;
+  line(c, wx + ww / 2, wy, wx + ww / 2, wy + wh, 11, 6, .8); line(c, wx, wy + wh * .48, wx + ww, wy + wh * .48, 12, 6, .8);
+  c.strokeStyle = INK; c.lineWidth = 3;
+  wob(c, [[wx, wy], [wx + ww, wy], [wx + ww, wy + wh], [wx, wy + wh], [wx, wy]], 21); c.stroke();
+  c.fillStyle = "#4a3934"; c.fillRect(wx - 10, wy + wh, ww + 20, 9);
+  c.lineWidth = 2.5; wob(c, [[wx - 10, wy + wh], [wx + ww + 10, wy + wh], [wx + ww + 10, wy + wh + 9], [wx - 10, wy + wh + 9], [wx - 10, wy + wh]], 31); c.stroke();
+  // lamp glow from the right
+  const lx = W * .86, ly = H * .14;
+  g = c.createRadialGradient(lx, ly + 30, 10, lx, ly + 30, Math.max(W, H) * .75);
+  g.addColorStop(0, "rgba(255,178,102,.30)"); g.addColorStop(.35, "rgba(255,150,80,.10)"); g.addColorStop(1, "rgba(255,150,80,0)");
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.strokeStyle = INK; c.lineWidth = 3; line(c, lx, ly + 26, lx, floorY + 22, 41, 8, .6);
+  c.fillStyle = "#e9b878"; wob(c, [[lx - 30, ly + 28], [lx - 19, ly - 10], [lx + 19, ly - 10], [lx + 30, ly + 28], [lx - 30, ly + 28]], 51, .8); c.fill(); c.stroke();
+  c.fillStyle = "#3a2d2a"; wob(c, ellPts(lx, floorY + 24, 20, 5, 14), 61, .5); c.fill(); c.stroke();
+  // baseboard + floor
+  g = c.createLinearGradient(0, floorY, 0, H); g.addColorStop(0, "#43302a"); g.addColorStop(1, "#2a1e1a");
+  c.fillStyle = g; c.fillRect(0, floorY, W, H - floorY);
+  c.strokeStyle = "rgba(20,12,10,.55)"; c.lineWidth = 1.6;
+  const vx = W / 2, vy = floorY - H * .9;
+  for (let i = -8; i <= 8; i++) { const bx = W / 2 + i * W * .16; const k = (floorY - vy) / (H - vy); line(c, lerp(vx, bx, k), floorY, bx, H, 70 + i, 5, .7); }
+  for (let j = 1; j < 5; j++) { const y = floorY + (H - floorY) * (j / 5) ** 1.5; for (let i = 0; i < 4; i++) { const x0 = ((i * .31 + j * .17) % 1) * W; line(c, x0, y, x0 + W * .12, y, 90 + j * 9 + i, 3, .5); } }
+  c.fillStyle = "#4a3934"; c.fillRect(0, floorY - 12, W, 14);
+  c.strokeStyle = INK; c.lineWidth = 2.6; line(c, -4, floorY - 12, W + 4, floorY - 12, 101, 10, .8); line(c, -4, floorY + 2, W + 4, floorY + 2, 102, 10, .8);
+  // moonlight on the floor
+  c.fillStyle = "rgba(150,180,235,.07)";
+  c.beginPath(); c.moveTo(wx, floorY + 2); c.lineTo(wx + ww, floorY + 2); c.lineTo(wx + ww * 1.7, H * .86); c.lineTo(wx + ww * .2, H * .86); c.fill();
+  // rug
+  const rx = W * .5, ry = lerp(floorY, H, .56), rw = Math.min(W * .4, 250), rh = (H - floorY) * .24;
+  c.fillStyle = "#7c3f35"; c.strokeStyle = INK; c.lineWidth = 2.6; wob(c, ellPts(rx, ry, rw, rh, 34), 111, 1.4); c.fill(); c.stroke();
+  c.strokeStyle = "#b9734a"; c.lineWidth = 3; wob(c, ellPts(rx, ry, rw * .78, rh * .74, 30), 121, 1.2); c.stroke();
+  c.strokeStyle = "rgba(233,184,120,.55)"; c.lineWidth = 2; wob(c, ellPts(rx, ry, rw * .5, rh * .46, 26), 131, 1); c.stroke();
+  // a ball of yarn in the corner
+  const yx = W * .9, yy = floorY + 30, yr = 15;
+  c.fillStyle = "#5f7fb6"; c.strokeStyle = INK; c.lineWidth = 2.5; wob(c, ellPts(yx, yy, yr, yr, 18), 141, .7); c.fill(); c.stroke();
+  c.lineWidth = 1.5; c.strokeStyle = "rgba(29,20,18,.7)";
+  for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(yx - 4 + i * 4, yy + 2, yr * (.9 - i * .2), -2.2, .4); c.stroke(); }
+  c.strokeStyle = "#5f7fb6"; c.lineWidth = 2; wob(c, [[yx - yr, yy + 6], [yx - 40, yy + 14], [yx - 70, yy + 10], [yx - 96, yy + 18]], 151, 1.5); c.stroke();
+  // vignette layer (goes over the cat)
+  vig = document.createElement("canvas"); vig.width = W * DPR; vig.height = H * DPR;
+  const v = vig.getContext("2d"); v.scale(DPR, DPR);
+  g = v.createRadialGradient(W * .55, H * .55, Math.min(W, H) * .3, W * .5, H * .5, Math.max(W, H) * .78);
+  g.addColorStop(0, "rgba(8,5,8,0)"); g.addColorStop(1, "rgba(8,5,8,.62)"); v.fillStyle = g; v.fillRect(0, 0, W, H);
+}
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  S = clamp(Math.min(W / 540, H / 600), .6, 1.35) * 1.15;
+  floorY = H * .4; zMin = floorY + 62 * S; zMax = H - 66 * S;
+  buildRoom();
+  if (cat) { cat.z = clamp(cat.z, zMin, zMax); cat.x = clamp(cat.x, 80 * S, W - 80 * S); }
+}
+
+// ---------- the laser (your finger) ----------
+const dot = { on: false, x: 0, y: 0, vx: 0, vy: 0, sp: 0, still: 0, alpha: 0, used: false, px: 0, py: 0, off: 9 };
+function setDot(e) { dot.x = e.clientX; dot.y = e.clientY; }
+addEventListener("pointerdown", e => { setDot(e); if (!dot.on) { dot.px = dot.x; dot.py = dot.y; } dot.on = true; dot.used = true; });
+addEventListener("pointermove", e => { if (e.pointerType === "mouse" && !dot.on && !e.clientX && !e.clientY) return; setDot(e); if (e.pointerType === "mouse" && !dot.on) { dot.on = true; dot.px = dot.x; dot.py = dot.y; dot.used = true; } });
+addEventListener("pointerup", e => { if (e.pointerType !== "mouse") dot.on = false; });
+addEventListener("pointercancel", () => dot.on = false);
+document.addEventListener("pointerleave", () => dot.on = false);
+
+// ---------- the cat ----------
+let cat = null;
+function newCat() {
+  return { x: W * .5, z: lerp(zMin, zMax, .45), vx: 0, vz: 0, h: 0, vh: 0, face: 1, f: 1,
+    mode: "idle", mt: 0, wig: 0, wigDur: .6, cool: 0, count: 0,
+    c: 0, s: 1, a: 0, r: 0, b: 0, w: 0, d: 0, lid: .3, mouth: 0, ph: 0, sq: 0, sqv: 0,
+    head: { x: W * .5, y: H * .5 }, look: { x: W * .6, y: H * .5 }, hr: 0, px: 0, py: 0, pu: .5,
+    stars: 0, purrT: 0, offCat: 0, idleLook: 0 };
+}
+const fx = [], pops = [];      // dust puffs, "!" / "?" / purr popups
+let shake = 0, bump = 0, hintA = .7;
+function puff(x, y, n, spread, up, size) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    fx.push({ x: x + Math.cos(a) * 4, y: y + Math.sin(a) * 2, vx: Math.cos(a) * spread * (.5 + Math.random()), vy: -up * (.4 + Math.random()) + Math.sin(a) * spread * .25,
+      r: size * (.6 + Math.random() * .6), t: 0, life: .45 + Math.random() * .35 });
+  }
+}
+function pop(text, kind) { pops.push({ text, kind, t: 0 }); }
+function setMode(m) { cat.mode = m; cat.mt = 0; }
+
+function think(dt, now) {
+  const k = cat, sc = S * lerp(.8, 1.16, (k.z - zMin) / (zMax - zMin)), SP = CONFIG.speed;
+  k.mt += dt; k.cool -= dt;
+  // what the cat wants: front paws on the dot
+  const dX = dot.x - k.x;
+  if (dot.on && Math.abs(dX) > 34 * sc && k.mode !== "pounce" && k.mode !== "bonk") k.face = Math.sign(dX);
+  const tx = dot.x - k.face * 46 * sc, tz = clamp(dot.y + 6 * sc, zMin, zMax);
+  const ex = tx - k.x, ez = tz - k.z, dist = Math.hypot(ex, ez * 1.3);
+  const sp = Math.hypot(k.vx, k.vz);
+  const onCat = dot.on && Math.abs(dot.x - (k.x + k.face * 22 * sc)) < 86 * sc && dot.y > k.z - 118 * sc && dot.y < k.z + 26 * sc;
+  const wantSit = dot.on && onCat && dot.still > CONFIG.sitAfter;
+  let ax = 0, az = 0, skid = false, fric = 0;
+  const T = (c, s, a, r, b, w) => { k.c = ease(k.c, c, 12, dt); k.s = ease(k.s, s, 7, dt); k.a = ease(k.a, a, 16, dt); k.r = ease(k.r, r, 9, dt); k.b = ease(k.b, b, 12, dt); k.w = ease(k.w, w, 10, dt); };
+
+  switch (k.mode) {
+    case "idle": {
+      fric = 9; T(0, 1, 0, 0, 0, 0);
+      k.idleLook += dt;
+      if (dot.on) { pop("!", "alert"); k.sq = -.18; setMode("chase"); }
+      break;
+    }
+    case "chase": {
+      if (!dot.on) { if (dot.off > .25) { pop("?", "huh"); setMode("idle"); } fric = 5; T(0, 0, 0, 0, 0, 0); break; }
+      if (wantSit) { setMode("sit"); break; }
+      const vmax = 560 * SP * sc, want = Math.min(vmax, dist * 3.4);
+      const dvx = ex / (dist || 1) * want - k.vx, dvz = ez / (dist || 1) * want - k.vz;
+      const dv = Math.hypot(dvx, dvz) || 1;
+      skid = sp > 240 * sc && (dvx * k.vx + dvz * k.vz) < -.35 * dv * sp;
+      const amax = (skid ? 560 : 1900) * SP * sc, aa = Math.min(amax, dv * 7);
+      ax = dvx / dv * aa; az = dvz / dv * aa;
+      T(0, 0, 0, clamp(sp / (260 * sc), 0, 1), skid ? 1 : 0, 0);
+      if (dist < CONFIG.pounceRange * sc && dist > 22 * sc && dot.sp < 240 && sp < 230 * sc && k.cool <= 0) {
+        k.wigDur = lerp(CONFIG.wiggle[0], CONFIG.wiggle[1], Math.random()); setMode("crouch");
+      }
+      break;
+    }
+    case "crouch": {
+      fric = 10; T(1, 0, 0, 0, 0, clamp(k.mt / k.wigDur, 0, 1) * 1.1);
+      if (!dot.on || dot.sp > 700 || dist > 270 * sc) { setMode("chase"); break; }
+      if (wantSit && dist < 30 * sc) { setMode("sit"); break; }
+      if (k.mt > k.wigDur) {             // launch!
+        const lead = .16, px = dot.x + clamp(dot.vx, -900, 900) * lead, py = dot.y + clamp(dot.vy, -900, 900) * lead;
+        const lx = clamp(px - k.face * 46 * sc, 70 * S, W - 70 * S), lz = clamp(py + 6 * sc, zMin, zMax);
+        const d = Math.hypot(lx - k.x, (lz - k.z) * 1.3), Tf = (.34 + d / 1900) / Math.sqrt(SP);
+        k.vx = (lx - k.x) / Tf; k.vz = (lz - k.z) / Tf; k.g = 2400 * sc * SP; k.vh = k.g * Tf / 2; k.h = .1;
+        k.sq = .34; k.c = .4; puff(k.x - k.face * 30 * sc, k.z, 4, 60, 20, 9 * sc); setMode("pounce");
+      }
+      break;
+    }
+    case "pounce": {
+      T(0, 0, 1, 0, 0, 0);
+      k.vh -= k.g * dt; k.h += k.vh * dt;
+      if (k.h <= 0) {
+        k.h = 0; k.vh = 0; k.vx *= .25; k.vz *= .25; k.sq = .42; k.a = .2;
+        k.count++; bump = 1; countEl.innerHTML = "pounces: <b>" + k.count + "</b>";
+        puff(k.x + k.face * 40 * sc, k.z, 7, 120, 30, 10 * sc);
+        k.cool = .45; setMode("land");
+      }
+      break;
+    }
+    case "land": {
+      fric = 12; T(.35, 0, 0, 0, 0, 0);
+      if (k.mt > .3) setMode(dot.on ? (wantSit ? "sit" : "chase") : "idle");
+      break;
+    }
+    case "bonk": {
+      fric = k.h > 0 ? 0 : 6; T(0, k.mt > .35 ? .7 : 0, 0, 0, 0, 0);
+      if (k.h > 0 || k.vh > 0) { k.vh -= 2200 * sc * dt; k.h = Math.max(0, k.h + k.vh * dt); }
+      if (k.mt > 1.7) { k.cool = .3; setMode(dot.on ? "chase" : "idle"); }
+      break;
+    }
+    case "sit": {
+      fric = 12; T(0, 1, 0, 0, 0, 0);
+      k.purrT += dt;
+      if (!dot.on) { setMode("idle"); break; }
+      k.offCat = onCat ? 0 : k.offCat + dt;
+      if (dot.sp > 170 || k.offCat > .3) { k.purrT = 0; k.sq = -.15; setMode("chase"); }
+      break;
+    }
+  }
+  if (k.mode !== "sit") k.purrT = 0;
+
+  // movement
+  k.vx += ax * dt; k.vz += az * dt;
+  if (fric) { const m = Math.exp(-fric * dt); k.vx *= m; k.vz *= m; }
+  k.x += k.vx * dt; k.z += k.vz * dt;
+  if (k.z < zMin) { k.z = zMin; k.vz = Math.max(0, k.vz); } if (k.z > zMax) { k.z = zMax; k.vz = Math.min(0, k.vz); }
+  // walls: the head is in front, the butt behind
+  const front = 112 * sc, back = 70 * sc;
+  const xMin = k.vx < 0 && k.face < 0 ? front : back, xMax = k.vx > 0 && k.face > 0 ? W - front : W - back;
+  for (const side of [-1, 1]) {
+    const lim = side < 0 ? xMin : xMax;
+    if (side * (k.x - lim) > 0) {
+      const v = Math.abs(k.vx);
+      k.x = lim;
+      if (v > CONFIG.bonkSpeed * sc && k.mode !== "bonk") {
+        k.face = side; k.f = side;
+        k.vx = -side * Math.min(240, v * .3); k.vz *= .2; k.vh = 330 * sc; k.h = Math.max(k.h, .1);
+        k.sq = -.42; k.d = 1; k.stars = 1.9; k.mouth = 1; shake = 1;
+        pop("!", "bonk"); puff(side < 0 ? 8 : W - 8, k.z - 40 * sc, 9, 110, 10, 11 * sc); setMode("bonk");
+      } else k.vx = 0;
+    }
+  }
+  // gait, skid dust, pose springs
+  const sp2 = Math.hypot(k.vx, k.vz);
+  k.ph += dt * (5 + sp2 / (16 * sc));
+  if (skid && Math.random() < dt * 40) puff(k.x + Math.sign(k.vx) * 40 * sc, k.z, 1, 40, 25, 8 * sc);
+  if (k.mode === "chase" && sp2 > 380 * sc && Math.random() < dt * 9) puff(k.x - k.face * 45 * sc, k.z, 1, 20, 15, 6 * sc);
+  const fT = k.mode === "chase" && skid ? Math.sign(k.vx) || k.face : k.face;
+  k.f = ease(k.f, fT, 16, dt);
+  const sq0 = .07 * k.r + (k.mode === "pounce" ? .14 * Math.sign(k.vh) : 0);
+  k.sqv += (-300 * (k.sq - sq0) - 13 * k.sqv) * dt; k.sq += k.sqv * dt;
+  k.d = k.stars > 0 ? 1 : ease(k.d, 0, 4, dt); k.stars = Math.max(0, k.stars - dt);
+  k.mouth = ease(k.mouth, 0, 2.5, dt);
+  // eyes: what to look at, how big the pupils are, the slow blink
+  if (dot.on) { k.look.x = dot.x; k.look.y = dot.y; }
+  else if (k.mode === "idle") { const a = k.idleLook * .45; k.look.x = k.x + k.face * (140 + Math.sin(a) * 60) * sc; k.look.y = k.z - (60 + Math.sin(a * 1.7) * 70) * sc; }
+  const hunting = k.mode === "crouch" || k.mode === "chase" || k.mode === "pounce";
+  k.pu = ease(k.pu, hunting ? 1 : k.mode === "sit" ? .15 : .45, 6, dt);
+  let lid = k.mode === "sit" ? .38 : k.mode === "crouch" ? .12 : k.mode === "bonk" ? .2 : .05;
+  if (k.mode === "sit") { const u = (k.purrT - .6) % 3.4; if (k.purrT > .6) lid = u < .55 ? lerp(.38, 1, u / .55) : u < 1.15 ? 1 : u < 1.8 ? lerp(1, .38, (u - 1.15) / .65) : .38; }
+  else { const u = (now / 1000) % 3.7; if (u < .14) lid = 1; }
+  k.lid = ease(k.lid, lid, k.mode === "sit" ? 14 : 30, dt);
+  const lx = (k.look.x - k.head.x) * Math.sign(k.f || 1), ly = k.look.y - k.head.y, ll = Math.hypot(lx, ly) || 1;
+  const want = clamp(Math.atan2(ly, Math.max(lx, 20)), -.75, .7) * .6;
+  k.hr = ease(k.hr, k.mode === "sit" ? -.12 + Math.sin(now / 700) * .03 : want, 10, dt);
+  k.px = ease(k.px, lx / ll * Math.min(1, ll / 90), 18, dt); k.py = ease(k.py, ly / ll * Math.min(1, ll / 90), 18, dt);
+}
+
+// ---------- drawing the cat: chunky ink lines that "boil" a little like a hand-drawn cartoon ----------
+let boil = 0, bi = 0;
+const J = amp => hash(boil * 97.3 + (bi++) * 13.7) * amp;
+const pt = (x, y, amp = .9) => [x + J(amp), y + J(amp)];
+function curve(pts) {
+  const n = pts.length; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    ctx.bezierCurveTo(p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6, p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6, p2[0], p2[1]);
+  }
+  ctx.closePath();
+}
+function inked(fill, lw = 3.4) { ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = lw; ctx.stroke(); }
+function limb(x1, y1, x2, y2, w, fill) {
+  const a = pt(x1, y1, .5), b = pt(x2, y2, .7);
+  ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.quadraticCurveTo((a[0] + b[0]) / 2 + J(1.5), (a[1] + b[1]) / 2, b[0], b[1]);
+  ctx.strokeStyle = INK; ctx.lineWidth = w + 7; ctx.stroke(); ctx.strokeStyle = fill; ctx.lineWidth = w; ctx.stroke();
+  return b;
+}
+function mix3(st, cr, si, c, s) { return st + (cr - st) * c + (si - st) * s; }
+
+function drawCat(now) {
+  const k = cat, t = now / 1000, sc = S * lerp(.8, 1.16, (k.z - zMin) / (zMax - zMin));
+  bi = 0;
+  // shadow
+  ctx.fillStyle = "rgba(10,6,6,.42)"; ctx.beginPath();
+  ctx.ellipse(k.x + k.f * 6 * sc, k.z + 2, 66 * sc * (1 - Math.min(.5, k.h / 300)), 11 * sc, 0, 0, 7); ctx.fill();
+  ctx.save();
+  const purr = k.mode === "sit" && k.purrT > .4 ? Math.sin(t * 140) * .5 : 0;
+  ctx.translate(k.x, k.z - k.h + purr);
+  const sx = 1 + k.sq, sy = 1 / Math.sqrt(Math.max(.4, 1 + k.sq * 1.6));
+  ctx.translate(0, -36 * sc); ctx.scale(sc * k.f * sx, sc * sy); ctx.translate(0, 36);
+  ctx.lineJoin = ctx.lineCap = "round";
+  const c = k.c, s = k.s, a = k.a, r = k.r, b = k.b, w = k.w, ph = k.ph;
+  const gal = Math.sin(ph), bob = -Math.abs(Math.cos(ph)) * 5 * r;
+  const wigX = Math.sin(t * 24) * 4.5 * w, wigY = -Math.abs(Math.sin(t * 12)) * 5 * w - 5 * w;
+  // spine: rear R, chest Cc
+  let Rx = mix3(-38, -36, -24, c, s) - gal * 6 * r - 8 * a + wigX, Ry = mix3(-40, -40, -30, c, s) + bob + wigY + 6 * b;
+  let Cx = mix3(36, 40, 4, c, s) + gal * 6 * r + 10 * a, Cy = mix3(-44, -25, -70, c, s) + bob * .6 - 7 * b;
+  const rR = mix3(31, 30, 33, c, s), rC = mix3(27, 24, 25, c, s);
+  let Hx = mix3(60, 66, 12, c, s) + gal * 7 * r + 12 * a - 8 * b, Hy = mix3(-82, -46, -106, c, s) + bob * .4 + 4 * a - 4 * b;
+  if (k.mode === "bonk") { Hx += Math.sin(k.mt * 16) * 2 * k.d; }
+  // legs: hips / shoulders, paw targets
+  const hipX = Rx + 8, hipY = Ry + 14, shX = Cx - 4, shY = Cy + 14;
+  const paws = (near) => {
+    const o = near ? 0 : .7, lift = p => Math.max(0, -Math.cos(p)) * 12 * r;
+    const fp = ph + o, bp = ph + Math.PI + o;
+    let f = [mix3(shX, shX + 10, 14, c, s) + Math.sin(fp) * 17 * r + 24 * b, -lift(fp)];
+    let bk = [mix3(hipX, hipX + 2, s > .5 ? -2 : hipX, c, s) + Math.sin(bp) * 15 * r + 6 * b, -lift(bp)];
+    f = [lerp(f[0], shX + 30, a), lerp(f[1], shY + 12, a)];
+    bk = [lerp(bk[0], hipX - 28, a), lerp(bk[1], hipY + 14, a)];
+    return { f, bk };
+  };
+  const far = paws(false), near = paws(true);
+  // far legs (shaded)
+  limb(hipX - 6, hipY, far.bk[0] - 6, far.bk[1], 13, C.dark);
+  limb(shX - 5, shY, far.f[0] - 5, far.f[1], 13, C.dark);
+  // tail
+  {
+    let ang = mix3(-2.05, -3.26, -3.98, c, s) - .88 * r * (1 - c) * (1 - s) - .9 * a;
+    const curl = mix3(.13, -.01, -.2, c, s) * (1 - r * .6);
+    const amp = k.mode === "idle" || k.mode === "sit" ? .22 : .12, fq = k.mode === "idle" || k.mode === "sit" ? 2.4 : 6.5;
+    const bx = Rx - rR * .72, by = Ry - rR * .35;
+    let x = bx, y = by; const sp = [[x, y]];
+    for (let i = 0; i < 10; i++) {
+      ang += curl + Math.sin(t * fq - i * .5) * amp * .45 + (i > 5 ? Math.sin(t * 15 - i) * .14 * (c + w) : 0) - (k.d > .5 ? .05 : 0);
+      x += Math.cos(ang) * 8.6; y += Math.sin(ang) * 8.6; sp.push([x, y]);
+    }
+    const L = [], Rr = [];
+    sp.forEach((p, i) => {
+      const q = sp[Math.min(sp.length - 1, i + 1)], o = sp[Math.max(0, i - 1)], dx = q[0] - o[0], dy = q[1] - o[1], d = Math.hypot(dx, dy) || 1;
+      const hw = lerp(6.5, 4.6, i / sp.length);
+      L.push(pt(p[0] - dy / d * hw, p[1] + dx / d * hw, .5)); Rr.unshift(pt(p[0] + dy / d * hw, p[1] - dx / d * hw, .5));
+    });
+    const tip = sp[sp.length - 1], pre = sp[sp.length - 2];
+    curve([...L, pt(tip[0] + (tip[0] - pre[0]) * .7, tip[1] + (tip[1] - pre[1]) * .7, .3), ...Rr.slice(0, -1)]);
+    inked(C.fur, 3.2);
+  }
+  // near legs
+  limb(hipX, hipY, near.bk[0], near.bk[1], 14, C.fur);
+  const pawF = limb(shX, shY, near.f[0], near.f[1], 14, C.fur);
+  // body (a bean between the rear and the chest)
+  {
+    let ux = Cx - Rx, uy = Cy - Ry; const L = Math.hypot(ux, uy); ux /= L; uy /= L; const nx = uy, ny = -ux;
+    const P = (bx, by, along, out) => pt(bx + ux * along + nx * out, by + uy * along + ny * out, 1);
+    const mx = (Rx + Cx) / 2, my = (Ry + Cy) / 2, m1x = lerp(Rx, Cx, .35), m1y = lerp(Ry, Cy, .35), m2x = lerp(Rx, Cx, .7), m2y = lerp(Ry, Cy, .7);
+    const body = [P(Rx, Ry, -rR * .97, 0), P(Rx, Ry, -rR * .6, rR * .8), P(m1x, m1y, 0, rR * .97), P(m2x, m2y, 0, rC * .93), P(Cx, Cy, rC * .25, rC * .82),
+      P(Cx, Cy, rC * .97, 0), P(Cx, Cy, rC * .45, -rC * .85), P(mx, my, 0, -(rR + rC) / 2 - 2 + 3 * r * 0), P(Rx, Ry, rR * .25, -rR * .92), P(Rx, Ry, -rR * .72, -rR * .6)];
+    curve(body); ctx.fillStyle = C.fur; ctx.fill();
+    ctx.save(); ctx.clip();
+    ctx.fillStyle = C.light; ctx.beginPath(); ctx.ellipse(lerp(mx, Cx, .35) - nx * 18, lerp(my, Cy, .35) - ny * 18 + 6, 26, 14, Math.atan2(uy, ux), 0, 7); ctx.fill();
+    if (C.stripes) {
+      ctx.strokeStyle = C.dark; ctx.lineWidth = 5.5;
+      for (const q of [.12, .34, .56]) {
+        const qx = lerp(Rx, Cx, q), qy = lerp(Ry, Cy, q), rr = lerp(rR, rC, q);
+        const s0 = pt(qx + nx * (rr + 4), qy + ny * (rr + 4), .6), s1 = pt(qx + nx * (rr - 15) + ux * 5, qy + ny * (rr - 15) + uy * 5, .6);
+        ctx.beginPath(); ctx.moveTo(s0[0], s0[1]); ctx.quadraticCurveTo((s0[0] + s1[0]) / 2 - ux * 4, (s0[1] + s1[1]) / 2 - uy * 4, s1[0], s1[1]); ctx.stroke();
+      }
+    }
+    if (s > .3) {      // sitting haunch
+      ctx.strokeStyle = "rgba(29,20,18," + (s - .3) * 1.2 + ")"; ctx.lineWidth = 2.8;
+      ctx.beginPath(); ctx.arc(Rx + 10, Ry + 8, 21, -2.6, .3); ctx.stroke();
+    }
+    ctx.restore();
+    curve(body); ctx.strokeStyle = INK; ctx.lineWidth = 3.6; ctx.stroke();
+  }
+  // toe lines on the near paws
+  ctx.strokeStyle = INK; ctx.lineWidth = 1.8;
+  for (const p of [pawF, [near.bk[0], near.bk[1]]]) { ctx.beginPath(); ctx.moveTo(p[0] + 2, p[1] + 1); ctx.lineTo(p[0] + 2.5, p[1] - 4); ctx.moveTo(p[0] + 6, p[1]); ctx.lineTo(p[0] + 6, p[1] - 4); ctx.stroke(); }
+  // head
+  ctx.save(); ctx.translate(Hx, Hy); ctx.rotate(k.hr + Math.sin(t * 7) * .22 * k.d + (s > .5 && k.mode === "sit" ? .05 : 0));
+  const m = ctx.getTransform(); const hw = m.transformPoint(new DOMPoint(0, 0)); k.head.x = hw.x / DPR; k.head.y = hw.y / DPR;
+  const earBack = clamp(c * .8 + k.d * .9, 0, 1), perk = k.mode === "chase" || k.mode === "alert" ? 1 : 0;
+  const ear = (ex, ey, sz, rot, near) => {
+    ctx.save(); ctx.translate(ex, ey); ctx.rotate(rot + earBack * (near ? .75 : .55)); ctx.scale(1, 1 - earBack * .3);
+    curve([pt(-11 * sz, 4), pt(-4 * sz, -22 * sz + perk * -2, .6), pt(1 * sz, -25 * sz, .5), pt(12 * sz, 3)]); inked(near ? C.fur : C.dark, 3.2);
+    curve([pt(-6 * sz, 1), pt(-1 * sz, -16 * sz, .4), pt(6 * sz, 0)]); ctx.fillStyle = C.ear; ctx.fill();
+    ctx.restore();
+  };
+  ear(-16, -19, .95, -.42, false);
+  ear(10, -23, 1, .12, true);
+  const head = [pt(-34, -2), pt(-29, -20), pt(-12, -29), pt(8, -29), pt(26, -21), pt(35, -5), pt(36, 8), pt(30, 19), pt(16, 26), pt(-2, 27), pt(-20, 23), pt(-33, 13), pt(-38, 6)];
+  curve(head); inked(C.fur, 3.6);
+  ctx.save(); curve(head); ctx.clip();
+  ctx.fillStyle = C.light; ctx.beginPath(); ctx.ellipse(22, 16, 17, 11, -.2, 0, 7); ctx.fill();
+  if (C.stripes) { ctx.strokeStyle = C.dark; ctx.lineWidth = 4.2; for (const q of [-4, 4, 12]) { ctx.beginPath(); ctx.moveTo(q + J(.6), -30); ctx.lineTo(q + 1 + J(.6), -18 + Math.abs(q - 4) * .4); ctx.stroke(); } }
+  ctx.restore();
+  // eyes
+  const eye = (ex, ey, rx, ry) => {
+    if (k.d > .55) {     // dizzy spirals
+      ctx.strokeStyle = INK; ctx.lineWidth = 2.2; ctx.beginPath();
+      for (let i = 0; i < 26; i++) { const aa = i * .55 + t * 9, rr = i / 26 * rx * 1.05; i ? ctx.lineTo(ex + Math.cos(aa) * rr, ey + Math.sin(aa) * rr) : ctx.moveTo(ex, ey); }
+      ctx.stroke(); return;
+    }
+    ctx.save(); ctx.beginPath(); ctx.ellipse(ex, ey, rx, ry, 0, 0, 7); ctx.fillStyle = C.eye; ctx.fill(); ctx.clip();
+    const pw = lerp(1.6, 5.4, k.pu), ph2 = ry * .92, ox = k.px * 2.8, oy = k.py * 2.6;
+    ctx.fillStyle = "#120c0b"; ctx.beginPath(); ctx.ellipse(ex + ox, ey + oy, pw, ph2, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fffaf0"; ctx.beginPath(); ctx.arc(ex + ox - 2.4, ey + oy - 3.4, 1.9, 0, 7); ctx.fill();
+    const ly = ey - ry + k.lid * ry * 2.1;
+    ctx.fillStyle = C.fur; ctx.fillRect(ex - rx - 2, ey - ry - 2, rx * 2 + 4, ly - (ey - ry) + 2);
+    if (k.lid > .06) { ctx.strokeStyle = INK; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(ex - rx, ly); ctx.quadraticCurveTo(ex, ly + 2.5 * (1 - k.lid), ex + rx, ly); ctx.stroke(); }
+    ctx.restore();
+    ctx.strokeStyle = INK; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.ellipse(ex, ey, rx, ry, 0, 0, 7); ctx.stroke();
+  };
+  eye(-2, -3, 6.4, 8, true);
+  eye(19, -3, 7.4, 8.8, true);
+  // nose, mouth, whiskers
+  ctx.fillStyle = C.nose; ctx.strokeStyle = INK; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(25.5, 7); ctx.lineTo(31.5, 7); ctx.lineTo(28.5, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(28.5, 11); ctx.lineTo(28.5, 13.5);
+  ctx.moveTo(23.5, 13.5); ctx.quadraticCurveTo(26, 16.5, 28.5, 13.5); ctx.quadraticCurveTo(31, 16.5, 33.5, 13.5); ctx.stroke();
+  if (k.mouth > .1) { ctx.fillStyle = "#5a1f22"; ctx.beginPath(); ctx.ellipse(28.5, 18, 3.4 * k.mouth, 4 * k.mouth, 0, 0, 7); ctx.fill(); ctx.stroke(); }
+  ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(29,20,18,.85)";
+  for (const [dy, dl] of [[-2, -4], [1, 0], [4, 4]]) { ctx.beginPath(); ctx.moveTo(36, 10 + dy); ctx.quadraticCurveTo(46, 9 + dy + dl * .3, 56, 9 + dy + dl); ctx.stroke(); }
+  for (const [dy, dl] of [[0, -3], [3, 2]]) { ctx.beginPath(); ctx.moveTo(-31, 12 + dy); ctx.lineTo(-44, 11 + dy + dl); ctx.stroke(); }
+  ctx.restore();
+  ctx.restore();
+  return sc;
+}
+
+function star(x, y, r, rot) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const a = rot + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  ctx.closePath(); ctx.fillStyle = "#ffd65c"; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
+}
+function handText(txt, x, y, size, fill, alpha = 1, rot = 0) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.rotate(rot);
+  ctx.font = `700 ${size}px Kalam, cursive`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineJoin = "round"; ctx.strokeStyle = INK; ctx.lineWidth = size * .2; ctx.strokeText(txt, 0, 0); ctx.fillStyle = fill; ctx.fillText(txt, 0, 0);
+  ctx.restore();
+}
+
+// ---------- one loop for everything ----------
+let last = performance.now(), acc = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (!cat) cat = newCat();
+  let dt = Math.min(.05, (now - last) / 1000); last = now;
+  // laser speed / stillness
+  const ivx = (dot.x - dot.px) / Math.max(dt, 1e-3), ivy = (dot.y - dot.py) / Math.max(dt, 1e-3);
+  if (dt > 0) { dot.vx = ease(dot.vx, ivx, 18, dt); dot.vy = ease(dot.vy, ivy, 18, dt); }
+  dot.px = dot.x; dot.py = dot.y; dot.sp = Math.hypot(dot.vx, dot.vy);
+  dot.still = dot.on && dot.sp < 45 ? dot.still + dt : 0;
+  dot.off = dot.on ? 0 : dot.off + dt;
+  dot.alpha = ease(dot.alpha, dot.on ? 1 : 0, dot.on ? 40 : 14, dt);
+  acc += dt; while (acc > 1 / 120) { think(1 / 120, now); acc -= 1 / 120; }
+  boil = Math.floor(now / 110);
+  shake = ease(shake, 0, 7, dt); bump = ease(bump, 0, 8, dt);
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.save();
+  if (shake > .02) ctx.translate(Math.sin(now * .09) * 5 * shake, Math.cos(now * .07) * 3 * shake);
+  ctx.drawImage(bg, -8, -8, W + 16, H + 16);
+  // dust behind / around the cat
+  for (let i = fx.length - 1; i >= 0; i--) { const p = fx[i]; p.t += dt; if (p.t > p.life) { fx.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= Math.exp(-4 * dt); p.vy *= Math.exp(-4 * dt); }
+  const drawDust = () => fx.forEach(p => { const u = p.t / p.life, al = (1 - u) * .8;
+    ctx.fillStyle = `rgba(214,190,165,${al * .55})`; ctx.strokeStyle = `rgba(29,20,18,${al * .5})`; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (.6 + u * 1.1), 0, 7); ctx.fill(); ctx.stroke(); });
+  const sc = drawCat(now);
+  drawDust();
+  ctx.drawImage(vig, 0, 0, W, H);
+  // stars when it bonks
+  if (cat.stars > 0) {
+    const al = Math.min(1, cat.stars * 1.5);
+    ctx.globalAlpha = al;
+    for (let i = 0; i < 3; i++) { const a = now / 180 + i * 2.09; star(cat.head.x + Math.cos(a) * 34 * sc, cat.head.y - 34 * sc + Math.sin(a) * 9 * sc, 7.5 * sc, a * 2); }
+    ctx.globalAlpha = 1;
+  }
+  // popups: "!" "?" and the purr
+  for (let i = pops.length - 1; i >= 0; i--) {
+    const p = pops[i]; p.t += dt; const life = p.kind === "bonk" ? 1.1 : .9; if (p.t > life) { pops.splice(i, 1); continue; }
+    const k = Math.min(1, p.t / .12), sz = (p.kind === "bonk" ? 44 : 34) * S * (k < 1 ? k * 1.25 : 1 + .25 * Math.exp(-(p.t - .12) * 14) - .0);
+    const al = Math.min(1, (life - p.t) / .25);
+    handText(p.text, cat.head.x + cat.f * 6 * sc, cat.head.y - (58 + p.t * 18) * sc, sz, p.kind === "bonk" ? "#ff6b57" : "#fff1d6", al, p.kind === "huh" ? .15 : -.12);
+  }
+  if (cat.mode === "sit" && cat.purrT > .9) {
+    const n = Math.min(CONFIG.purr.length, Math.floor((cat.purrT - .9) * 9));
+    ctx.save(); ctx.font = `700 ${22 * S}px Kalam, cursive`; ctx.textBaseline = "middle";
+    const txt = CONFIG.purr.slice(0, n), x = cat.head.x + cat.f * 18 * sc, y = cat.head.y - 62 * sc + Math.sin(now / 400) * 2;
+    ctx.globalAlpha = Math.min(1, (cat.purrT - .9) * 3); ctx.lineJoin = "round"; ctx.strokeStyle = INK; ctx.lineWidth = 4.5 * S;
+    let cx = x - ctx.measureText(CONFIG.purr).width / 2;
+    for (let i = 0; i < txt.length; i++) { const ch = txt[i], wob = i > 2 ? Math.sin(now / 60 + i) * 1.4 : 0;
+      ctx.strokeText(ch, cx, y + wob); ctx.fillStyle = "#fff1d6"; ctx.fillText(ch, cx, y + wob); cx += ctx.measureText(ch).width; }
+    ctx.restore();
+  }
+  // the laser dot (on top of everything, glowing)
+  if (dot.alpha > .01) {
+    const jx = dot.x + Math.sin(now * .031) * .7 + Math.sin(now * .013) * .5, jy = dot.y + Math.cos(now * .027) * .7;
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = dot.alpha;
+    let g = ctx.createRadialGradient(jx, jy, 0, jx, jy, 70 * S);
+    g.addColorStop(0, CONFIG.dot + "40"); g.addColorStop(1, CONFIG.dot + "00"); ctx.fillStyle = g; ctx.fillRect(jx - 70 * S, jy - 70 * S, 140 * S, 140 * S);
+    g = ctx.createRadialGradient(jx, jy, 0, jx, jy, 15 * S);
+    g.addColorStop(0, CONFIG.dot + "ff"); g.addColorStop(.35, CONFIG.dot + "aa"); g.addColorStop(1, CONFIG.dot + "00"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(jx, jy, 15 * S, 0, 7); ctx.fill();
+    ctx.restore(); ctx.save(); ctx.globalAlpha = dot.alpha;
+    ctx.fillStyle = CONFIG.dot; ctx.beginPath(); ctx.arc(jx, jy, 4.6 * S, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff4f0"; ctx.beginPath(); ctx.arc(jx, jy, 2 * S, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+  // ui
+  countEl.style.transform = `scale(${1 + bump * .35})`;
+  hintA = dot.used ? Math.max(0, hintA - dt * 1.5) : .45 + Math.sin(now / 500) * .2; hintEl.style.opacity = hintA;
+}
+addEventListener("resize", resize);
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
