@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>paper plane</title>
+<meta name="description" content="A note on notebook paper folds itself into a paper plane. Flick it. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Geist+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#140e0b;color:#efe2d0}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.k,.n{position:fixed;top:22px;margin:0;pointer-events:none;z-index:2;font:500 9.5px/1 "Geist Mono",ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;color:#f3e6d3}
+.k{left:16px;opacity:.55}
+.n{right:16px;opacity:.75}
+.hint{position:fixed;left:0;right:0;bottom:36px;margin:0;text-align:center;pointer-events:none;z-index:2;font:500 10px/1 "Geist Mono",ui-monospace,monospace;letter-spacing:.22em;text-transform:uppercase;color:#f3e6d3}
+.credit{position:fixed;left:0;right:0;bottom:13px;text-align:center;z-index:3;font:400 10.5px "Geist Mono",ui-monospace,monospace;color:#efe2d0;opacity:.5}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<p class="k" id="label">a note for Delly</p>
+<p class="n" id="step">1:12 am</p>
+<p class="hint" id="hint">tap the paper to fold it</p>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:600 20px Caveat">a</span><span class="pre" style="font:500 20px 'Geist Mono'">a</span>
+<script>
+// ===== Paper Plane · free code by @sicscod.drops =====
+// Try: yoursite/?name=Delly&msg=miss%20you%20already&back=your%20turn&hue=350
+const P = new URLSearchParams(location.search);
+const arg = (k, n) => (P.get(k) || "").trim().slice(0, n);
+const NAME = arg("name", 24) || "Delly";
+const CONFIG = {
+  name: NAME,
+  msg: (arg("msg", 90) || "can't stop thinking about you, {name}").replace(/\{name\}/g, NAME),  // written on the paper
+  back: arg("back", 60) || "ok now send this back ✈",   // appears after it lands (✈ is drawn as a doodle)
+  hue: P.get("hue") !== null && isFinite(parseFloat(P.get("hue"))) ? parseFloat(P.get("hue")) % 360 : 226,  // pen ink hue (226 = blue biro)
+  label: "a note for " + NAME,
+  clock: "1:12 am",
+  foldStep: .42,      // seconds per fold (6 folds)
+  heartTime: 2.7,     // seconds the plane takes to draw the heart
+  planeSize: .3,      // plane length in flight, as a share of the screen
+};
+document.getElementById("label").textContent = CONFIG.label;
+
+// ---------- small math ----------
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const eio = x => (x = clamp(x, 0, 1), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const eout = x => 1 - Math.pow(1 - clamp(x, 0, 1), 3);
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1]], cr = (a, b) => a[0] * b[1] - a[1] * b[0];
+const nrm = v => { const l = Math.hypot(...v) || 1; return v.map(x => x / l); };
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const crs3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const add3 = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+function rot3(v, k, th) {  // Rodrigues, k unit axis
+  const c = Math.cos(th), s = Math.sin(th), kx = crs3(k, v), kd = dot3(k, v) * (1 - c);
+  return [v[0] * c + kx[0] * s + k[0] * kd, v[1] * c + kx[1] * s + k[1] * kd, v[2] * c + kx[2] * s + k[2] * kd];
+}
+// 2D affine [a,b,c,d,e,f]: (x,y) -> (a x + c y + e, b x + d y + f)
+const I2 = [1, 0, 0, 1, 0, 0];
+const ap = (m, p) => [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]];
+const mul = (A, B) => [A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1], A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3], A[0] * B[4] + A[2] * B[5] + A[4], A[1] * B[4] + A[3] * B[5] + A[5]];
+function reflect(a, d) { const r00 = 2 * d[0] * d[0] - 1, r01 = 2 * d[0] * d[1], r11 = 2 * d[1] * d[1] - 1;
+  return [r00, r01, r01, r11, a[0] - (r00 * a[0] + r01 * a[1]), a[1] - (r01 * a[0] + r11 * a[1])]; }
+
+// ---------- the sheet and its folds (paper width = 1, letter ratio) ----------
+const PH = 1.294, EPS = .0032, AMAX = 84 * Math.PI / 180, BMAX = 77 * Math.PI / 180;
+const s8 = Math.sin(Math.PI / 8), c8 = Math.cos(Math.PI / 8);
+const FOLDS = [   // classic dart: two corners to the centre, the new edges to the centre again
+  { a: [0, 0], d: nrm([-.5, .5]), ref: [-.5, 0] },
+  { a: [0, 0], d: nrm([.5, .5]), ref: [.5, 0] },
+  { a: [0, 0], d: [-s8, c8], ref: [-.5, .3] },
+  { a: [0, 0], d: [s8, c8], ref: [.5, .3] },
+];
+const KEEL = { a: [0, 0], d: [0, 1], ref: [.5, .5] };
+const WINGR = { a: [.024, 0], d: nrm([.118 - .024, PH]), ref: [.5, .9] };
+const WINGL = { a: [-.024, 0], d: nrm([-.118 + .024, PH]), ref: [-.5, .9] };
+for (const f of [...FOLDS, KEEL, WINGR, WINGL]) f.s = Math.sign(cr(f.d, sub(f.ref, f.a)));
+const area = pts => { let s = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
+function split(p, M, fl, label) {   // cut a facet along a crease (in its current flat position); keeps edge labels
+  const f = p.o.map(q => ap(M, q)), d = f.map(q => fl.s * cr(fl.d, sub(q, fl.a)));
+  const side = sg => { const o = [], e = [];
+    for (let i = 0; i < f.length; i++) { const j = (i + 1) % f.length, da = sg * d[i], db = sg * d[j];
+      const X = () => { const t = da / (da - db); return [lerp(p.o[i][0], p.o[j][0], t), lerp(p.o[i][1], p.o[j][1], t)]; };
+      if (da >= 0) { o.push(p.o[i]); e.push(p.e[i]); if (db < 0) { o.push(X()); e.push(label); } }
+      else if (db >= 0) { o.push(X()); e.push(p.e[i]); } }
+    return Math.abs(area(o)) > 1e-7 ? { ...p, o, e, M: p.M.slice(), L: p.L.slice(), mv: p.mv.slice() } : null; };
+  return [side(1), side(-1)];
+}
+let polys = [{ o: [[-.5, 0], [.5, 0], [.5, PH], [-.5, PH]], e: [-1, -1, -1, -1], M: [I2], L: [0], mv: [] }];
+FOLDS.forEach((fl, k) => {
+  const out = [];
+  for (const p of polys) { const [A, B] = split(p, p.M[k], fl, k); if (A) { A.mv[k] = true; out.push(A); } if (B) { B.mv[k] = false; out.push(B); } }
+  polys = out;
+  const maxL = Math.max(...polys.map(p => p.L[k])), maxM = Math.max(...polys.filter(p => p.mv[k]).map(p => p.L[k])), R = reflect(fl.a, fl.d);
+  for (const p of polys) { p.M[k + 1] = p.mv[k] ? mul(R, p.M[k]) : p.M[k]; p.L[k + 1] = p.mv[k] ? maxL + 1 + maxM - p.L[k] : p.L[k]; }
+});
+{ const out = [];
+  for (const p of polys) { const [A, B] = split(p, p.M[4], KEEL, 4);
+    for (const [q, side] of [[A, 1], [B, -1]]) { if (!q) continue; q.side = side;
+      const [W, Bd] = split(q, q.M[4], side > 0 ? WINGR : WINGL, side > 0 ? 5 : 6);
+      if (W) { W.wing = true; out.push(W); } if (Bd) { Bd.wing = false; out.push(Bd); } } }
+  polys = out; }
+for (const p of polys) {   // best texture triangle per facet
+  let best = [0, 1, 2], ba = 0;
+  for (let i = 1; i < p.o.length; i++) for (let j = i + 1; j < p.o.length; j++) { const a = Math.abs(cr(sub(p.o[i], p.o[0]), sub(p.o[j], p.o[0]))); if (a > ba) { ba = a; best = [0, i, j]; } }
+  p.tri = best; p.grp = (p.side > 0 ? "R" : "L") + (p.wing ? "W" : "B");
+}
+const PIV = [0, .55 * PH, .06];
+
+const prog = [0, 0, 0, 0, 0, 0];   // fold 1-4, keel, wings (0..1)
+function stage() {
+  for (let k = 0; k < 4; k++) if (prog[k] < 1) return { k, th: Math.PI * eio(prog[k]) };
+  return { k: 4, al: AMAX * eio(prog[4]), be: BMAX * eio(prog[5]) };
+}
+function local3(p, q, zo, st) {   // paper point -> folded 3D (paper units, z up)
+  const k = st.k, f = ap(p.M[k], q); let v = [f[0], f[1], p.L[k] * EPS + zo];
+  if (k < 4) {
+    if (p.mv[k] && st.th > 0) { const fl = FOLDS[k]; v = add3(rot3([v[0] - fl.a[0], v[1] - fl.a[1], v[2]], [fl.s * fl.d[0], fl.s * fl.d[1], 0], st.th), [fl.a[0], fl.a[1], 0]); }
+    return v;
+  }
+  if (p.wing && st.be > 0) { const fl = p.side > 0 ? WINGR : WINGL; v = add3(rot3([v[0] - fl.a[0], v[1] - fl.a[1], v[2]], [fl.s * fl.d[0], fl.s * fl.d[1], 0], -st.be), [fl.a[0], fl.a[1], 0]); }
+  const c = Math.cos(st.al), s = Math.sin(st.al) * p.side;
+  return [v[0] * c - v[2] * s, v[1], v[0] * s + v[2] * c];
+}
+
+// ---------- canvas, sizes ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const stepEl = document.getElementById("step"), hintEl = document.getElementById("hint");
+let W = 0, H = 0, DPR = 1, S = 1, CX = 0, CY = 0, ZF = .4, HS = 10, HCY = 0, TW = 512;
+let desk = null, deskX0 = 0, deskY0 = 0, DS = 1, texF = null, texB = null, layout = null, fontOK = false;
+const F = 1100;   // camera focal length (px)
+let home = [0, 0, 0], hover = [0, 0, 0];
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  S = Math.min(W * .8, H * .7 / PH, 470); CX = W / 2; CY = H * .48;
+  ZF = clamp(CONFIG.planeSize * Math.min(W, H) / (PH * S), .22, .65);
+  HS = Math.min(.72 * W / ZF / 32, .62 * H / ZF / 29); HCY = -.03 * H / ZF;
+  home = [PIV[0] * S, (PIV[1] - PH / 2) * S, PIV[2] * S]; hover = [0, -.02 * S, home[2] + 36];
+  TW = Math.round(S * Math.min(2, Math.max(1.5, DPR)));
+  texF = document.createElement("canvas"); texB = document.createElement("canvas");
+  for (const t of [texF, texB]) { t.width = TW; t.height = Math.ceil(TW * PH); }
+  buildDesk(); layoutText(); paintTex(true);
+}
+
+// ---------- desk at night (world px, drawn once) ----------
+function buildDesk() {
+  const zMin = ZF * .96, m = 80;
+  deskX0 = -W / 2 / zMin - m; deskY0 = -CY / zMin - m;
+  const dw = W / zMin + 2 * m, dh = H / zMin + 2 * m;
+  DS = Math.min(1.4, Math.sqrt(7e6 / (dw * dh)));
+  desk = document.createElement("canvas"); desk.width = Math.ceil(dw * DS); desk.height = Math.ceil(dh * DS);
+  const c = desk.getContext("2d"); c.scale(DS, DS); c.translate(-deskX0, -deskY0);
+  const x0 = deskX0, x1 = deskX0 + dw, y0 = deskY0, y1 = deskY0 + dh;
+  c.fillStyle = "#24170f"; c.fillRect(x0, y0, dw, dh);
+  const ph = S * .42; let n = 0;
+  for (let y = Math.floor(y0 / ph) * ph; y < y1; y += ph, n++) {
+    const h1 = hash(n * 3.7);
+    c.fillStyle = `hsl(${20 + h1 * 8},${34 + h1 * 10}%,${10 + h1 * 4}%)`; c.fillRect(x0, y, dw, ph);
+    for (let j = 0; j < 46; j++) {   // grain
+      const gy = y + hash(n * 91 + j) * ph, a1 = 2 + hash(j * 7 + n) * 5, f1 = .004 + hash(j + n * 13) * .006, p1 = hash(j * 3 + n) * 6;
+      c.beginPath();
+      for (let x = x0; x <= x1; x += 18) { const yy = gy + Math.sin(x * f1 + p1) * a1 + Math.sin(x * f1 * 3.1 + p1 * 2) * a1 * .3; x === x0 ? c.moveTo(x, yy) : c.lineTo(x, yy); }
+      c.strokeStyle = hash(j * 5.3 + n) > .55 ? `rgba(255,190,130,${.03 + hash(j + 9) * .04})` : `rgba(0,0,0,${.12 + hash(j + 4) * .16})`;
+      c.lineWidth = .6 + hash(j * 2.1 + n) * 1.8; c.stroke();
+    }
+    if (hash(n * 5.5) > .4) {   // a knot
+      const kx = x0 + hash(n * 8.1) * dw, ky = y + ph * (.3 + hash(n * 2.2) * .4);
+      for (let r = 3; r < 26; r += 4) { c.beginPath(); c.ellipse(kx, ky, r * 2.6, r * .7, 0, 0, 7); c.strokeStyle = `rgba(0,0,0,${.18 - r * .005})`; c.lineWidth = 1.2; c.stroke(); }
+    }
+    c.fillStyle = "rgba(0,0,0,.55)"; c.fillRect(x0, y - 1.5, dw, 3);
+    c.fillStyle = "rgba(255,210,170,.05)"; c.fillRect(x0, y + 1.5, dw, 1.5);
+    const jx = x0 + hash(n * 4.4) * dw; c.fillStyle = "rgba(0,0,0,.5)"; c.fillRect(jx, y, 2.5, ph);
+  }
+  // mug, top left
+  const mx = -1.02 * S, my = -.62 * S, mr = .2 * S;
+  shadowBlob(c, mx + 14, my + 18, mr * 1.08, .5);
+  c.fillStyle = "#2c463f"; c.beginPath(); c.roundRect(mx + mr * .8, my - mr * .22, mr * .75, mr * .44, mr * .2); c.fill();
+  c.fillStyle = "#24170f"; c.beginPath(); c.roundRect(mx + mr * .95, my - mr * .1, mr * .45, mr * .2, mr * .1); c.fill();
+  c.fillStyle = "#35554c"; c.beginPath(); c.arc(mx, my, mr, 0, 7); c.fill();
+  c.strokeStyle = "rgba(255,255,255,.12)"; c.lineWidth = 3; c.beginPath(); c.arc(mx, my, mr - 2, Math.PI * 1.05, Math.PI * 1.6); c.stroke();
+  let g = c.createRadialGradient(mx - mr * .2, my - mr * .2, 2, mx, my, mr * .84);
+  g.addColorStop(0, "#3a2215"); g.addColorStop(1, "#120804"); c.fillStyle = g; c.beginPath(); c.arc(mx, my, mr * .84, 0, 7); c.fill();
+  c.fillStyle = "rgba(255,220,180,.16)"; c.beginPath(); c.ellipse(mx - mr * .3, my - mr * .32, mr * .22, mr * .07, -.6, 0, 7); c.fill();
+  // pencil, right of the paper
+  c.save(); c.translate(.7 * S, .3 * S); c.rotate(-1.2);
+  const L = .95 * S, w = .045 * S;
+  c.fillStyle = "rgba(0,0,0,.45)"; c.filter = "blur(5px)"; c.fillRect(-L / 2 + 6, -w / 2 + 8, L, w); c.filter = "none";
+  c.fillStyle = "#d39a35"; c.fillRect(-L / 2, -w / 2, L * .84, w);
+  c.fillStyle = "#e7b552"; c.fillRect(-L / 2, -w / 2, L * .84, w * .33);
+  c.fillStyle = "#a8721f"; c.fillRect(-L / 2, w * .2, L * .84, w * .3);
+  c.fillStyle = "#b9b6ad"; c.fillRect(-L / 2 - w * 1.1, -w / 2, w * 1.1, w);
+  c.fillStyle = "rgba(0,0,0,.2)"; for (let i = 1; i < 4; i++) c.fillRect(-L / 2 - w * 1.1 + i * w * .27, -w / 2, 1.5, w);
+  c.fillStyle = "#d77f86"; c.beginPath(); c.roundRect(-L / 2 - w * 2, -w / 2, w * .95, w, [w * .3, 0, 0, w * .3]); c.fill();
+  c.fillStyle = "#e6c79a"; c.beginPath(); c.moveTo(L * .34, -w / 2); c.lineTo(L * .5, -w * .1); c.lineTo(L * .5, w * .1); c.lineTo(L * .34, w / 2); c.fill();
+  c.fillStyle = "#2b2b2e"; c.beginPath(); c.moveTo(L * .455, -w * .17); c.lineTo(L * .51, 0); c.lineTo(L * .455, w * .17); c.fill();
+  c.restore();
+  // eraser crumbs
+  for (let i = 0; i < 9; i++) { const ex = .5 * S + hash(i * 3.3) * .25 * S, ey = .55 * S + hash(i * 7.7) * .2 * S;
+    c.fillStyle = `rgba(${200 + hash(i) * 30},${150 + hash(i + 2) * 30},150,.55)`; c.beginPath(); c.ellipse(ex, ey, 2 + hash(i * 2) * 3, 1.2 + hash(i * 5) * 1.5, hash(i) * 3, 0, 7); c.fill(); }
+  // a sticky note, bottom left
+  c.save(); c.translate(-.92 * S, .7 * S); c.rotate(.12);
+  c.fillStyle = "rgba(0,0,0,.4)"; c.filter = "blur(6px)"; c.fillRect(-.16 * S + 6, -.16 * S + 8, .32 * S, .32 * S); c.filter = "none";
+  c.fillStyle = "#e9d27a"; c.fillRect(-.16 * S, -.16 * S, .32 * S, .32 * S);
+  c.fillStyle = "rgba(0,0,0,.06)"; c.fillRect(-.16 * S, -.16 * S, .32 * S, .05 * S);
+  c.font = `600 ${.07 * S}px Caveat, cursive`; c.fillStyle = "rgba(40,30,60,.75)"; c.fillText("to do:", -.12 * S, -.03 * S);
+  c.fillText("text " + NAME, -.12 * S, .05 * S); c.fillText("buy paper", -.12 * S, .12 * S); c.restore();
+}
+function shadowBlob(c, x, y, r, a) { if (!r) return; const g = c.createRadialGradient(x, y, r * .6, x, y, r * 1.35); g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = g; c.beginPath(); c.arc(x, y, r * 1.35, 0, 7); c.fill(); }
+
+// ---------- notebook paper texture + handwriting ----------
+const Y0 = .15, G = .052, ML = -.5 + .13;
+const INK = `hsl(${CONFIG.hue},58%,24%)`;
+function layoutText() {
+  const m = document.createElement("canvas").getContext("2d"), fs = G * 1.5 * TW;
+  m.font = `600 ${fs}px Caveat, cursive`;
+  const wOf = s => [...s].reduce((w, ch) => w + (ch === "✈" ? fs * .95 : 0), 0) + m.measureText(s.replace(/✈/g, "")).width;
+  const x0 = (ML + .5 + .045) * TW, maxW = (1 - .06) * TW - x0;
+  const lines = text => { const out = []; let cur = "";
+    for (const wd of text.split(/\s+/)) { const t = cur ? cur + " " + wd : wd; if (wOf(t) > maxW && cur) { out.push(cur); cur = wd; } else cur = t; }
+    if (cur) out.push(cur); return out; };
+  const chars = [], place = (ls, row0, set) => { let i = 0;
+    ls.forEach((ln, r) => { const by = (Y0 + (row0 + r) * G - .009) * TW; let x = x0 + (set === 1 ? fs * .25 : 0);
+      for (const ch of ln) { const w = ch === "✈" ? fs * .95 : m.measureText(ch).width, seed = chars.length;
+        chars.push({ ch, x, y: by + (hash(seed * 1.7) - .5) * fs * .05, rot: (hash(seed * 3.1) - .5) * .08, set, i: i++ }); x += w * .97; }
+      i++; });
+    return i; };
+  const ml = lines(CONFIG.msg), bl = lines(CONFIG.back);
+  const nm = place(ml, 5, 0), nb = place(bl, 5 + ml.length + 1, 1);
+  const last = chars.filter(c => c.set === 0).pop();
+  layout = { fs, chars, nm, nb, heart: last ? [last.x + m.measureText(last.ch).width + fs * .32, last.y - fs * .3] : null };
+}
+let wrote = [0, 0], texDirty = true;
+function paintTex(full) {
+  for (const back of full ? [false, true] : [false]) {
+    const t = back ? texB : texF, c = t.getContext("2d"), w = t.width, h = t.height;
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, h);
+    const g = c.createLinearGradient(0, 0, w * .3, h); g.addColorStop(0, back ? "#ebe2cf" : "#f6efdf"); g.addColorStop(1, back ? "#e2d7c2" : "#eee3cd");
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1400; i++) { c.fillStyle = `rgba(${hash(i) > .5 ? "120,95,60" : "255,255,255"},${.035 + hash(i * 2.3) * .05})`; c.fillRect(hash(i * 1.37) * w, hash(i * 7.11) * h, 1 + hash(i * 3) * 1.5, 1); }
+    c.strokeStyle = "rgba(78,128,190,.42)"; c.lineWidth = Math.max(1, TW * .0017);
+    for (let y = Y0; y < PH - .02; y += G) { c.beginPath(); c.moveTo(0, y * TW); c.lineTo(w, y * TW); c.stroke(); }
+    c.strokeStyle = "rgba(214,86,92,.5)"; c.lineWidth = Math.max(1, TW * .0022);
+    const mx = (back ? .5 - .13 + .5 : ML + .5) * TW; c.beginPath(); c.moveTo(mx, 0); c.lineTo(mx, h); c.stroke();
+    if (!layout) continue;
+    c.save(); if (back) c.globalAlpha = .07;
+    drawInk(c, layout, wrote);
+    c.restore();
+  }
+}
+function drawInk(c, L, n) {
+  c.fillStyle = INK; c.strokeStyle = INK; c.lineCap = c.lineJoin = "round";
+  c.font = `600 ${L.fs}px Caveat, cursive`;
+  for (const ch of L.chars) {
+    const a = clamp(n[ch.set] - ch.i, 0, 1); if (a <= 0) continue;
+    c.save(); c.globalAlpha *= a; c.translate(ch.x, ch.y + (1 - a) * L.fs * .06); c.rotate(ch.rot);
+    if (ch.ch === "✈") planeDoodle(c, L.fs); else c.fillText(ch.ch, 0, 0);
+    c.restore();
+  }
+  if (L.heart) { const a = clamp(n[0] - L.nm, 0, 1); if (a > 0) {   // little heart after the name
+    const [x, y] = L.heart, r = L.fs * .2; c.save(); c.globalAlpha *= a; c.lineWidth = L.fs * .07; c.translate(x, y); c.rotate(-.12);
+    c.beginPath(); c.moveTo(0, r * 1.1); c.bezierCurveTo(-r * 1.9, -r * .2, -r * .9, -r * 1.6, 0, -r * .45); c.bezierCurveTo(r * .9, -r * 1.6, r * 1.9, -r * .2, 0, r * 1.1); c.stroke(); c.restore(); } }
+}
+function planeDoodle(c, fs) {   // the ✈ at the end of the back line, drawn by hand
+  const s = fs * .42; c.save(); c.translate(fs * .45, -fs * .28); c.rotate(-.35); c.lineWidth = fs * .06;
+  c.beginPath(); c.moveTo(-s, -s * .1); c.lineTo(s, 0); c.lineTo(-s * .55, s * .55); c.lineTo(-s * .25, s * .05); c.closePath(); c.stroke();
+  c.beginPath(); c.moveTo(-s * .25, s * .05); c.lineTo(s, 0); c.stroke();
+  c.setLineDash([fs * .05, fs * .12]); c.beginPath(); c.moveTo(-s * 1.2, s * .3); c.quadraticCurveTo(-s * 2, s * .5, -s * 2.3, s * .1); c.stroke(); c.restore();
+}
+
+// ---------- flight: loop-de-loop, then a heart, then a soft landing ----------
+function heartXY(t) { const s = Math.sin(t); return [HS * 16 * s * s * s, HCY - HS * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t) + 2.5)]; }
+let FL = null;
+function buildFlight(p0) {
+  const pts = [], dots = []; let t = 0;
+  const cusp = heartXY(0), Zc = home[2] + 60;
+  const D = clamp(p0[1] - cusp[1] - 60, 70, 420), R = clamp(HS * 3.6, 60, 150), T1 = 1.05;
+  pts.push({ t: 0, p: p0.slice(), w: 0 });
+  for (let i = 1; i <= 120; i++) { const u = i / 120, ph = 2 * Math.PI * (.62 * u + .38 * u * u);
+    pts.push({ t: T1 * u, p: [lerp(p0[0], 0, sm(u)), p0[1] - (R * Math.sin(ph) + D * ph / (2 * Math.PI)), p0[2] + R * (1 - Math.cos(ph))], w: 0 }); }
+  const heart = [], M = 900; let len = 0;
+  for (let i = 0; i <= M; i++) { const th = 2 * Math.PI * i / M, [x, y] = heartXY(th);
+    const z = Zc + 26 * Math.sin(th) ** 2 + 165 * Math.exp(-(((th - Math.PI) / .3) ** 2));
+    if (i) len += Math.hypot(x - heart[i - 1].p[0], y - heart[i - 1].p[1], z - heart[i - 1].p[2]); heart.push({ th, p: [x, y, z], s: len }); }
+  const v = len / CONFIG.heartTime, e1 = pts[pts.length - 1].p, gap = e1[1] - cusp[1];
+  t = T1;
+  for (let i = 1; i <= 10; i++) { const u = i / 10; pts.push({ t: t + u * gap / v, p: [0, lerp(e1[1], cusp[1], u), lerp(e1[2], Zc, sm(u))], w: 0 }); }
+  t += gap / v;
+  const tH0 = t; let lastDot = -1e9, xy = 0;
+  for (let i = 1; i <= M; i++) { const h = heart[i], th = h.th;
+    const w = th < Math.PI - .4 ? 1 : th < Math.PI + .3 ? 0 : sm((th - Math.PI - .3) / .7);
+    pts.push({ t: tH0 + h.s / v, p: h.p, w });
+    xy += Math.hypot(h.p[0] - heart[i - 1].p[0], h.p[1] - heart[i - 1].p[1]);
+    if (xy - lastDot > 8 / ZF) { lastDot = xy; dots.push({ p: h.p, t: tH0 + h.s / v }); } }
+  t = tH0 + len / v;
+  const land = [0, home[1] - 120, home[2]], T5 = .75, T6 = .55, endH = heart[M].p;
+  for (let i = 1; i <= 40; i++) { const u = i / 40; pts.push({ t: t + T5 * u, p: [0, lerp(endH[1], land[1], 1 - (1 - u) ** 2), lerp(Zc, home[2], sm(u))], w: 1 }); }
+  t += T5;
+  const tSk = t;
+  for (let i = 1; i <= 30; i++) { const u = i / 30; pts.push({ t: t + T6 * u, p: [0, lerp(land[1], home[1], eout(u)), home[2]], w: 1, psi: Math.PI + Math.PI * eout(u) }); }
+  t += T6;
+  // orientation frames: forward from the path, "up" carried along the path (so the loop really loops), banking in the turns
+  let up = [0, 0, 1];
+  for (let i = 0; i < pts.length; i++) { const a = pts[Math.max(0, i - 1)].p, b = pts[Math.min(pts.length - 1, i + 1)].p, q = pts[i];
+    if (q.psi !== undefined) { q.f = [Math.sin(q.psi), -Math.cos(q.psi), 0]; q.u = [0, 0, 1]; continue; }
+    let f = nrm([b[0] - a[0], b[1] - a[1], b[2] - a[2]]); if (i === 0) f = [0, -1, 0];
+    up = nrm(add3(up, f, -dot3(up, f))); q.f = f; q.tu = up; }
+  for (let i = 0; i < pts.length; i++) { const q = pts[i]; if (q.psi !== undefined) continue;
+    let u = q.tu; const want = add3([0, 0, 1], q.f, -q.f[2]);
+    if (q.w > 0 && Math.hypot(...want) > .05) { const wn = nrm(want), ang = Math.atan2(dot3(crs3(u, wn), q.f), dot3(u, wn)); u = rot3(u, q.f, ang * q.w); }
+    // bank from horizontal curvature
+    const a = pts[Math.max(0, i - 4)], b = pts[Math.min(pts.length - 1, i + 4)];
+    if (a.f && b.f && q.w > 0) { const h1 = Math.atan2(a.f[1], a.f[0]), h2 = Math.atan2(b.f[1], b.f[0]); let dh = h2 - h1; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+      const ds = Math.hypot(b.p[0] - a.p[0], b.p[1] - a.p[1]) || 1; u = rot3(u, q.f, clamp(dh / ds * 70, -.7, .7) * q.w); }
+    q.u = u; }
+  FL = { pts, dots, T: t, tH0, tH1: tH0 + len / v };
+}
+function flightPose(t) {
+  const P = FL.pts; let i = 1; while (i < P.length - 1 && P[i].t < t) i++;
+  const a = P[i - 1], b = P[i], k = clamp((t - a.t) / ((b.t - a.t) || 1), 0, 1);
+  const f = nrm([lerp(a.f[0], b.f[0], k), lerp(a.f[1], b.f[1], k), lerp(a.f[2], b.f[2], k)]);
+  let u = [lerp(a.u[0], b.u[0], k), lerp(a.u[1], b.u[1], k), lerp(a.u[2], b.u[2], k)]; u = nrm(add3(u, f, -dot3(u, f)));
+  return { p: [lerp(a.p[0], b.p[0], k), lerp(a.p[1], b.p[1], k), lerp(a.p[2], b.p[2], k)], f, u };
+}
+
+// ---------- state ----------
+let mode = "write", tMode = 0, T = 0, last = null, flights = 0, folds = 0, creased = -1;
+let pose = { p: home, f: [0, -1, 0], u: [0, 0, 1] }, zoom = 1, drag = null, dragOff = [0, 0], trailA = 0;
+const go = m => { mode = m; tMode = T; texDirty = true; };
+function down(e) {
+  if (e.target.closest && e.target.closest("a")) return;
+  if (mode === "idle" || mode === "done" || (mode === "write" && T - tMode > .3)) { if (mode === "write") wrote[0] = 1e3, texDirty = true; go("fold"); folds++; }
+  else if (mode === "ready") drag = { x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY };
+}
+function move(e) { if (drag) { drag.cx = e.clientX; drag.cy = e.clientY; } }
+function up() {
+  if (!drag) return; drag = null;
+  buildFlight(pose.p.slice()); go("fly"); flights++;
+}
+addEventListener("pointerdown", down); addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+
+function update(dt) {
+  const e = T - tMode, SD = CONFIG.foldStep;
+  if (mode === "write") { wrote[0] = e * 34; texDirty = true; if (wrote[0] > layout.nm + 1.5) go("idle"); }
+  else if (mode === "fold") {
+    for (let i = 0; i < 6; i++) prog[i] = clamp((e - i * SD) / SD, 0, 1);
+    const si = Math.floor(e / SD); creased = Math.max(creased, si >= 5 ? 6 : si);
+    const lu = eio((e - 6 * SD) / .45);
+    pose = { p: [lerp(home[0], hover[0], lu), lerp(home[1], hover[1], lu), lerp(home[2], hover[2], lu)], f: [0, -1, 0], u: [0, 0, 1] };
+    zoom = lerp(1, ZF, eio((e - 4 * SD) / (2 * SD + .45)));
+    if (e > 6 * SD + .45) go("ready");
+  }
+  else if (mode === "ready") {
+    if (drag) { dragOff[0] = ease(dragOff[0], (drag.cx - drag.x) / zoom, 18, dt); dragOff[1] = ease(dragOff[1], (drag.cy - drag.y) / zoom, 18, dt); }
+    const bob = Math.sin(e * 2.4) * 5;
+    pose = { p: [hover[0] + dragOff[0], hover[1] + dragOff[1], hover[2] + bob], f: [0, -1, 0], u: nrm([Math.sin(e * 1.7) * .06 - dragOff[0] * .0006, 0, 1]) };
+  }
+  else if (mode === "fly") {
+    pose = flightPose(e); trailA = 1;
+    if (e >= FL.T) { pose = { p: home, f: [0, -1, 0], u: [0, 0, 1] }; go("unfold"); }
+  }
+  else if (mode === "unfold") {
+    const R = [.18, .18, .27, .27, .27, .27];   // wings, keel, fold 4..1
+    let t0 = .15; const order = [5, 4, 3, 2, 1, 0];
+    order.forEach((k, j) => { prog[k] = 1 - clamp((e - t0) / R[j], 0, 1); t0 += R[j]; });
+    zoom = lerp(ZF, 1, eio((e - .1) / 1.3)); trailA = 1 - sm((e - .25) / 1.1);
+    if (e > t0 + .05) go(wrote[1] > layout.nb ? "done" : "write2");
+  }
+  else if (mode === "write2") { wrote[1] = e * 26; texDirty = true; if (wrote[1] > layout.nb + 1) go("done"); }
+  if (mode !== "ready") dragOff = [0, 0];
+}
+const ease = (v, target, rate, dt) => v + (target - v) * (1 - Math.exp(-rate * dt));
+
+// ---------- render ----------
+const LIGHT = nrm([-.35, -.45, .82]), SH = [.45, .6];
+function proj(P) { const k = zoom * F / (F - P[2] * zoom); return [CX + P[0] * k, CY + P[1] * k]; }
+function toWorld(l) {   // folded paper (units) -> world px through the current pose
+  const X = (l[0] - PIV[0]) * S, Y = (l[1] - PIV[1]) * S, Z = (l[2] - PIV[2]) * S, f = pose.f, u = pose.u, r = crs3(u, f);
+  return [pose.p[0] + r[0] * X - f[0] * Y + u[0] * Z, pose.p[1] + r[1] * X - f[1] * Y + u[1] * Z, pose.p[2] + r[2] * X - f[2] * Y + u[2] * Z];
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  T = now / 1000; if (last === null) { last = T; tMode = T; } const dt = Math.min(.05, T - last); last = T;
+  if (!fontOK && document.fonts && document.fonts.check("600 20px Caveat")) { fontOK = true; layoutText(); buildDesk(); paintTex(true); }
+  update(dt);
+  if (texDirty) { paintTex(mode !== "write" && mode !== "write2"); texDirty = false; }
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = "#140e0b"; ctx.fillRect(0, 0, W, H);
+  ctx.setTransform(DPR * zoom / DS, 0, 0, DPR * zoom / DS, DPR * (CX + deskX0 * zoom), DPR * (CY + deskY0 * zoom));
+  ctx.drawImage(desk, 0, 0);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  lamp([[0, "rgb(255,246,230)"], [.35, "rgb(240,218,192)"], [.7, "rgb(176,148,124)"], [1, "rgb(92,74,62)"]]);
+
+  // facets in world space
+  const st = stage(), items = [];
+  for (const p of polys) {
+    const w = p.o.map(q => toWorld(local3(p, q, 0, st)));
+    const c0 = p.o[0], n = nrm(add3(toWorld(local3(p, c0, .05, st)), toWorld(local3(p, c0, 0, st)), -1));
+    const key = st.k < 4 ? (p.mv[st.k] ? "M" : "S") : p.grp;
+    items.push({ p, w, n, key, L: p.L[Math.min(st.k, 4)], sp: w.map(proj), z: w.reduce((s, v) => s + v[2], 0) / w.length });
+  }
+  const groups = {}; for (const it of items) (groups[it.key] = groups[it.key] || []).push(it);
+  let order;
+  if (st.k < 4) order = ["S", "M"].filter(k => groups[k]);
+  else order = Object.keys(groups).sort((a, b) => avgZ(groups[a]) - avgZ(groups[b]));
+  // shadows on the desk
+  const lift = pose.p[2] - home[2];
+  shadow(items, .42 / (1 + Math.max(0, lift) / 220), 2.5 + Math.max(0, lift) * .03, 2.5);
+  // dotted heart trail
+  if (FL && trailA > .01) { drawTrail(true); drawTrail(); }
+  for (const k of order) {
+    const g = groups[k];
+    if (k === "M") shadow(g, .24 * Math.sin(st.th), 2 + Math.sin(st.th) * 3, 0);
+    const facing = g[0].n[2] >= 0;
+    g.sort((a, b) => facing ? a.L - b.L : b.L - a.L);
+    for (const it of g) drawFacet(it);
+  }
+  lamp([[0, "rgb(255,250,240)"], [.45, "rgb(246,232,212)"], [1, "rgb(190,170,150)"]]);
+  ui();
+}
+function lamp(stops) {   // warm desk lamp (multiply), in world space so it moves with the camera
+  ctx.save(); ctx.globalCompositeOperation = "multiply";
+  const lc = proj([-.45 * S, -.8 * S, 0]), lr = 3.3 * S * zoom, lg = ctx.createRadialGradient(lc[0], lc[1], 0, lc[0], lc[1], lr);
+  for (const [o, c] of stops) lg.addColorStop(o, c);
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H); ctx.restore();
+}
+const avgZ = g => g.reduce((s, it) => s + it.z, 0) / g.length;
+function shadow(list, a, blur, base) {
+  if (a <= .005) return;
+  ctx.save(); ctx.filter = `blur(${blur.toFixed(1)}px)`; ctx.fillStyle = `rgba(8,4,2,${a})`; ctx.beginPath();
+  for (const it of list) it.w.forEach((v, i) => { const z = v[2] + base, s = proj([v[0] + z * SH[0], v[1] + z * SH[1], 0]); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); });
+  ctx.fill(); ctx.restore();
+}
+function drawFacet(it) {
+  const p = it.p, sp = it.sp, [i0, i1, i2] = p.tri;
+  const T0 = [(p.o[i0][0] + .5) * TW, p.o[i0][1] * TW], T1 = [(p.o[i1][0] + .5) * TW, p.o[i1][1] * TW], T2 = [(p.o[i2][0] + .5) * TW, p.o[i2][1] * TW];
+  const d1 = sub(T1, T0), d2 = sub(T2, T0), s1 = sub(sp[i1], sp[i0]), s2 = sub(sp[i2], sp[i0]), det = cr(d1, d2);
+  const a = (s1[0] * d2[1] - s2[0] * d1[1]) / det, c = (s2[0] * d1[0] - s1[0] * d2[0]) / det;
+  const b = (s1[1] * d2[1] - s2[1] * d1[1]) / det, d = (s2[1] * d1[0] - s1[1] * d2[0]) / det;
+  const e = sp[i0][0] - a * T0[0] - c * T0[1], f = sp[i0][1] - b * T0[0] - d * T0[1], sd = a * d - b * c;
+  ctx.save(); ctx.beginPath();   // grow the facet by ~1.5px so neighbours overlap (no hairline seams)
+  const sg = Math.sign(area(sp)) || 1, N = sp.length, en = i => { const a = sp[i], b = sp[(i + 1) % N], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [sg * (b[1] - a[1]) / l, -sg * (b[0] - a[0]) / l]; };
+  for (let i = 0; i < N; i++) { const n1 = en((i + N - 1) % N), n2 = en(i), k = 1.5 / Math.max(.6, 1 + n1[0] * n2[0] + n1[1] * n2[1]);
+    const x = sp[i][0] + (n1[0] + n2[0]) * k, y = sp[i][1] + (n1[1] + n2[1]) * k; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.closePath(); ctx.clip();
+  const front = sd > 0;
+  if (Math.abs(sd) > 1e-4) { ctx.setTransform(DPR * a, DPR * b, DPR * c, DPR * d, DPR * e, DPR * f); ctx.drawImage(front ? texF : texB, 0, 0); ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
+  else { ctx.fillStyle = "#e9dfca"; ctx.fill(); }
+  // light: flat-on-desk = untouched, turned away from the lamp = darker
+  let n = it.n; if (n[2] < 0) n = n.map(x => -x);
+  const l = dot3(n, LIGHT), dark = clamp((LIGHT[2] - l) * .8, 0, .6), lite = clamp((l - LIGHT[2]) * 1.4, 0, .18);
+  if (dark > .005) { ctx.fillStyle = `rgba(40,26,14,${dark})`; ctx.fill(); }
+  if (lite > .005) { ctx.fillStyle = `rgba(255,248,235,${lite})`; ctx.fill(); }
+  ctx.restore();
+  // creases you've already made stay in the paper
+  ctx.beginPath(); let any = false;
+  for (let i = 0; i < sp.length; i++) { const lab = p.e[i]; if (lab < 0 || lab > creased) continue; const j = (i + 1) % sp.length; ctx.moveTo(sp[i][0], sp[i][1]); ctx.lineTo(sp[j][0], sp[j][1]); any = true; }
+  if (any) { ctx.strokeStyle = "rgba(90,66,40,.13)"; ctx.lineWidth = .8; ctx.stroke(); }
+}
+function drawTrail(glow) {
+  const e = T - tMode, ft = mode === "fly" ? e : 1e9, done = mode !== "fly" || e > FL.tH1;
+  const pulse = mode === "fly" && e > FL.tH1 ? Math.exp(-(e - FL.tH1) * 2.2) : 0;
+  ctx.save();
+  if (glow) ctx.globalCompositeOperation = "lighter";
+  for (const d of FL.dots) {
+    if (d.t > ft) break;
+    const s = proj(d.p), age = ft - d.t, fresh = Math.exp(-age * 3);
+    const a = trailA * (glow ? .1 + .35 * fresh + .5 * pulse : .62 + .3 * fresh);
+    ctx.fillStyle = glow ? `rgba(255,190,140,${a})` : `rgba(255,240,222,${a})`;
+    ctx.beginPath(); ctx.arc(s[0], s[1], (glow ? 3.4 : 1.8) * (1 + .4 * fresh) * (.6 + .4 * zoom / ZF * .6), 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+let lastHint = "", lastStep = "";
+function ui() {
+  let hint = "", step = CONFIG.clock;
+  if (mode === "write" || mode === "idle") hint = "tap the paper to fold it";
+  if (mode === "fold") { const k = Math.min(6, Math.floor((T - tMode) / CONFIG.foldStep) + 1); step = k <= 6 && T - tMode < 6 * CONFIG.foldStep ? `fold ${k} / 6` : "ready"; hint = "folding"; }
+  if (mode === "ready") { step = "ready"; hint = drag ? "let go" : "drag & flick the plane"; }
+  if (mode === "fly") { step = "airborne"; }
+  if (mode === "unfold" || mode === "write2" || mode === "done") { step = `sent ${flights}×`; hint = mode === "done" ? "tap to fold it again" : ""; }
+  if (hint !== lastHint) { hintEl.textContent = hint; lastHint = hint; }
+  if (step !== lastStep) { stepEl.textContent = step; lastStep = step; }
+  hintEl.style.opacity = (mode === "idle" || mode === "ready" || mode === "done" ? .5 + Math.sin(T * 2.2) * .18 : .35).toFixed(3);
+}
+addEventListener("resize", () => { resize(); texDirty = true; });
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
