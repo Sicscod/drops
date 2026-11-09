@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Для тебя 💗</title>
+<style>
+:root{
+  --bg1:#c9184a; --bg2:#ff8fab; --card:rgba(255,255,255,.18); --text:#fff; --muted:#ffe3f0;
+  --yes:#ff2f7f; --no:rgba(255,255,255,.25); --accent:#fff0f6;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg1:#c9184a; --bg2:#ff8fab; } }
+:root[data-theme="dark"]{ --bg1:#c9184a; --bg2:#ff8fab; }
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{
+  background:radial-gradient(120% 90% at 50% 0%, var(--bg2), var(--bg1));
+  background-color:var(--bg1);
+  color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  display:flex;align-items:center;justify-content:center;padding:16px;
+}
+.stars{position:fixed;inset:0;pointer-events:none;z-index:0}
+.stars i{position:absolute;bottom:-40px;font-style:normal;opacity:.55;animation:rise linear infinite}
+@keyframes rise{to{transform:translateY(-115vh) rotate(25deg)}}
+.screen{position:relative;z-index:1;width:100%;max-width:420px;text-align:center;display:none;animation:in .5s ease}
+.screen.on{display:block}
+@keyframes in{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+.emoji{font-size:64px;margin-bottom:14px;display:inline-block;animation:bob 2.4s infinite ease-in-out}
+@keyframes bob{50%{transform:translateY(-8px)}}
+h1{font-size:30px;line-height:1.2;margin-bottom:28px;font-weight:800}
+.btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;min-height:60px}
+button{
+  font:inherit;font-size:20px;font-weight:700;border:0;border-radius:999px;padding:14px 34px;
+  color:#fff;cursor:pointer;transition:transform .15s, left .25s, top .25s;
+}
+button:active{transform:scale(.95)}
+.yes{background:var(--yes);box-shadow:0 8px 24px rgba(180,0,80,.4)}
+.no{background:var(--no);border:1px solid rgba(255,255,255,.2)}
+.no.flee{position:fixed;z-index:5}
+.sub{color:var(--muted);font-size:16px;margin-top:18px;min-height:22px}
+.card{background:var(--card);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:26px 22px;backdrop-filter:blur(8px)}
+.big{font-size:34px;font-weight:800;margin-bottom:24px;line-height:1.25}
+.letter p{font-size:18px;line-height:1.6;margin-bottom:14px;text-align:left}
+.letter p:last-child{margin-bottom:0}
+.sign{text-align:right!important;color:var(--accent);font-weight:700}
+.heart{position:fixed;pointer-events:none;z-index:9;font-size:22px;animation:fly 2.2s ease-out forwards}
+@keyframes fly{to{transform:translateY(-70vh) scale(1.4) rotate(20deg);opacity:0}}
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+
+<section class="screen on" id="s1">
+  <div class="emoji">🥺</div>
+  <h1>Ты любииишь меня?</h1>
+  <div class="btns">
+    <button class="yes" id="yes1">Да 💗</button>
+    <button class="no" id="no1">Нет</button>
+  </div>
+  <p class="sub" id="sub1"></p>
+</section>
+
+<section class="screen" id="s2">
+  <div class="emoji">🍕</div>
+  <h1>Сет «Чо там» ожидали?</h1>
+  <div class="btns">
+    <button class="no" data-go="s3">Нет</button>
+  </div>
+</section>
+
+<section class="screen" id="s3">
+  <div class="emoji">😏</div>
+  <p class="big">А он тебя ожидал<br>хахахахахахах</p>
+  <button class="yes" data-go="s4">Дальше →</button>
+</section>
+
+<section class="screen" id="s4">
+  <div class="card letter">
+    <p>Зай, я капец за тебя волнуюсь 💗</p>
+    <p>Можешь ничего не говорить и не отвечать. Просто покушай с кайфом, проведи время с собой и залокинься.</p>
+    <p>Знай, что я верю в тебя. Всё у тебя получится, правда.</p>
+    <p>Я всегда буду рядом и любить тебя буду всегдааа.</p>
+    <p class="sign">твой 🫶</p>
+  </div>
+</section>
+
+<script>
+// stars
+const st=document.getElementById('stars');
+for(let i=0;i<28;i++){const s=document.createElement('i');s.textContent=['❤️','💗','💖','💕','🤍'][i%5];s.style.left=Math.random()*100+'vw';s.style.fontSize=14+Math.random()*22+'px';const d=7+Math.random()*8;s.style.animationDuration=d+'s';s.style.animationDelay=-Math.random()*d+'s';st.appendChild(s)}
+
+function go(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));document.getElementById(id).classList.add('on');
+  const n=document.getElementById('no1'); if(id!=='s1') n.style.display='none';}
+function hearts(n){for(let i=0;i<n;i++){setTimeout(()=>{const h=document.createElement('div');h.className='heart';h.textContent=['💗','💖','🤍','🌸'][i%4];
+  h.style.left=Math.random()*90+5+'vw';h.style.top=80+Math.random()*15+'vh';document.body.appendChild(h);setTimeout(()=>h.remove(),2300)},i*60)}}
+
+// runaway "no"
+const no=document.getElementById('no1'), sub=document.getElementById('sub1');
+const lines=['эээ куда','не-не-не','промахнулась 😝','попробуй ещё','не получится хаха','ну нажми уже «Да»','кнопка стесняется','💗💗💗'];
+let k=0;
+function flee(e){ if(e){e.preventDefault();}
+  no.classList.add('flee');
+  const w=no.offsetWidth,h=no.offsetHeight,W=innerWidth,H=innerHeight;
+  no.style.left=Math.max(10,Math.random()*(W-w-20))+'px';
+  no.style.top=Math.max(10,Math.random()*(H-h-20))+'px';
+  sub.textContent=lines[k++%lines.length];
+}
+['mouseenter','touchstart','pointerdown','click'].forEach(ev=>no.addEventListener(ev,flee,{passive:false}));
+
+document.getElementById('yes1').onclick=()=>{hearts(24);setTimeout(()=>go('s2'),700)};
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ if(b.dataset.go==='s4')hearts(30); go(b.dataset.go)});
+</script>
+</body>
+</html>
