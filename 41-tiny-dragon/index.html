@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>tiny dragon</title>
+<meta name="description" content="A chunky baby dragon lives on your screen and hunts the bugs in your code. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Geist+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#1b1a1f;color:#ece3d4}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.k,.n{position:fixed;top:20px;margin:0;pointer-events:none;z-index:2;font:500 9.5px/1 "Geist Mono",ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;color:#ece3d4}
+.k{left:16px;opacity:.5}
+.n{right:16px;opacity:.85;transform-origin:100% 50%}
+.n b{font-weight:500;color:#ffb35c}
+.hint{position:fixed;left:0;right:0;bottom:34px;margin:0;text-align:center;pointer-events:none;z-index:2;font:500 10px/1 "Geist Mono",ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;color:#ece3d4}
+.credit{position:fixed;left:0;right:0;bottom:13px;text-align:center;z-index:3;font:400 10.5px "Geist Mono",ui-monospace,monospace;color:#ece3d4;opacity:.5}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<p class="k" id="label">main.js · 1 problem</p>
+<p class="n" id="count">bugs roasted: <b>0</b></p>
+<p class="hint" id="hint">drag · tap to breathe fire · hold still</p>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:700 20px Kalam">a</span><span class="pre" style="font:400 20px Kalam">a</span><span class="pre" style="font:500 20px 'Geist Mono'">a</span>
+<script>
+// ===== Tiny Dragon · free code by @sicscod.drops =====
+// Try: yoursite/?color=purple
+const P = new URLSearchParams(location.search);
+const SKINS = {   // scales, shade, belly, wings, spikes + tail tip
+  green:  { body: "#72bf5c", dark: "#4b9442", belly: "#f3e3a8", wing: "#a5d97f", spike: "#f2b84b" },
+  red:    { body: "#e2604d", dark: "#b33f35", belly: "#f8d79c", wing: "#f39478", spike: "#f6c552" },
+  purple: { body: "#9273d6", dark: "#6a4fae", belly: "#f4dbb4", wing: "#bba4ec", spike: "#f49cb8" },
+  gold:   { body: "#eab544", dark: "#c18623", belly: "#fcebbd", wing: "#f6d57a", spike: "#e2703f" },
+};
+const CONFIG = {
+  color: SKINS[P.get("color")] ? P.get("color") : "green",  // green | red | purple | gold
+  fireEvery: 3,          // sneezes until the real fire: tap 1 and 2 = sneeze, tap 3 = FIRE
+  flameReach: 250,       // px: how far the big fire goes
+  holdToSleep: 1.0,      // seconds your finger has to stay still before it naps on it
+  bugSpeed: 30,          // px/s: how fast the bugs crawl across your code
+  sneezes: ["achoo!", "pff.", "*sniff*"],
+  file: "main.js",
+};
+const C = SKINS[CONFIG.color], INK = "#1d1513";
+
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const countEl = document.getElementById("count"), hintEl = document.getElementById("hint"), labelEl = document.getElementById("label");
+const DS = 1.18;          // dragon size
+let W = 0, H = 0, DPR = 1, S = 1, LH = 26, bg = null, lines = [];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = (v, target, rate, dt) => v + (target - v) * (1 - Math.exp(-rate * dt));
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return (s - Math.floor(s)) * 2 - 1; };
+const sm = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+
+// ---------- hand-drawn helpers: every outline wobbles and "boils" a few times a second ----------
+let boil = 0;
+function wob(pts, seed, amp = 1) {
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => { const ox = hash(seed + i * 3.1 + boil * 17) * amp, oy = hash(seed + i * 7.3 + boil * 29) * amp; i ? ctx.lineTo(x + ox, y + oy) : ctx.moveTo(x + ox, y + oy); });
+}
+function ell(cx, cy, rx, ry, n = 22, rot = 0) {
+  const p = [], c = Math.cos(rot), s = Math.sin(rot);
+  for (let i = 0; i <= n; i++) { const a = i / n * Math.PI * 2, x = Math.cos(a) * rx, y = Math.sin(a) * ry; p.push([cx + x * c - y * s, cy + x * s + y * c]); }
+  return p;
+}
+function blob(pts, fill, seed, lw = 3, amp = .9) { wob(pts, seed, amp); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (lw) { ctx.lineWidth = lw; ctx.strokeStyle = INK; ctx.stroke(); } }
+function stroke(pts, seed, lw = 2.5, col = INK, amp = .7) { wob(pts, seed, amp); ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.stroke(); }
+
+// ---------- the code editor behind it (drawn once per resize) ----------
+function buildEditor() {
+  bg = document.createElement("canvas"); bg.width = W * DPR; bg.height = H * DPR;
+  const c = bg.getContext("2d"); c.scale(DPR, DPR); c.lineCap = "round";
+  c.fillStyle = "#1b1a1f"; c.fillRect(0, 0, W, H);
+  c.fillStyle = "#17161b"; c.fillRect(0, 0, 40, H);
+  const tok = ["#d98e86", "#dcbc7c", "#93b796", "#8eaacb", "#b59ad0", "#7d7882"];
+  LH = Math.round(26 * clamp(S, .8, 1.2)); lines = [];
+  c.font = '400 10px "Geist Mono", monospace'; c.textAlign = "right";
+  let ind = 0;
+  for (let i = 0, y = 62; y < H - 40; i++, y += LH) {
+    lines.push(y);
+    c.fillStyle = "rgba(236,227,212,.2)"; c.fillText(String(i + 1), 30, y + 3.5);
+    const r = (hash(i * 5.7) + 1) / 2;
+    if (r < .12) continue;                          // blank line
+    if (r > .78 && ind < 3) ind++; else if (r < .3 && ind > 0) ind--;
+    let x = 56 + ind * 22, n = 1 + Math.floor((hash(i * 2.3) + 1) * 2);
+    for (let j = 0; j < n && x < W - 40; j++) {
+      const w = 14 + (hash(i * 9.1 + j * 4.4) + 1) * 40;
+      c.strokeStyle = tok[Math.floor((hash(i * 3.3 + j * 1.9) + 1) * 3) % tok.length];
+      c.globalAlpha = .32; c.lineWidth = 6;
+      c.beginPath(); c.moveTo(x, y + hash(i + j) * .6); c.lineTo(Math.min(W - 40, x + w), y + hash(i * 2 + j) * .6); c.stroke();
+      x += w + 13;
+    }
+  }
+  c.globalAlpha = 1;
+  const g = c.createRadialGradient(W * .5, H * .45, Math.min(W, H) * .25, W * .5, H * .5, Math.max(W, H) * .75);
+  g.addColorStop(0, "rgba(10,8,12,0)"); g.addColorStop(1, "rgba(10,8,12,.55)"); c.fillStyle = g; c.fillRect(0, 0, W, H);
+}
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  S = clamp(Math.min(W / 540, H / 600), .62, 1.3);
+  buildEditor();
+  if (!D.x) { D.x = W * .5; D.y = H * .42; D.tx = D.x; D.ty = D.y; }
+  if (!bug) spawnBug(true);
+}
+
+// ---------- your finger ----------
+const F = { down: false, x: 0, y: 0, sx: 0, sy: 0, t0: 0, moved: 0, ax: 0, ay: 0, still: 0, used: false, follow: false };
+addEventListener("pointerdown", e => {
+  const now = performance.now();
+  Object.assign(F, { down: true, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, ax: e.clientX, ay: e.clientY, t0: now, still: now, moved: 0, used: true });
+});
+addEventListener("pointermove", e => {
+  const now = performance.now();
+  F.x = e.clientX; F.y = e.clientY;
+  if (!F.down && e.pointerType !== "mouse") return;
+  F.moved = Math.max(F.moved, Math.hypot(F.x - F.sx, F.y - F.sy));
+  if (Math.hypot(F.x - F.ax, F.y - F.ay) > 9) { F.ax = F.x; F.ay = F.y; F.still = now; }
+  if (F.moved > 10 || e.pointerType === "mouse") F.follow = true;
+  F.used = true;
+});
+addEventListener("pointerup", e => {
+  const now = performance.now();
+  if (F.down && F.moved < 10 && now - F.t0 < 450) tap(e.clientX, e.clientY);
+  F.down = false; F.follow = e.pointerType === "mouse";
+});
+addEventListener("pointercancel", () => { F.down = false; F.follow = false; });
+
+// ---------- the dragon ----------
+const D = { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0, face: 1, fs: 1, ph: 0, pitch: 0, head: 0, sc: 1, curl: 0, mouth: 0,
+  eyes: "open", bob: 0, lookX: 1, lookY: 0, taps: 0, act: null, pride: 0, sleep: false, zT: 0, blink: 0, sniff: 0 };
+const fx = [];             // smoke, flames, sparks, ash, z's, words
+let bug = null, roasted = 0, bump = 0, shake = 0, glow = 0, lastNow = 0, hintA = .7;
+
+function L2S(lx, ly) {     // dragon-local point -> screen
+  const r = -D.pitch, c = Math.cos(r), s = Math.sin(r);
+  const x = lx * c - ly * s, y = lx * s + ly * c, k = S * D.sc * DS;
+  return [D.x + x * k * D.fs, D.y + D.bob + y * k];
+}
+function mouthLocal() {    // mouth tip, after the head turns
+  const a = -D.head, c = Math.cos(a), s = Math.sin(a), nx = 18, ny = -24, x = 80 - nx, y = -22 - ny;
+  return [nx + x * c - y * s, ny + x * s + y * c];
+}
+function tap(x, y) {
+  if (D.sleep) { wake(); return; }
+  if (D.act && D.act.type !== "proud") return;
+  D.taps++;
+  const fire = D.taps % CONFIG.fireEvery === 0;
+  const lock = fire && bug && bug.st === "crawl" && Math.hypot(bug.x - x, bug.y - y) < 190 * S;   // aim assist: tap near a bug = it goes for the bug
+  D.face = (lock ? bug.x : x) >= D.x ? 1 : -1;
+  D.act = { type: fire ? "fire" : "sneeze", t: 0, x, y, hit: false, n: D.taps, lock };
+}
+function wake() { D.sleep = false; D.act = null; word("!", D.x + D.face * 30 * S, D.y - 90 * S, "#ffe9c4", 26); }
+function word(text, x, y, col, size, rot = 0) { fx.push({ k: "word", text, x, y, vx: 0, vy: -26, t: 0, life: 1.1, col, size, rot }); }
+function smoke(x, y, n, sp, size, vx0 = 0, vy0 = -30) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * 6.283;
+    fx.push({ k: "smoke", x, y, vx: vx0 + Math.cos(a) * sp * Math.random(), vy: vy0 + Math.sin(a) * sp * Math.random(), r: size * (.6 + Math.random() * .6), t: 0, life: .9 + Math.random() * .6, seed: Math.random() * 99 }); }
+}
+
+function think(dt, now) {
+  const a = D.act;
+  // where it wants to be: next to your finger, facing it (or curled ON it when you hold still)
+  const holding = F.down && now - F.still > CONFIG.holdToSleep * 1000 && (!a || a.type === "proud");
+  if (holding && !D.sleep) { D.sleep = true; D.act = null; D.zT = 0; }
+  if (D.sleep && F.down && now - F.still < 50) wake();
+  if (D.sleep && !F.down) wake();
+  if (D.sleep) { D.tx = F.x; D.ty = F.y - 40 * S; D.face = D.face || 1; }
+  else if (F.follow) {
+    const side = D.x < F.x ? -1 : 1;
+    D.tx = clamp(F.x + side * 92 * S, 70 * S, W - 70 * S); D.ty = clamp(F.y - 30 * S, 110 * S, H - 90 * S);
+    if (!a && Math.abs(F.x - D.x) > 20 * S) D.face = Math.sign(F.x - D.x);
+  } else if (!a && Math.abs(D.vx) > 60) D.face = Math.sign(D.vx);
+  if (a && a.lock && bug && bug.st === "crawl") {      // line up the shot: hover up and to the side of the bug
+    a.x = bug.x; a.y = bug.y - 6 * S;
+    const side = D.x < bug.x ? -1 : 1;
+    D.tx = clamp(bug.x + side * 165 * S, 130 * S, W - 130 * S); D.ty = clamp(bug.y - 105 * S, 120 * S, H);
+  }
+  if (a && a.type !== "proud") D.face = a.x >= D.x ? 1 : -1;
+  // springy flight
+  const k = D.sleep ? 30 : 10, damp = D.sleep ? 10 : 4.6;
+  D.vx += ((D.tx - D.x) * k - D.vx * damp) * dt; D.vy += ((D.ty - D.y) * k - D.vy * damp) * dt;
+  D.x += D.vx * dt; D.y += D.vy * dt;
+  D.fs = ease(D.fs, D.face, 16, dt);
+  const sp = Math.hypot(D.vx, D.vy);
+  // wings + bob
+  D.ph += dt * (D.sleep ? 0 : 9 + Math.min(10, sp * .02));
+  D.curl = ease(D.curl, D.sleep ? 1 : 0, 6, dt);
+  D.bob = Math.sin(D.ph) * 5 * S * (1 - D.curl);
+  let pitch = clamp(-D.vy * .0009, -.25, .25) + clamp(D.vx * D.face * -.0004, -.12, .12), sc = 1, head = 0, mouth = 0, eyes = D.sleep ? "shut" : "open";
+  D.lookX = 1; D.lookY = 0;
+  if (bug && bug.st === "crawl" && !D.sleep) { const dx = (bug.x - D.x) * D.face, dy = bug.y - D.y; const l = Math.hypot(dx, dy) || 1; D.lookX = dx / l; D.lookY = dy / l; }
+  if (F.follow && F.down) { const dx = (F.x - D.x) * D.face, dy = F.y - D.y, l = Math.hypot(dx, dy) || 1; D.lookX = dx / l; D.lookY = dy / l; }
+  // aim (local angle, + = up)
+  const aim = a && a.type !== "proud" ? clamp(Math.atan2(-(a.y - (D.y - 26 * S * DS)), Math.max(40 * S, Math.abs(a.x - D.x) - 70 * S * DS)), -1, .6) : 0;
+  if (a) {
+    a.t += dt; const u = a.t;
+    if (a.type === "sneeze") {
+      const IN = .3;
+      if (u < IN) { const q = sm(u / IN); sc = 1 + .09 * q; pitch += .2 * q; head = .25 * q; eyes = "squint"; mouth = .2; }
+      else {
+        if (!a.done) {
+          a.done = true; const [mx, my] = L2S(...mouthLocal());
+          smoke(mx, my, 9, 60, 15 * S, Math.cos(aim) * D.face * 70, -Math.sin(aim) * 70 - 10);
+          fx.push({ k: "spark", x: mx, y: my, vx: D.face * (140 + Math.random() * 60), vy: -120, t: 0, life: .75 });
+          word(CONFIG.sneezes[(a.n - 1) % CONFIG.sneezes.length], mx + D.face * 40 * S, my - 40 * S, "#fff1dc", 30 * S, D.face * -.12);
+          shake = .25;
+        }
+        const q = Math.exp(-(u - IN) * 7);
+        sc = 1 - .07 * q; pitch -= .35 * q; head = aim * .5 - .35 * q; eyes = u < .75 ? "xx" : "open"; mouth = .3 * q;
+        if (u > .75) D.sniff = 1;
+        if (u > 1.05) D.act = null;
+      }
+    } else if (a.type === "fire") {
+      const IN = .42, OUT = 1.25;
+      if (u < IN) { const q = sm(u / IN); sc = 1 + .14 * q; pitch += .25 * q; head = aim * .4 + .3 * q; eyes = "squint"; mouth = .1; }
+      else if (u < IN + OUT) {
+        const q = Math.min(1, (u - IN) * 8);
+        sc = 1.04 - .04 * q; pitch -= .12 * q; head = aim * .7; eyes = "fierce"; mouth = 1;
+        shake = Math.max(shake, .6); glow = 1;
+        const [mx, my] = L2S(...mouthLocal()), dir = D.face > 0 ? -aim : Math.PI + aim;
+        const fu = u - IN;
+        D.flame = { x: mx, y: my, dir, len: CONFIG.flameReach * S * sm(fu / .16) * (1 - sm((fu - OUT + .2) / .2)) };
+        const n = Math.round(dt * 200);
+        for (let i = 0; i < n; i++) {
+          const ang = dir + (Math.random() - .5) * .3, v = (CONFIG.flameReach * 2.9 + Math.random() * 160) * S;
+          fx.push({ k: "fire", x: mx, y: my, vx: Math.cos(ang) * v + D.vx * .5, vy: Math.sin(ang) * v, r: (7 + Math.random() * 7) * S, t: 0, life: .42 + Math.random() * .22 });
+        }
+        if (bug && bug.st === "crawl") {      // did we get it?
+          const ux = Math.cos(dir), uy = Math.sin(dir), L = D.flame.len, along = clamp((bug.x - mx) * ux + (bug.y - my) * uy, 0, L);
+          const off = Math.hypot(bug.x - (mx + ux * along), bug.y - (my + uy * along));
+          if (along > 0 && off < 22 * S + L * .2 * Math.sin(Math.PI * Math.pow(along / Math.max(L, 1), .62))) roast();
+        }
+      } else { D.flame = null; D.act = { type: "proud", t: 0 }; D.pride = 1; word(a.hit ? "hmph." : "...hmph.", D.x + D.face * 10 * S, D.y - 125 * S, "#fff1dc", 28 * S); }
+    } else if (a.type === "proud") {
+      const q = sm(a.t / .35) * (1 - sm((a.t - 2.4) / .5));
+      sc = 1 + .08 * q; pitch += .2 * q; head = .18 * q; eyes = q > .3 ? "happy" : "open";
+      if (Math.random() < dt * 5 * q) { const [nx, ny] = L2S(...mouthLocal()); smoke(nx - D.face * 6 * S, ny - 8 * S, 1, 8, 5 * S, 0, -40); }
+      if (a.t > 2.9) D.act = null;
+    }
+  }
+  if (D.sleep) { pitch = .05; head = -.15; sc = 1 + .035 * Math.sin(now / 420); }
+  D.pitch = ease(D.pitch, pitch, 14, dt); D.sc = ease(D.sc, sc, 18, dt); D.head = ease(D.head, head, 16, dt); D.mouth = ease(D.mouth, mouth, 20, dt);
+  D.eyes = eyes;
+  // blinks
+  D.blink -= dt; if (D.blink < -3.4 - Math.random()) D.blink = .12;
+  if (D.blink > 0 && eyes === "open") D.eyes = "shut";
+  // z z z
+  if (D.sleep && D.curl > .7) { D.zT -= dt; if (D.zT <= 0) { D.zT = .9; const [hx, hy] = L2S(50, -60); fx.push({ k: "z", x: hx, y: hy, vx: D.face * 18, vy: -34, t: 0, life: 1.8, size: 26 * S }); } }
+}
+
+// ---------- the bug (crawls along a line of code, leaves a red squiggle) ----------
+function spawnBug(first) {
+  const li = lines.length ? lines[Math.floor(lines.length * (first ? .68 : .45 + Math.random() * .35))] : H * .7;
+  const dir = first ? -1 : (Math.random() < .5 ? 1 : -1);
+  const x = first ? W * .78 : dir > 0 ? -20 * S : W + 20 * S;
+  bug = { x, y: li, x0: x, dir, ph: 0, st: "crawl", t: 0, s: S * 1.35 };
+}
+function roast() {
+  bug.st = "burn"; bug.t = 0; D.act.hit = true; roasted++; bump = 1;
+  countEl.innerHTML = `bugs roasted: <b>${roasted}</b>`;
+  labelEl.textContent = `${CONFIG.file} · 0 problems`;
+}
+function bugStep(dt) {
+  const b = bug; b.t += dt;
+  if (b.st === "crawl") {
+    b.ph += dt * 5.2;
+    b.x += b.dir * CONFIG.bugSpeed * S * (.25 + .75 * Math.max(0, Math.sin(b.ph))) * dt * 1.6;
+    if (b.x < -60 * S || b.x > W + 60 * S) spawnBug(false);
+  } else if (b.st === "burn") {
+    if (Math.random() < dt * 14) smoke(b.x, b.y - 14 * b.s, 1, 14, 7 * S, 0, -50);
+    if (b.t > 1.5) { b.st = "ash"; b.t = 0;
+      for (let i = 0; i < 16; i++) fx.push({ k: "ash", x: b.x + (Math.random() - .5) * 40 * S, y: b.y - Math.random() * 10 * S, vx: (Math.random() - .5) * 60, vy: -40 - Math.random() * 60, t: 0, life: .9 + Math.random() * .5 });
+      word("fixed ✓", b.x, b.y - 30 * S, "#9fdc8e", 15 * S);
+    }
+  } else if (b.st === "ash" && b.t > 3) { spawnBug(false); labelEl.textContent = `${CONFIG.file} · 1 problem`; }
+}
+function drawBug(now) {
+  const b = bug, s = b.s;
+  // linter squiggle
+  if (b.st !== "ash") {
+    const x1 = Math.min(b.x0, b.x), x2 = Math.max(b.x0, b.x), al = b.st === "burn" ? Math.max(0, 1 - b.t * 1.5) : .85;
+    if (x2 - x1 > 4 && al > 0) {
+      ctx.save(); ctx.strokeStyle = `rgba(240,84,72,${al})`; ctx.lineWidth = 1.6; ctx.beginPath();
+      for (let x = x1; x <= x2; x += 3) ctx.lineTo(x, b.y + 9 * s + Math.sin(x * .55) * 2.2);
+      ctx.stroke(); ctx.restore();
+    }
+  }
+  if (b.st === "ash") return;
+  const burnt = b.st === "burn", q = burnt ? Math.min(1, b.t * 3) : 0;
+  ctx.save(); ctx.translate(b.x, b.y); ctx.scale(b.dir * s, s);
+  if (burnt) { const f = sm((b.t - .6) / .4); ctx.translate(0, -6 * f); ctx.rotate(Math.PI * f * .999); ctx.translate(0, 6 * f * 0); }
+  const hump = burnt ? 0 : Math.max(0, Math.sin(b.ph)), sp = 9 - hump * 3;
+  const col = burnt ? "#2a2321" : "#ef6a50", spot = burnt ? "#463a36" : "#ffc07a";
+  const seg = [];
+  for (let i = 4; i >= 1; i--) seg.push([-i * sp, -7 - Math.sin(i / 4 * Math.PI) * hump * 9 * (i > 0 && i < 4 ? 1 : .3), 7.5]);
+  // legs
+  ctx.lineCap = "round";
+  seg.forEach(([x, y], i) => stroke([[x - 2, y + 5], [x - 3, y + 10]], 300 + i, 2));
+  seg.forEach(([x, y, r], i) => { blob(ell(x, y, r, r, 12), col, 310 + i * 5, 2.4, .6); if (i % 2 === 0) { ctx.fillStyle = spot; ctx.beginPath(); ctx.arc(x - 1, y - 3, 2.2, 0, 7); ctx.fill(); } });
+  // head
+  const hx = 4, hy = -9;
+  stroke([[hx + 2, hy - 8], [hx + 4, hy - 17], [hx + 8, hy - 20]], 340, 2); stroke([[hx + 6, hy - 7], [hx + 11, hy - 15], [hx + 15, hy - 16]], 345, 2);
+  blob(ell(hx + 3, hy, 10, 9.5, 14), col, 350, 2.6, .6);
+  if (b.st === "burn" && b.t > .25) {           // x_x
+    ctx.strokeStyle = "#f2e6d8"; ctx.lineWidth = 1.8;
+    [[hx + 2, hy - 2], [hx + 8, hy - 2]].forEach(([x, y]) => { ctx.beginPath(); ctx.moveTo(x - 2, y - 2); ctx.lineTo(x + 2, y + 2); ctx.moveTo(x + 2, y - 2); ctx.lineTo(x - 2, y + 2); ctx.stroke(); });
+  } else {
+    ctx.fillStyle = "#fff"; [[hx + 3, hy - 2], [hx + 9, hy - 2]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); });
+    ctx.fillStyle = INK; [[hx + 4, hy - 1.6], [hx + 10, hy - 1.6]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 1.6, 0, 7); ctx.fill(); });
+    stroke([[hx + 5, hy + 4], [hx + 7.5, hy + 5.5], [hx + 10, hy + 4]], 360, 1.4);
+  }
+  ctx.restore();
+  // a little error badge floating above it
+  if (b.st === "crawl") {
+    const y = b.y - 38 * s + Math.sin(now / 260) * 2;
+    ctx.save(); ctx.fillStyle = "#f05448"; ctx.beginPath(); ctx.arc(b.x, y, 8 * s, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = `700 ${12 * s}px "Geist Mono", monospace`; ctx.textAlign = "center"; ctx.fillText("!", b.x, y + 4.2 * s); ctx.restore();
+  }
+  // flames on a burning bug
+  if (burnt && b.t < 1.2) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 5; i++) {
+      const fl = (1 - b.t / 1.2) * (12 + 6 * Math.sin(now / 50 + i * 2)) * s, x = b.x + (i - 2) * 9 * s;
+      const g = ctx.createRadialGradient(x, b.y - 10 * s, 0, x, b.y - 10 * s, fl * 1.4);
+      g.addColorStop(0, "rgba(255,230,140,.9)"); g.addColorStop(.5, "rgba(255,120,40,.5)"); g.addColorStop(1, "rgba(255,60,20,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, b.y - 10 * s - fl * .4, fl * .6, fl * 1.2, 0, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// ---------- drawing the dragon ----------
+function drawDragon(now) {
+  const t = now / 1000, cu = D.curl;
+  ctx.save();
+  ctx.translate(D.x, D.y + D.bob); ctx.scale(D.fs * S * D.sc * DS, S * D.sc * DS); ctx.rotate(-D.pitch);
+  ctx.lineJoin = ctx.lineCap = "round";
+  const flap = Math.sin(D.ph) * (1 - cu);
+  // wings
+  function wing(ox, oy, col, seed, back) {
+    ctx.save(); ctx.translate(ox, oy);
+    const ang = lerp(-.25 + flap * .55, -.95, cu) + (back ? .18 : 0);
+    ctx.rotate(ang); ctx.scale(1, lerp(.62 + .38 * Math.abs(flap + .3) / 1.3, .6, cu) * (back ? .9 : 1));
+    const pts = [[0, 0], [-8, -36], [-20, -64], [-30, -46], [-46, -46], [-44, -30], [-60, -24], [-40, -12], [-24, 2]];
+    blob(pts, col, seed, 3, .8);
+    stroke([[-3, -6], [-24, -58]], seed + 20, 2); stroke([[-4, -4], [-42, -40]], seed + 21, 2); stroke([[-4, -2], [-54, -22]], seed + 22, 2);
+    ctx.restore();
+  }
+  wing(-2, -30, C.dark, 10, true);
+  // tail
+  {
+    const N = 12, base = [-34, 18]; let x = base[0], y = base[1], ang = lerp(Math.PI * .92, Math.PI * .62, cu);
+    const L = [], R = [];
+    for (let i = 0; i <= N; i++) {
+      const k = i / N, w = lerp(12, 3, k);
+      const nx = -Math.sin(ang), ny = Math.cos(ang);
+      L.push([x + nx * w, y + ny * w]); R.push([x - nx * w, y - ny * w]);
+      ang += lerp(-.1, -.17, cu) + Math.sin(t * 7 - i * .6) * .16 * k * (1 - cu) + (D.act && D.act.type === "proud" ? Math.sin(t * 14 - i) * .08 : 0);
+      x += Math.cos(ang) * 7.5; y += Math.sin(ang) * 7.5;
+    }
+    blob(L.concat(R.reverse()), C.body, 30, 3, .6);
+    // spade tip
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+    blob([[-3, 0], [6, -10], [18, 0], [6, 10]], C.spike, 40, 2.6, .5); ctx.restore();
+  }
+  // back foot
+  blob(ell(-20, 40 - cu * 4, 11, 8, 12), C.dark, 50, 3, .6);
+  // body + belly
+  blob(ell(0, 6, 44, 39, 26, -.08), C.body, 60, 3.2, 1);
+  ctx.save(); wob(ell(0, 6, 44, 39, 26, -.08), 60, 1); ctx.clip();
+  blob(ell(18, 14, 26, 30, 18), C.belly, 70, 0, .7);
+  ctx.strokeStyle = "rgba(29,21,19,.35)"; ctx.lineWidth = 2;
+  for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.ellipse(20, 14 + i * 10 - 10, 22, 6, 0, .15 * Math.PI, .85 * Math.PI); ctx.stroke(); }
+  ctx.restore();
+  // back spikes
+  [[-34, -10], [-22, -26], [-6, -34]].forEach(([sx, sy], i) => { const a = Math.atan2(sy - 6, sx) ; const ox = Math.cos(a), oy = Math.sin(a);
+    blob([[sx - oy * 6, sy + ox * 6], [sx + ox * 11, sy + oy * 11], [sx + oy * 6, sy - ox * 6]], C.spike, 80 + i * 5, 2.4, .5); });
+  // front foot + tiny arm
+  blob(ell(20, 42 - cu * 4, 12, 8, 12), C.body, 100, 3, .6);
+  stroke([[16, 44], [16, 47]], 104, 1.6); stroke([[22, 45], [22, 48]], 105, 1.6);
+  blob(ell(34, 14, 7, 9, 10, .5), C.body, 110, 2.6, .5);
+  // head (turns around the neck)
+  ctx.save(); ctx.translate(18 - cu * 6, -24 + cu * 16); ctx.rotate(-D.head); ctx.translate(-18, 24);
+  // horns + frill
+  blob([[8, -62], [-2, -86], [20, -66]], "#f6e7c8", 120, 2.6, .5);
+  blob([[26, -68], [24, -90], [38, -68]], "#f6e7c8", 125, 2.6, .5);
+  blob([[0, -46], [-20, -54], [-14, -40], [-22, -32], [2, -34]], C.wing, 130, 2.6, .6);
+  blob(ell(24, -42, 33, 30, 24), C.body, 140, 3.2, 1);
+  // snout + open mouth
+  const mo = D.mouth;
+  if (mo > .05) blob(ell(70, -18, 12, 4 + mo * 7, 12), "#5a2320", 150, 2.4, .5);
+  blob(ell(56, -32, 25, 17, 18, -.1), C.body, 160, 3, .8);
+  ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(74, -40, 2.4, 3.2, .4, 0, 7); ctx.fill();
+  if (D.sniff > 0) { /* nothing drawn, keeps the nose wiggle */ }
+  if (mo < .3) stroke([[50, -22], [58, -19], [66, -21]], 170, 2.2);
+  // cheek
+  ctx.fillStyle = "rgba(255,120,120,.35)"; ctx.beginPath(); ctx.ellipse(40, -26, 7, 4, 0, 0, 7); ctx.fill();
+  // eye
+  const e = D.eyes, ex = 33, ey = -48;
+  if (e === "open" || e === "fierce") {
+    blob(ell(ex, ey, 11, 12.5, 16), "#fffaf0", 180, 2.6, .5);
+    const px = ex + 3 + D.lookX * 3, py = ey + 1 + D.lookY * 3.5;
+    ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(px, py, 6.2, 7.4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(px + 2, py - 3, 2.4, 0, 7); ctx.fill();
+    if (e === "fierce") { blob([[ex - 13, ey - 16], [ex + 12, ey - 10], [ex + 12, ey - 6], [ex - 13, ey - 11]], C.dark, 190, 2.2, .3); }
+  } else if (e === "squint") {
+    stroke([[ex - 9, ey - 1], [ex, ey + 1], [ex + 9, ey - 1]], 200, 3);
+  } else if (e === "xx") {
+    stroke([[ex - 7, ey - 7], [ex + 6, ey], [ex - 7, ey + 7]], 210, 3);
+  } else if (e === "happy") {
+    stroke([[ex - 9, ey + 3], [ex - 4, ey - 4], [ex + 4, ey - 5], [ex + 9, ey + 2]], 220, 3);
+  } else { // shut
+    stroke([[ex - 9, ey + 1], [ex - 3, ey + 5], [ex + 4, ey + 5], [ex + 9, ey + 1]], 230, 2.6);
+  }
+  ctx.restore();
+  // front wing
+  wing(6, -30, C.wing, 240, false);
+  ctx.restore();
+}
+
+function drawFlame(now) {          // the big cartoon flame: three wobbly layers with an ink outline
+  const f = D.flame; if (!f || f.len < 4) return;
+  ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.dir); ctx.lineJoin = "round";
+  [[1, 1, "#ff6a2b", 3.2], [.82, .66, "#ffb43a", 0], [.58, .36, "#fff1b8", 0]].forEach(([lk, wk, col, lw], li) => {
+    const L = f.len * lk, n = 14, top = [], bot = [];
+    for (let i = 0; i <= n; i++) {
+      const u = i / n, x = u * L, w = (5 + L * .2 * Math.sin(Math.PI * Math.pow(u, .62))) * wk;
+      const fl = 1 + .16 * Math.sin(now / 38 + i * 1.7 + li) , fl2 = 1 + .16 * Math.sin(now / 45 - i * 1.3 + li * 2);
+      top.push([x, -w * fl]); bot.push([x, w * fl2]);
+    }
+    top.push([L + 10 * wk, 0]);
+    blob(top.concat(bot.reverse()), col, 400 + li * 9, lw * S, 1.6);
+  });
+  ctx.restore();
+}
+function drawFx(dt) {
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const p = fx[i]; p.t += dt;
+    if (p.t > p.life) { fx.splice(i, 1); continue; }
+    const u = p.t / p.life;
+    if (p.k === "fire") { p.vx *= Math.exp(-dt * 2.4); p.vy = p.vy * Math.exp(-dt * 2.4) - 150 * dt; }
+    else if (p.k === "smoke") { p.vx *= Math.exp(-dt * 2.5); p.vy = p.vy * Math.exp(-dt * 1.5) - 18 * dt; }
+    else if (p.k === "spark" || p.k === "ash") p.vy += 420 * dt * (p.k === "ash" ? .3 : 1);
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    ctx.save();
+    if (p.k === "fire") {
+      ctx.globalCompositeOperation = "lighter";
+      const r = p.r * (1 + u * 2.2), col = u < .25 ? [255, 236, 160] : u < .55 ? [255, 150, 50] : [230, 70, 30];
+      ctx.globalAlpha = (1 - u) * .75;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      g.addColorStop(0, `rgba(${col},1)`); g.addColorStop(1, `rgba(${col},0)`);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill();
+    } else if (p.k === "smoke") {
+      ctx.globalAlpha = (1 - u) * .9; const r = p.r * (1 + u * 1.4);
+      blob(ell(p.x, p.y, r, r * .92, 12), "#b9b2ad", p.seed, 2.2 * S, 1.2);
+    } else if (p.k === "spark") {
+      ctx.globalAlpha = 1 - u; ctx.fillStyle = "#ffd36a"; ctx.translate(p.x, p.y); ctx.rotate(p.t * 12);
+      const r = 7 * S * (1 - u * .6); ctx.beginPath();
+      for (let j = 0; j < 8; j++) { const rr = j % 2 ? r * .35 : r; ctx.lineTo(Math.cos(j * Math.PI / 4) * rr, Math.sin(j * Math.PI / 4) * rr); }
+      ctx.closePath(); ctx.fill();
+    } else if (p.k === "ash") {
+      ctx.globalAlpha = 1 - u; ctx.fillStyle = "#3b3330"; ctx.fillRect(p.x, p.y, 3 * S, 3 * S);
+    } else if (p.k === "z") {
+      ctx.globalAlpha = Math.min(1, u * 6) * Math.min(1, (1 - u) * 2.5); p.vx = Math.sin(p.t * 3) * 14;
+      ctx.font = `700 ${p.size * (1 + u * .6)}px Kalam`; ctx.fillStyle = "#e9dcff"; ctx.lineWidth = 4 * S; ctx.strokeStyle = INK; ctx.lineJoin = "round";
+      ctx.strokeText("z", p.x, p.y); ctx.fillText("z", p.x, p.y);
+    } else if (p.k === "word") {
+      const pop = u < .12 ? .6 + u / .12 * .5 : 1.1 - Math.min(.1, (u - .12));
+      ctx.globalAlpha = u > .7 ? (1 - u) / .3 : 1; p.vy *= Math.exp(-dt * 3);
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(pop, pop);
+      ctx.font = p.text.includes("✓") ? `500 ${p.size}px "Geist Mono", monospace` : `700 ${p.size}px Kalam`;
+      ctx.textAlign = "center"; ctx.lineJoin = "round"; ctx.lineWidth = 5 * S; ctx.strokeStyle = INK;
+      ctx.strokeText(p.text, 0, 0); ctx.fillStyle = p.col; ctx.fillText(p.text, 0, 0);
+    }
+    ctx.restore();
+  }
+}
+
+function frame(now) {
+  const dt = Math.min(.05, (now - (lastNow || now)) / 1000); lastNow = now;
+  boil = Math.floor(now / 125);
+  think(dt, now); bugStep(dt);
+  shake = Math.max(0, shake - dt * 1.6); glow = Math.max(0, glow - dt * 2.5); bump = Math.max(0, bump - dt * 2.5);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.drawImage(bg, 0, 0, W, H);
+  ctx.save();
+  const sk = shake * shake * 7 * S; ctx.translate(Math.sin(now * .09) * sk, Math.cos(now * .113) * sk);
+  if (glow > 0) {
+    const g = ctx.createRadialGradient(D.x + D.face * 180 * S, D.y + 20 * S, 0, D.x + D.face * 180 * S, D.y + 20 * S, 420 * S);
+    g.addColorStop(0, `rgba(255,140,50,${.22 * glow})`); g.addColorStop(1, "rgba(255,140,50,0)"); ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
+  }
+  drawBug(now);
+  // soft shadow under the dragon on the "page"
+  ctx.fillStyle = "rgba(0,0,0,.22)"; ctx.beginPath(); ctx.ellipse(D.x, D.y + 80 * S * D.sc * DS, 50 * S * DS * (1 - D.curl * .2), 9 * S, 0, 0, 7); ctx.fill();
+  drawDragon(now);
+  drawFlame(now);
+  drawFx(dt);
+  ctx.restore();
+  countEl.style.transform = `scale(${1 + bump * .35})`;
+  hintA = F.used ? Math.max(0, hintA - dt * 1.2) : .5 + Math.sin(now / 500) * .2; hintEl.style.opacity = hintA;
+  requestAnimationFrame(frame);
+}
+addEventListener("resize", resize);
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
