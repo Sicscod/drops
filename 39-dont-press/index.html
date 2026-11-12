@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>don't press</title>
+<meta name="description" content="One big red button. Please don't press it. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=JetBrains+Mono:wght@500;800&family=Gochi+Hand&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#131114;color:#f1ece4}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.credit{position:fixed;left:0;right:0;bottom:12px;text-align:center;z-index:3;font:500 10.5px "JetBrains Mono",ui-monospace,monospace;color:#f1ece4;opacity:.45}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:800 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:700 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:800 20px 'JetBrains Mono'">a</span><span class="pre" style="font:500 20px 'JetBrains Mono'">a</span><span class="pre" style="font:20px 'Gochi Hand'">a</span>
+<script>
+// ===== Don't Press · free code by @sicscod.drops =====
+// Try: yoursite/?color=%2300c46a   (any hex: ?color=2a7fff)
+const P = new URLSearchParams(location.search);
+const hex = v => v && /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) ? (v[0] === "#" ? v : "#" + v) : null;
+const CONFIG = {
+  color: hex(P.get("color")) || "#e3242b",   // the button
+  label: "DON'T PRESS",                      // the label tape under it
+  corner: "panel 39 · do not touch",
+  // the jokes, one per press. say = the big line, hold = seconds it stays on screen
+  lines: [
+    { say: "hey.",                   hold: 9 },
+    { say: "i said don't.",          hold: 9 },
+    { say: "ok. you caught me.",     hold: 9 },  // after the chase
+    { say: "i have a family.",       hold: 9 },  // + the little sign
+    { say: "now look what you did.", hold: 9 },  // the glass cracks
+    { say: "SELF-DESTRUCT IN",       hold: 9 },  // sirens + countdown
+  ],
+  dodge: ["nope.", "nuh uh.", "too slow."],      // before press 3 the button runs away, once per line
+  dodgeSpots: [[.78, .3], [.22, .7], [.76, .74]],// where it runs to (fractions of the screen)
+  sign: "please 🥺",
+  countdown: 3,          // 3…2…1
+  countStep: .6,         // seconds per number
+  win: "…fine. you win.",
+  again: "again?",
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1, R = 90, home = { x: 0, y: 0 }, floorY = 0;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const sm = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+const rnd = (a, b) => a + Math.random() * (b - a);
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return (s - Math.floor(s)) * 2 - 1; };
+const rgb = h => { h = h.slice(1); if (h.length === 3) h = h.replace(/./g, "$&$&"); const n = parseInt(h, 16); return [n >> 16, n >> 8 & 255, n & 255]; };
+const mix = (a, b, k) => { const A = rgb(a), B = rgb(b); return `rgb(${A.map((v, i) => Math.round(lerp(v, B[i], k))).join(",")})`; };
+const COL = { base: CONFIG.color, hi: mix(CONFIG.color, "#ffffff", .38), lo: mix(CONFIG.color, "#000000", .45), side: mix(CONFIG.color, "#000000", .62) };
+const F = { say: "800 1px 'Bricolage Grotesque'", soft: "700 1px 'Bricolage Grotesque'", mono: "500 1px 'JetBrains Mono'", monoB: "800 1px 'JetBrains Mono'", hand: "1px 'Gochi Hand'" };
+const font = (f, px) => f.replace("1px", px.toFixed(1) + "px");
+
+function layout() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  R = clamp(Math.min(W * .19, H * .17), 56, 124);
+  home = { x: W / 2, y: H * .53 }; floorY = H - 30;
+}
+addEventListener("resize", layout); layout();
+
+// ---------- state ----------
+let stage = 0, total = 0, dodgeI = 0, mode = "play";
+let now = 0, tPress = -9, tSay = -9, say = "", sayHold = 9, sayRot = 0, tCount = -9, shakeA = 0, tShake = -9;
+let burstDone = false, tSign = -9, tCrack = -9, tAlarm = -9, tBoom = -9, tReset = 0;
+let cracks = [], shards = [], bodies = [], confetti = [];
+const btn = { x: 0, y: 0, vx: 0, vy: 0, tx: null, ty: null };
+
+function reset() {
+  stage = 0; dodgeI = 0; mode = "play"; say = ""; tSign = tCrack = tAlarm = tBoom = -9; tReset = now;
+  burstDone = false; cracks = []; shards = []; bodies = []; btn.tx = btn.ty = null; btn.x = home.x; btn.y = home.y; btn.vx = btn.vy = 0;
+}
+function talk(text, hold = 9) { say = text; sayHold = hold; tSay = now; sayRot = rnd(-.06, .06); }
+function shake(a) { const cur = shakeA * Math.exp(-7 * (now - tShake)); shakeA = Math.max(cur, a); tShake = now; }
+
+// ---------- tiny synth (optional) ----------
+let ac = null;
+function audio() { if (!CONFIG.sound) return null; try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch (e) { ac = null; } return ac; }
+function tone(f0, f1, dur, type = "sine", g = .2, at = 0) {
+  const a = audio(); if (!a) return; const t = a.currentTime + at, o = a.createOscillator(), v = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  v.gain.setValueAtTime(g, t); v.gain.exponentialRampToValueAtTime(.0001, t + dur); o.connect(v).connect(a.destination); o.start(t); o.stop(t + dur + .02);
+}
+function noise(dur, g = .3, at = 0, fc = 1200) {
+  const a = audio(); if (!a) return; const t = a.currentTime + at, b = a.createBuffer(1, a.sampleRate * dur, a.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 2;
+  const s = a.createBufferSource(), f = a.createBiquadFilter(), v = a.createGain(); f.frequency.value = fc; v.gain.value = g;
+  s.buffer = b; s.connect(f).connect(v).connect(a.destination); s.start(t);
+}
+function siren(len) {
+  const a = audio(); if (!a) return; const t = a.currentTime, o = a.createOscillator(), l = a.createOscillator(), lg = a.createGain(), v = a.createGain();
+  o.type = "sawtooth"; o.frequency.value = 760; l.frequency.value = 1.6; lg.gain.value = 260; l.connect(lg).connect(o.frequency);
+  v.gain.setValueAtTime(.0001, t); v.gain.exponentialRampToValueAtTime(.06, t + .15); v.gain.setValueAtTime(.06, t + len - .05); v.gain.exponentialRampToValueAtTime(.0001, t + len);
+  o.connect(v).connect(a.destination); o.start(t); l.start(t); o.stop(t + len + .05); l.stop(t + len + .05);
+}
+
+// ---------- input ----------
+function onPress(x, y) {
+  total++; tCount = now; tPress = now; tone(180, 60, .12, "sine", .5); noise(.05, .25, 0, 3000);
+  if (mode !== "play") { shake(4); return; }
+  stage++;
+  const L = CONFIG.lines[stage - 1];
+  if (L) talk(L.say, L.hold);
+  shake([0, 5, 9, 8, 10, 22, 14][stage] || 8);
+  if (stage === 3) { btn.tx = home.x; btn.ty = home.y; }
+  if (stage === 4) { tSign = now; tone(500, 900, .18, "triangle", .15, .05); }
+  if (stage === 5) { tCrack = now; makeCracks(x, y); noise(.5, .5, 0, 5000); tone(2400, 1800, .3, "triangle", .06); }
+  if (stage === 6) {
+    mode = "alarm"; tAlarm = now; const len = .45 + CONFIG.countStep * CONFIG.countdown; siren(len);
+    for (let i = 0; i < CONFIG.countdown; i++) tone(980, 980, .12, "square", .08, .45 + i * CONFIG.countStep);
+  }
+}
+function dodge() {
+  const s = CONFIG.dodgeSpots[dodgeI % CONFIG.dodgeSpots.length];
+  btn.tx = clamp(s[0] * W, R * 1.2, W - R * 1.2); btn.ty = clamp(s[1] * H, R * 1.2 + 40, floorY - R * 1.1);
+  talk(CONFIG.dodge[dodgeI], 9); dodgeI++; shake(3); tone(300, 1400, .22, "triangle", .12);
+}
+cv.addEventListener("pointerdown", e => {
+  const x = e.clientX, y = e.clientY;
+  if (mode === "again") {
+    const r = respawnR(), ry = H * .54;
+    if (Math.hypot(x - W / 2, y - ry) < r * 1.25) { tPress = now; total++; tCount = now; tone(180, 60, .12, "sine", .5); reset(); }
+    return;
+  }
+  if (mode === "fallen") return;
+  if (Math.hypot(x - btn.x, y - btn.y) > R * 1.2) return;
+  if (mode === "play" && stage === 2 && dodgeI < CONFIG.dodge.length) dodge();
+  else onPress(x, y);
+});
+
+// ---------- the glass ----------
+function makeCracks(px, py) {
+  const L = Math.hypot(W, H), n = 11, rays = [];
+  for (let i = 0; i < n; i++) {
+    let a = i / n * Math.PI * 2 + rnd(-.25, .25), x = px, y = py, len = 0; const pts = [[x, y]], max = L * rnd(.3, .75);
+    while (len < max) {
+      const s = rnd(12, 34); a += rnd(-.45, .45); x += Math.cos(a) * s; y += Math.sin(a) * s; len += s; pts.push([x, y]);
+      if (x < -30 || x > W + 30 || y < -30 || y > H + 30) break;
+    }
+    rays.push(pts); cracks.push({ pts, d: 0 });
+  }
+  for (const r of [L * .07, L * .16, L * .27]) for (let i = 0; i < n; i++) {
+    if (Math.random() < .3) continue;
+    const pick = ray => ray.reduce((b, p) => Math.abs(Math.hypot(p[0] - px, p[1] - py) - r) < Math.abs(Math.hypot(b[0] - px, b[1] - py) - r) ? p : b, ray[0]);
+    const A = pick(rays[i]), B = pick(rays[(i + 1) % n]); if (Math.hypot(A[0] - px, A[1] - py) < r * .6 || Math.hypot(B[0] - px, B[1] - py) < r * .6) continue;
+    const m = [lerp(A[0], B[0], .5) + rnd(-8, 8), lerp(A[1], B[1], .5) + rnd(-8, 8)];
+    cracks.push({ pts: [A, m, B], d: r / 2400 });
+  }
+  for (let i = 0; i < 18; i++) {
+    const a = rnd(0, Math.PI * 2), v = rnd(150, 650), s = rnd(5, 15);
+    shards.push({ x: px, y: py, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 350, a: rnd(0, 6), va: rnd(-14, 14), s, k: [rnd(.6, 1), rnd(.4, 1), rnd(.5, 1)] });
+  }
+}
+function drawCrack(c, pts, grow) {
+  c.lineJoin = c.lineCap = "round";
+  for (const pass of [0, 1]) {
+    c.beginPath(); let len = 0;
+    c.moveTo(pts[0][0] + pass * 0, pts[0][1]);
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], s = Math.hypot(x1 - x0, y1 - y0);
+      if (len + s > grow) { const k = (grow - len) / s; c.lineTo(lerp(x0, x1, k), lerp(y0, y1, k)); break; }
+      c.lineTo(x1, y1); len += s;
+    }
+    if (pass === 0) { c.strokeStyle = "rgba(0,0,0,.55)"; c.lineWidth = 2.6; c.save(); c.translate(.8, 1.2); c.stroke(); c.restore(); }
+    else { c.strokeStyle = "rgba(235,242,255,.85)"; c.lineWidth = 1.1; c.stroke(); }
+  }
+}
+
+// ---------- parts (each drawn around its own centre) ----------
+function rr(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+const PW = () => R * 2.9, PH = () => R * 3.4, PLATE_DY = () => R * .25;
+function drawPlate(c) {
+  const w = PW(), h = PH(), sy = -PLATE_DY();
+  c.save(); c.shadowColor = "rgba(0,0,0,.55)"; c.shadowBlur = R * .35; c.shadowOffsetY = R * .12;
+  rr(c, -w / 2, -h / 2, w, h, R * .16); let g = c.createLinearGradient(0, -h / 2, 0, h / 2);
+  g.addColorStop(0, "#2d2a2f"); g.addColorStop(1, "#1c1a1e"); c.fillStyle = g; c.fill(); c.restore();
+  rr(c, -w / 2 + .5, -h / 2 + .5, w - 1, h - 1, R * .16); c.strokeStyle = "rgba(255,255,255,.07)"; c.lineWidth = 1; c.stroke();
+  // brushed lines
+  c.save(); rr(c, -w / 2, -h / 2, w, h, R * .16); c.clip(); c.globalAlpha = .05; c.strokeStyle = "#fff";
+  for (let i = 0; i < 40; i++) { const y = -h / 2 + (i + .5) * h / 40 + hash(i) * 2; c.beginPath(); c.moveTo(-w / 2, y); c.lineTo(w / 2, y + hash(i + 9)); c.lineWidth = .6; c.stroke(); }
+  c.restore();
+  // hazard ring
+  c.save(); c.translate(0, sy); c.beginPath(); c.ellipse(0, 0, R * 1.36, R * 1.22, 0, 0, Math.PI * 2); c.ellipse(0, 0, R * 1.16, R * 1.03, 0, 0, Math.PI * 2, true); c.clip("evenodd");
+  c.fillStyle = "#f2c230"; c.fillRect(-R * 1.5, -R * 1.5, R * 3, R * 3); c.fillStyle = "#151316";
+  for (let i = -12; i < 12; i++) { c.beginPath(); const x = i * R * .2; c.moveTo(x, -R * 1.5); c.lineTo(x + R * .1, -R * 1.5); c.lineTo(x + R * .1 + R * 1.5, R * 1.5); c.lineTo(x + R * 1.5, R * 1.5); c.fill(); }
+  c.restore();
+  // socket (only visible when the button walks off)
+  c.save(); c.translate(0, sy); c.beginPath(); c.ellipse(0, 0, R * 1.08, R * .95, 0, 0, Math.PI * 2);
+  g = c.createRadialGradient(0, -R * .2, R * .1, 0, 0, R * 1.1); g.addColorStop(0, "#050405"); g.addColorStop(1, "#1a171a"); c.fillStyle = g; c.fill();
+  c.strokeStyle = "rgba(255,255,255,.06)"; c.lineWidth = 1.5; c.stroke(); c.restore();
+}
+function drawScrew(c, r, rot) {
+  c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); const g = c.createLinearGradient(-r, -r, r, r);
+  g.addColorStop(0, "#9b979c"); g.addColorStop(1, "#3e3b40"); c.fillStyle = g; c.fill();
+  c.rotate(rot); c.strokeStyle = "#1d1b1f"; c.lineWidth = r * .32; c.beginPath(); c.moveTo(-r * .7, 0); c.lineTo(r * .7, 0); c.stroke();
+}
+function drawButton(c, p, glow = 0) {
+  // p: press amount (0 up, 1 squashed, negative = overshoot)
+  const bz = R * 1.1;
+  c.save(); c.shadowColor = "rgba(0,0,0,.6)"; c.shadowBlur = R * .25; c.shadowOffsetY = R * .1;
+  c.beginPath(); c.ellipse(0, 0, bz, bz * .88, 0, 0, Math.PI * 2); let g = c.createLinearGradient(0, -bz, 0, bz);
+  g.addColorStop(0, "#4a474d"); g.addColorStop(.5, "#1b1a1d"); g.addColorStop(1, "#0b0a0c"); c.fillStyle = g; c.fill(); c.restore();
+  c.beginPath(); c.ellipse(0, 0, bz - 1, bz * .88 - 1, 0, 0, Math.PI * 2); c.strokeStyle = "rgba(255,255,255,.16)"; c.lineWidth = 1.5; c.stroke();
+  c.beginPath(); c.ellipse(0, R * .06, R * .96, R * .82, 0, 0, Math.PI * 2); c.fillStyle = "#050405"; c.fill();
+  const sx = 1 + .09 * p, sy = 1 - .2 * p, d = R * .3 * (1 - .78 * Math.max(0, p)) + R * .04 * Math.max(0, -p);
+  const rx = R * .86 * sx, ry = R * .72 * sy, top = -d * .55;
+  // side wall
+  c.beginPath(); c.ellipse(0, top + d, rx, ry, 0, 0, Math.PI); c.lineTo(-rx, top); c.ellipse(0, top, rx, ry, 0, Math.PI, 0, true); c.closePath();
+  g = c.createLinearGradient(-rx, 0, rx, 0); g.addColorStop(0, COL.side); g.addColorStop(.35, COL.lo); g.addColorStop(1, COL.side); c.fillStyle = g; c.fill();
+  // cap
+  c.beginPath(); c.ellipse(0, top, rx, ry, 0, 0, Math.PI * 2);
+  g = c.createRadialGradient(-rx * .3, top - ry * .4, R * .05, 0, top, rx * 1.05);
+  g.addColorStop(0, COL.hi); g.addColorStop(.45, COL.base); g.addColorStop(1, COL.lo); c.fillStyle = g; c.fill();
+  if (glow > 0) { c.save(); c.globalCompositeOperation = "lighter"; c.globalAlpha = glow * .5; c.fillStyle = COL.base; c.fill(); c.restore(); }
+  c.strokeStyle = "rgba(0,0,0,.25)"; c.lineWidth = 1; c.stroke();
+  // gloss
+  c.save(); c.beginPath(); c.ellipse(-rx * .22, top - ry * .42, rx * .52, ry * .3, -.18, 0, Math.PI * 2);
+  g = c.createLinearGradient(0, top - ry * .75, 0, top - ry * .1); g.addColorStop(0, "rgba(255,255,255,.62)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  c.fillStyle = g; c.fill(); c.restore();
+  c.beginPath(); c.ellipse(rx * .42, top + ry * .5, rx * .16, ry * .07, -.5, 0, Math.PI * 2); c.fillStyle = "rgba(255,255,255,.18)"; c.fill();
+}
+function drawTape(c, text, px) {
+  c.font = font(F.monoB, px); const tw = c.measureText(text).width + text.length * px * .14, w = tw + px * 1.4, h = px * 1.75;
+  c.save(); c.shadowColor = "rgba(0,0,0,.5)"; c.shadowBlur = 6; c.shadowOffsetY = 2;
+  c.beginPath(); c.moveTo(-w / 2, -h / 2); for (let i = 0; i <= 6; i++) c.lineTo(-w / 2 + (i % 2 ? 2 : 0), -h / 2 + i * h / 6);
+  c.lineTo(w / 2, h / 2); for (let i = 6; i >= 0; i--) c.lineTo(w / 2 - (i % 2 ? 2 : 0), -h / 2 + i * h / 6);
+  c.closePath(); c.fillStyle = "#0e0d10"; c.fill(); c.restore();
+  c.fillStyle = "rgba(255,255,255,.05)"; c.fillRect(-w / 2, -h / 2, w, h * .35);
+  c.textAlign = "left"; c.textBaseline = "middle"; let x = -tw / 2 + px * .07;
+  for (const ch of text) { c.fillStyle = "rgba(0,0,0,.6)"; c.fillText(ch, x + .6, 1.4); c.fillStyle = "#e9e6e1"; c.fillText(ch, x, .4); x += c.measureText(ch).width + px * .14; }
+  return [w / 2, h / 2];
+}
+function signSize() { return [R * 1.25, R * .7]; }
+function signX() { return Math.min(home.x + R * 2.02, W - R * .66); }
+function drawSign(c) {
+  const [w, h] = signSize();
+  c.fillStyle = "#8a6239"; c.fillRect(-R * .045, 0, R * .09, R * 1.6);                 // stick
+  c.save(); c.shadowColor = "rgba(0,0,0,.45)"; c.shadowBlur = 10; c.shadowOffsetY = 4;
+  c.beginPath(); c.moveTo(-w / 2, -h / 2 + 2); c.lineTo(w / 2 - 3, -h / 2); c.lineTo(w / 2, h / 2 - 2); c.lineTo(-w / 2 + 2, h / 2); c.closePath();
+  const g = c.createLinearGradient(0, -h / 2, 0, h / 2); g.addColorStop(0, "#dcbc8c"); g.addColorStop(1, "#c9a573"); c.fillStyle = g; c.fill(); c.restore();
+  c.strokeStyle = "rgba(90,60,30,.35)"; c.lineWidth = 1; c.stroke();
+  c.fillStyle = "#6f5232"; c.beginPath(); c.arc(0, h * .32, 2.2, 0, 7); c.fill();
+  let px = R * .34; c.font = font(F.hand, px); const tw = c.measureText(CONFIG.sign).width; if (tw > w * .86) px *= w * .86 / tw;
+  c.font = font(F.hand, px); c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#2a1d12"; c.fillText(CONFIG.sign, 0, -h * .04);
+}
+function drawBeacon(c, on) {
+  const r = 13;
+  c.fillStyle = "#1a181c"; rr(c, -r * 1.25, r * .2, r * 2.5, r * .7, 3); c.fill();
+  c.beginPath(); c.arc(0, r * .25, r, Math.PI, 0); c.closePath();
+  const g = c.createRadialGradient(-3, -4, 1, 0, 0, r * 1.2); g.addColorStop(0, on ? "#ffd0d0" : "#ff6a6a"); g.addColorStop(.5, "#e8202a"); g.addColorStop(1, "#6b0a10");
+  c.fillStyle = g; c.fill();
+}
+function textSize(c, txt, f, px, maxW) { c.font = font(f, px); const w = c.measureText(txt).width; return w > maxW ? px * maxW / w : px; }
+function drawText(c, txt, f, px, color) { c.font = font(f, px); c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = color; c.fillText(txt, 0, 0); }
+
+// ---------- collapse ----------
+function body(draw, x, y, a, hw, hh, vx, vy, va, round = false) { bodies.push({ draw, x, y, a, hw, hh, vx, vy, va, round, rest: 0 }); }
+function collapse() {
+  mode = "fallen"; tBoom = now; shake(34);
+  tone(90, 30, 1.1, "sine", .7); noise(1.2, .6, 0, 900);
+  const py = home.y + PLATE_DY();
+  body(c => drawPlate(c), home.x, py, 0, PW() / 2, PH() / 2, rnd(-60, 60), -380, rnd(-1.2, 1.2)); bodies[bodies.length - 1].fall = true;  // the panel drops out of frame
+  body(c => drawTape(c, CONFIG.label, R * .2), home.x, home.y + R * 1.5, -.03, R * .9, R * .2, rnd(-250, 250), -620, rnd(-5, 5));
+  const sx = PW() / 2 - R * .2, syy = PH() / 2 - R * .2;
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([i, j], k) => body(c => drawScrew(c, R * .07, k), home.x + i * sx, py + j * syy, 0, R * .07, R * .07, i * rnd(250, 520), rnd(-900, -500), rnd(-25, 25), true));
+  body(c => drawButton(c, 0), btn.x, btn.y, 0, R * 1.1, R * .97, -760, -820, -3, true);
+  if (tSign > 0) body(c => drawSign(c), signX(), home.y - R * .1, .14, signSize()[0] / 2, R * .9, 260, -520, 3.2);
+  body(c => drawText(c, "presses: " + total, F.mono, 12, "#cfc8bf"), W - 70, 24, 0, 52, 8, -80, -120, -1.5);
+  body(c => drawText(c, CONFIG.corner, F.mono, 10, "#8f8880"), 90, 24, 0, 75, 7, 90, -80, 1.2);
+  [[34, -1], [W - 34, 1]].forEach(([x, s]) => body(c => drawBeacon(c, false), x, 62, 0, 16, 12, s * -160, -300, s * -6, true));
+  body(c => drawText(c, say, F.monoB, R * .2, COL.hi), home.x, home.y - R * 2.35, 0, R * 1.4, R * .12, rnd(-90, 90), -300, rnd(-2, 2));
+  for (const k of cracks) {
+    let cx = 0, cy = 0; k.pts.forEach(p => { cx += p[0]; cy += p[1]; }); cx /= k.pts.length; cy /= k.pts.length;
+    const loc = k.pts.map(p => [p[0] - cx, p[1] - cy]); let hw = 4, hh = 4; loc.forEach(p => { hw = Math.max(hw, Math.abs(p[0])); hh = Math.max(hh, Math.abs(p[1])); });
+    body(c => drawCrack(c, loc, 1e9), cx, cy, 0, Math.min(hw, 40), Math.min(hh, 40), rnd(-160, 160), rnd(-350, 50), rnd(-3, 3));
+  }
+  cracks = [];
+}
+function stepBodies(dt) {
+  for (const b of bodies) {
+    b.vy += 2300 * dt; b.vx *= Math.exp(-.4 * dt); b.va *= Math.exp(-.6 * dt);
+    b.x += b.vx * dt; b.y += b.vy * dt; b.a += b.va * dt;
+    if (b.fall) continue;
+    const ca = Math.abs(Math.cos(b.a)), sa = Math.abs(Math.sin(b.a));
+    const ey = b.round ? b.hh : b.hw * sa + b.hh * ca, ex = b.round ? b.hw : b.hw * ca + b.hh * sa;
+    if (b.y + ey > floorY) {
+      b.y = floorY - ey; if (b.vy > 0) b.vy = b.vy > 160 ? -b.vy * .36 : 0;
+      b.vx *= .82;
+      if (b.round) b.va = b.vx / Math.max(4, b.hw) * .6;
+      else { const q = Math.round(b.a / (Math.PI / 2)) * Math.PI / 2; b.va *= .7; b.a += (q - b.a) * Math.min(1, 9 * dt); }
+    }
+    if (b.x - ex < 0 && b.vx < 0) { b.x = ex; b.vx *= -.5; } if (b.x + ex > W && b.vx > 0) { b.x = W - ex; b.vx *= -.5; }
+  }
+}
+
+// ---------- confetti ----------
+const CONF = [CONFIG.color, "#ffd23f", "#2ec4b6", "#f1ece4", "#ff7ab6", "#3a86ff", "#ff8c42"];
+function burst() {
+  for (let i = 0; i < 190; i++) {
+    const side = i % 2 ? 1 : -1, x = side < 0 ? -10 : W + 10;
+    confetti.push({ x, y: H * rnd(.55, .9), vx: -side * rnd(250, 1050), vy: -rnd(700, 1500), a: rnd(0, 6), va: rnd(-12, 12), ph: rnd(0, 6), fs: rnd(8, 16), w: rnd(5, 9), h: rnd(9, 15), c: CONF[i % CONF.length] });
+  }
+  for (let i = 0; i < 5; i++) tone(520 * [1, 1.25, 1.5, 2, 2.5][i], 520 * [1, 1.25, 1.5, 2, 2.5][i], .35, "triangle", .08, i * .07);
+}
+function respawnR() { return R * .55 * sm((now - tBoom - 1.75) / .12); }
+
+// ---------- loop ----------
+let last = performance.now(); reset();
+function frame(t) {
+  const dt = Math.min(1 / 20, Math.max(0, (t - last) / 1000)); last = t; now = t / 1000;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // background
+  ctx.fillStyle = "#131114"; ctx.fillRect(0, 0, W, H);
+  let g = ctx.createRadialGradient(home.x, home.y, R * .5, home.x, home.y, Math.max(W, H) * .75);
+  g.addColorStop(0, "rgba(255,236,214,.075)"); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(0, floorY, W, H - floorY); ctx.fillStyle = "rgba(255,255,255,.05)"; ctx.fillRect(0, floorY, W, 1);
+
+  const alarmOn = mode === "alarm" || (mode === "fallen" && now - tBoom < .25);
+  const tA = now - tAlarm, boomAt = .45 + CONFIG.countStep * CONFIG.countdown;
+  if (mode === "alarm" && tA >= boomAt) collapse();
+
+  // screen shake
+  const sk = shakeA * Math.exp(-7 * (now - tShake)), ox = sk * hash(now * 61), oy = sk * hash(now * 47 + 3);
+  ctx.save(); ctx.translate(ox, oy);
+
+  // rig pop-in after a reset
+  const pin = now - tReset, popS = pin < .6 ? 1 - .35 * Math.exp(-pin * 9) * Math.cos(pin * 16) : 1;
+
+  if (mode === "play" || mode === "alarm") {
+    ctx.save(); ctx.translate(home.x, home.y); ctx.scale(popS, popS); ctx.translate(-home.x, -home.y);
+    // button spring (it runs away / walks back home)
+    if (btn.tx !== null) {
+      const k = 230, d = 2 * Math.sqrt(k) * .5;
+      btn.vx += (k * (btn.tx - btn.x) - d * btn.vx) * dt; btn.vy += (k * (btn.ty - btn.y) - d * btn.vy) * dt;
+      btn.x += btn.vx * dt; btn.y += btn.vy * dt;
+    } else { btn.x = home.x; btn.y = home.y; }
+    let jx = 0, jy = 0; if (mode === "alarm") { jx = hash(now * 90) * 2.5; jy = hash(now * 77) * 2.5; }
+    // sign pops out from behind the plate
+    if (tSign > 0) {
+      const u = now - tSign, k = 1 - Math.exp(-u * 7) * Math.cos(u * 13), sx = lerp(home.x + R * .6, signX(), k), sy = home.y - R * .1;
+      ctx.save(); ctx.translate(sx, sy); ctx.rotate(.14 + Math.sin(u * 9) * Math.exp(-u * 3) * .25); drawSign(ctx); ctx.restore();
+    }
+    ctx.save(); ctx.translate(home.x, home.y + PLATE_DY()); drawPlate(ctx); ctx.restore();
+    const sx = PW() / 2 - R * .2, sy = PH() / 2 - R * .2;
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([i, j], k) => { ctx.save(); ctx.translate(home.x + i * sx, home.y + PLATE_DY() + j * sy); drawScrew(ctx, R * .07, k); ctx.restore(); });
+    // the coiled cord when it's out of its socket
+    const off = Math.hypot(btn.x - home.x, btn.y - home.y);
+    if (off > 4) {
+      ctx.lineCap = "round"; const N = 70, dx = btn.x - home.x, dy = btn.y - home.y, nx = -dy / off, ny = dx / off, amp = R * .07;
+      for (const pass of [0, 1]) {
+        ctx.beginPath();
+        for (let i = 0; i <= N; i++) {
+          const u = i / N, w = Math.sin(u * Math.PI * Math.max(6, off / 16)) * amp * Math.sin(u * Math.PI);
+          const x = home.x + dx * u + nx * w, y = home.y + dy * u + ny * w + Math.sin(u * Math.PI) * Math.min(60, off * .18);
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.strokeStyle = pass ? "#3a373d" : "#060507"; ctx.lineWidth = pass ? R * .025 : R * .07; ctx.stroke();
+      }
+    }
+    // speed lines
+    const sp = Math.hypot(btn.vx, btn.vy);
+    if (sp > 500) {
+      ctx.strokeStyle = `rgba(241,236,228,${clamp((sp - 500) / 1200, 0, .5)})`; ctx.lineWidth = 2;
+      for (let i = -2; i <= 2; i++) {
+        const ux = btn.vx / sp, uy = btn.vy / sp, px = -uy * i * R * .35, py = ux * i * R * .35;
+        ctx.beginPath(); ctx.moveTo(btn.x - ux * R * 1.25 + px, btn.y - uy * R * 1.25 + py); ctx.lineTo(btn.x - ux * (R * 1.25 + sp * .07) + px, btn.y - uy * (R * 1.25 + sp * .07) + py); ctx.stroke();
+      }
+    }
+    // the button itself
+    const u = now - tPress, p = u < 0 ? 0 : u < .05 ? u / .05 : Math.exp(-(u - .05) * 8) * Math.cos((u - .05) * 21);
+    const lean = clamp(btn.vx * .0006, -.35, .35), glow = mode === "alarm" ? .5 + .5 * Math.sin(now * 20) : 0;
+    ctx.save(); ctx.translate(btn.x + jx, btn.y + jy); ctx.rotate(lean); drawButton(ctx, p, glow); ctx.restore();
+    ctx.save(); ctx.translate(home.x, home.y + R * 1.5); ctx.rotate(-.03); drawTape(ctx, CONFIG.label, R * .2); ctx.restore();
+  }
+
+  // top corners
+  if (mode !== "fallen") {
+    ctx.save(); ctx.translate(90, 24); drawText(ctx, CONFIG.corner, F.mono, 10, "#8f8880"); ctx.restore();
+    const cu = now - tCount, cs = 1 + .5 * Math.exp(-cu * 10) * Math.max(0, Math.cos(cu * 14));
+    ctx.save(); ctx.translate(W - 70, 24); ctx.scale(cs, cs); drawText(ctx, "presses: " + total, F.mono, 12, cu < .3 ? "#fff" : "#cfc8bf"); ctx.restore();
+  }
+
+  // the big line
+  if (say && (mode === "play" || mode === "alarm")) {
+    const u = now - tSay, a = 1 - sm((u - sayHold) / .3);
+    if (a > 0) {
+      const punch = 1 + .55 * Math.exp(-u * 11) * Math.cos(u * 19);
+      ctx.save(); ctx.globalAlpha = a;
+      if (mode === "alarm") {
+        const px = textSize(ctx, say, F.monoB, R * .2, W - 40);
+        ctx.translate(home.x, home.y - R * 2.35); ctx.scale(punch, punch); drawText(ctx, say, F.monoB, px, now % .3 < .15 ? "#ff4b52" : "#f1ece4");
+      } else {
+        const px = textSize(ctx, say, F.say, R * .44, W - 36);
+        ctx.translate(home.x, home.y - R * 1.98); ctx.rotate(sayRot); ctx.scale(punch, punch);
+        ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.font = font(F.say, px); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(say, 2, 4);
+        drawText(ctx, say, F.say, px, "#f6f1ea");
+      }
+      ctx.restore();
+    }
+  }
+  // countdown digits
+  if (mode === "alarm") {
+    const n = clamp(Math.floor((tA - .45) / CONFIG.countStep) + 1, 0, CONFIG.countdown);
+    const toks = []; for (let i = 0; i < n; i++) toks.push(String(CONFIG.countdown - i) + (i < CONFIG.countdown - 1 ? "…" : ""));
+    const px = R * .6; ctx.font = font(F.say, px); const gap = px * .25;
+    const widths = toks.map(s => ctx.measureText(s).width), full = (() => { let s = 0; for (let i = 0; i < CONFIG.countdown; i++) s += ctx.measureText(String(CONFIG.countdown - i) + (i < CONFIG.countdown - 1 ? "…" : "")).width + gap; return s - gap; })();
+    let x = home.x - full / 2;
+    toks.forEach((s, i) => {
+      const u = tA - .45 - i * CONFIG.countStep, k = 1 + 1.1 * Math.exp(-u * 12) * Math.cos(u * 18);
+      ctx.save(); ctx.translate(x + widths[i] / 2, home.y - R * 1.82); ctx.scale(k, k); if (i === n - 1) ctx.rotate(hash(i) * .08);
+      ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.font = font(F.say, px); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(s, 2, 4);
+      drawText(ctx, s, F.say, px, i === n - 1 ? "#ffffff" : "#d8d1c8"); ctx.restore();
+      x += widths[i] + gap;
+    });
+  }
+
+  // physics pile
+  if (mode === "fallen" || mode === "again") {
+    stepBodies(dt);
+    for (const b of bodies) { ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a); b.draw(ctx); ctx.restore(); }
+  }
+  ctx.restore(); // end shake
+
+  // the glass (cracks sit on the screen, so they don't shake)
+  if (cracks.length) { const gu = (now - tCrack) * 2400; for (const k of cracks) drawCrack(ctx, k.pts, gu - k.d * 2400);
+    const u = now - tCrack; if (u < .25) { ctx.fillStyle = `rgba(255,255,255,${.22 * (1 - u / .25)})`; ctx.fillRect(0, 0, W, H); } }
+  for (const s of shards) {
+    s.vy += 2000 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.a += s.va * dt;
+    if (s.y > floorY - 3) { s.y = floorY - 3; s.vy = s.vy > 120 ? -s.vy * .3 : 0; s.vx *= .7; s.va *= .6; }
+    ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.a); ctx.beginPath(); ctx.moveTo(0, -s.s * s.k[0]); ctx.lineTo(s.s * s.k[1], s.s * .6); ctx.lineTo(-s.s * s.k[2], s.s * .4); ctx.closePath();
+    ctx.fillStyle = "rgba(210,225,240,.28)"; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.75)"; ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
+  }
+
+  // sirens
+  if (alarmOn) {
+    const k = sm(tA / .25), pulse = Math.sin(now * Math.PI * 2 * 2.6) > .2 ? 1 : .2;
+    ctx.fillStyle = `rgba(255,18,30,${.22 * pulse * k})`; ctx.fillRect(0, 0, W, H);
+    g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .3, W / 2, H / 2, Math.max(W, H) * .75);
+    g.addColorStop(0, "rgba(255,0,20,0)"); g.addColorStop(1, `rgba(255,0,20,${.35 * k})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    [[34, 0], [W - 34, Math.PI]].forEach(([x, ph]) => {
+      const y = lerp(-30, 62, 1 - Math.exp(-tA * 10) * Math.cos(tA * 12)), ang = now * 7.5 + ph, L = Math.max(W, H) * 1.2;
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.translate(x, y);
+      const bg = ctx.createRadialGradient(0, 0, 4, 0, 0, L); bg.addColorStop(0, `rgba(255,60,60,${.45 * k})`); bg.addColorStop(1, "rgba(255,0,0,0)");
+      ctx.fillStyle = bg; for (const o of [0, Math.PI]) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, L, ang + o - .22, ang + o + .22); ctx.closePath(); ctx.fill(); }
+      ctx.restore(); ctx.save(); ctx.translate(x, y); drawBeacon(ctx, pulse > .5); ctx.restore();
+    });
+  }
+  // boom flash
+  if (mode === "fallen" || mode === "again") {
+    const u = now - tBoom;
+    if (u < .3) { ctx.fillStyle = `rgba(255,250,240,${.9 * (1 - u / .3)})`; ctx.fillRect(0, 0, W, H); }
+    if (u >= .85 && !burstDone) { burstDone = true; burst(); }
+    if (u >= .85) {
+      const v = u - .85, a = sm(v / .3), px = textSize(ctx, CONFIG.win, F.soft, R * .36, W - 40);
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, H * .3 + 12 * (1 - a)); drawText(ctx, CONFIG.win, F.soft, px, "#f6f1ea"); ctx.restore();
+    }
+    if (u >= 1.75) {
+      mode = "again"; const v = u - 1.75, s = 1 - Math.exp(-v * 8) * Math.cos(v * 15);
+      ctx.save(); ctx.translate(W / 2, H * .54); ctx.scale(.55 * s, .55 * s); const q = now - tPress;
+      drawButton(ctx, q > 0 && q < 1 ? (q < .05 ? q / .05 : Math.exp(-(q - .05) * 8) * Math.cos((q - .05) * 21)) : 0); ctx.restore();
+      ctx.save(); ctx.translate(W / 2, H * .54 + R * .82); ctx.scale(s, s); ctx.rotate(.04); drawTape(ctx, CONFIG.again.toUpperCase(), R * .16); ctx.restore();
+    }
+  }
+  // confetti
+  for (let i = confetti.length - 1; i >= 0; i--) {
+    const f = confetti[i]; f.vy += 1100 * dt; f.vx *= Math.exp(-1.6 * dt); f.vy *= Math.exp(-1.2 * dt); f.vy = Math.min(f.vy, 170);
+    f.x += (f.vx + Math.sin(now * 3 + f.ph) * 40) * dt; f.y += f.vy * dt; f.a += f.va * dt;
+    if (f.y > H + 30) { confetti.splice(i, 1); continue; }
+    ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.a); ctx.scale(Math.cos(now * f.fs + f.ph), 1); ctx.fillStyle = f.c; ctx.fillRect(-f.w / 2, -f.h / 2, f.w, f.h); ctx.restore();
+  }
+  if (mode === "play" && confetti.length && now - tReset > 4) confetti.length = 0;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
