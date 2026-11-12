@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>loves me, loves me not</title>
+<meta name="description" content="A daisy in a night garden. Pluck the petals: loves me, loves me not. The flower is rigged. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Caveat:wght@600;700&family=DM+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#0a1416;color:#efe9da}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+.credit{position:fixed;left:0;right:0;bottom:12px;text-align:center;z-index:3;text-shadow:0 1px 3px #050b0a,0 0 8px #050b0a;font:400 11px "DM Mono",ui-monospace,monospace;color:#8fa596;letter-spacing:.02em}
+.credit a{color:#c9d8c4}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:italic 20px 'Instrument Serif'">a</span><span class="pre" style="font:20px 'Instrument Serif'">a</span><span class="pre" style="font:700 20px Caveat">a</span><span class="pre" style="font:500 20px 'DM Mono'">a</span>
+<script>
+// ===== Loves Me Not · free code by @sicscod.drops =====
+// Send it: yoursite/?name=Delly   (pluck the petals. the flower is rigged: it always ends on "loves me")
+const P = new URLSearchParams(location.search);
+const CONFIG = {
+  name: P.get("name") || "Delly",                        // who loves you (the final line)
+  msg: P.get("msg") || "the flower has spoken. no refunds.",   // small line under the ending
+  hue: P.has("hue") ? +P.get("hue") : 345,               // petal tip tint, 0-360 (345 = blush pink)
+  petals: Math.max(3, Math.min(13, +(P.get("petals") || 7))),  // how many petals it starts with
+  panic: "wait—",                                        // what the flower says when it grows a new petal
+  refuse: "nope.",                                       // what it says when the last "not" petal won't come off
+  sound: true
+};
+
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+const clamp = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const easeOut = x => 1 - Math.pow(1 - clamp(x), 3);
+const spring = x => x <= 0 ? 0 : 1 - Math.exp(-6*x)*Math.cos(11*x);
+const mix = (a, b, t) => a + (b - a)*t;
+const TAU = Math.PI*2;
+const hash = n => { const s = Math.sin(n*127.1 + 311.7)*43758.5453; return s - Math.floor(s); };
+
+let W, H, DPR, S, hx0, hy0, FR, DR, PL, PW, groundY, bgCanvas, grain, glowSprite;
+let now = 0, last = 0;
+
+// ---------- layout ----------
+function layout() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  FR = Math.min(W*0.36, H*0.3);            // flower radius (centre to petal tip)
+  S = FR/168;                              // global scale
+  DR = FR*0.27;                            // yellow disc radius
+  PL = FR - DR*0.72;                       // petal length (base hides under the disc)
+  PW = PL*0.6;                             // petal width
+  hx0 = W/2; hy0 = H*0.56;
+  groundY = H - 40*S;
+  bgCanvas = paintBackground();
+  grain = grainTexture();
+  glowSprite = makeGlow();
+}
+
+function makeCanvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+
+function paintBackground() {
+  const c = makeCanvas(cv.width, cv.height), x = c.getContext("2d");
+  x.scale(DPR, DPR);
+  const sky = x.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, "#08121a"); sky.addColorStop(.55, "#0c1b1c"); sky.addColorStop(1, "#11261c");
+  x.fillStyle = sky; x.fillRect(0, 0, W, H);
+  // moon, low and soft
+  const mx = W*0.87, my = H*0.065 + 8*S, mr = 13*S;
+  const halo = x.createRadialGradient(mx, my, mr*.5, mx, my, mr*7);
+  halo.addColorStop(0, "rgba(232,226,196,.16)"); halo.addColorStop(1, "rgba(232,226,196,0)");
+  x.fillStyle = halo; x.fillRect(0, 0, W, H);
+  x.fillStyle = "#e9e3c8"; x.beginPath(); x.arc(mx, my, mr, 0, TAU); x.fill();
+  x.fillStyle = "#0b161c"; x.beginPath(); x.arc(mx + mr*.45, my - mr*.25, mr*.92, 0, TAU); x.fill();
+  // stars
+  for (let i = 0; i < 70; i++) {
+    const sx = hash(i)*W, sy = hash(i + 50)*H*0.5, r = .4 + hash(i + 99)*.9;
+    x.fillStyle = `rgba(230,236,220,${.15 + hash(i + 7)*.45*(1 - sy/(H*.5))})`;
+    x.beginPath(); x.arc(sx, sy, r, 0, TAU); x.fill();
+  }
+  // far hedge silhouettes
+  for (let layer = 0; layer < 2; layer++) {
+    x.fillStyle = layer ? "#0b1a15" : "#0a1714";
+    x.beginPath(); x.moveTo(0, H);
+    const base = H*(layer ? .8 : .72);
+    for (let i = 0; i <= 40; i++) {
+      const px = i/40*W, n = Math.sin(i*.9 + layer*3)*.5 + Math.sin(i*2.3 + layer)*.3 + hash(i + layer*40)*.4;
+      x.lineTo(px, base - n*22*S - 10*S);
+    }
+    x.lineTo(W, H); x.fill();
+  }
+  // a few faraway daisies, out of focus
+  for (let i = 0; i < 9; i++) {
+    const fx = hash(i + 300)*W, fy = H*(.74 + hash(i + 310)*.16), fr = (5 + hash(i + 320)*6)*S;
+    if (Math.abs(fx - W/2) < FR*.8) continue;
+    x.strokeStyle = "rgba(20,48,32,.9)"; x.lineWidth = 1.2*S;
+    x.beginPath(); x.moveTo(fx, fy); x.quadraticCurveTo(fx + 4*S, fy + 30*S, fx + 1*S, H); x.stroke();
+    x.fillStyle = "rgba(200,206,190,.13)";
+    for (let k = 0; k < 8; k++) { const a = k/8*TAU; x.beginPath(); x.ellipse(fx + Math.cos(a)*fr, fy + Math.sin(a)*fr*.7, fr*.8, fr*.3, a, 0, TAU); x.fill(); }
+    x.fillStyle = "rgba(220,170,60,.25)"; x.beginPath(); x.arc(fx, fy, fr*.45, 0, TAU); x.fill();
+  }
+  // vignette
+  const v = x.createRadialGradient(W/2, H*.5, Math.min(W, H)*.3, W/2, H*.5, Math.max(W, H)*.8);
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.5)");
+  x.fillStyle = v; x.fillRect(0, 0, W, H);
+  return c;
+}
+function grainTexture() {
+  const c = makeCanvas(128, 128), x = c.getContext("2d"), d = x.createImageData(128, 128);
+  for (let i = 0; i < d.data.length; i += 4) { const v = Math.random()*255; d.data[i] = d.data[i+1] = d.data[i+2] = v; d.data[i+3] = 14; }
+  x.putImageData(d, 0, 0); return g.createPattern(c, "repeat");
+}
+function makeGlow() {
+  const c = makeCanvas(64, 64), x = c.getContext("2d"), r = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(246,255,190,1)"); r.addColorStop(.18, "rgba(222,246,120,.75)"); r.addColorStop(.5, "rgba(170,220,80,.18)"); r.addColorStop(1, "rgba(150,210,70,0)");
+  x.fillStyle = r; x.fillRect(0, 0, 64, 64); return c;
+}
+
+// ---------- state ----------
+let petals, loose, specks, flies, events, plucks, grown, phase, finaleT, text, bubble, mood, head, grab, tapT;
+function makePetal(i, a, born) {
+  return { a, id: i, len: PL*(.94 + hash(i*3.1)*.1), wid: PW*(.92 + hash(i*5.7)*.14), seed: i*17.3, born, state: "on", tug: 0, pull: { x: 0, y: 0 }, snapT: -9, snapD: { x: 0, y: 0 } };
+}
+function reset() {
+  petals = [];
+  for (let i = 0; i < CONFIG.petals; i++) petals.push(makePetal(i, -Math.PI/2 + i/CONFIG.petals*TAU + (hash(i + 4) - .5)*.12, -9));
+  loose = []; specks = []; events = []; plucks = 0; grown = false; phase = "play"; finaleT = -9; grab = null; tapT = -9;
+  text = { main: CONFIG.name + " loves me…", not: false, t: now, kick: "the daisy test", hint: "tap a petal" };
+  bubble = null; mood = { m: "calm", t: now }; head = { x: 0, y: 0, shake: 0 };
+  flies = [];
+  for (let i = 0; i < 22; i++) flies.push({ x: Math.random()*W, y: H*(.25 + Math.random()*.7), p: Math.random()*TAU, s: .6 + Math.random()*.8, heart: -1, k: 0, tx: 0, ty: 0, dl: 0 });
+}
+const word = n => n % 2 ? "loves me" : "loves me not";      // n = which pluck (1 = first)
+
+// ---------- geometry ----------
+function headPos() { return { x: hx0 + head.x + Math.sin(now*.0009)*3*S, y: hy0 + head.y + Math.sin(now*.0013)*1.5*S }; }
+function petalCentre(p) { const h = headPos(), r = DR*.72 + p.len*.55; return { x: h.x + Math.cos(p.a)*r, y: h.y + Math.sin(p.a)*r }; }
+
+// ---------- interaction ----------
+let AC = null;
+function sfx(kind) {
+  if (!CONFIG.sound) return;
+  try {
+    if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === "suspended") AC.resume();
+    const t = AC.currentTime, o = AC.createOscillator(), v = AC.createGain();
+    o.connect(v); v.connect(AC.destination);
+    const set = (f0, f1, d, gain, type) => { o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + d); v.gain.setValueAtTime(gain, t); v.gain.exponentialRampToValueAtTime(.0001, t + d); o.start(t); o.stop(t + d + .02); };
+    if (kind === "pluck") set(900, 380, .09, .08, "triangle");
+    if (kind === "pop") set(320, 1250, .14, .1, "sine");
+    if (kind === "boing") set(520, 140, .45, .1, "sine");
+    if (kind === "win") set(660, 1320, .6, .07, "triangle");
+  } catch (e) {}
+}
+function attached() { return petals.filter(p => p.state !== "gone"); }
+
+cv.addEventListener("pointerdown", e => {
+  const x = e.clientX, y = e.clientY;
+  const on = attached();
+  if (phase === "finale" && now - finaleT > 3500 && (!on.length || Math.hypot(petalCentre(on[0]).x - x, petalCentre(on[0]).y - y) > PL*.8)) { reset(); return; }
+  if (!on.length || on.some(p => p.state === "tug")) return;
+  const nextNot = (plucks + 1) % 2 === 0;
+  // the last petal is a "not": it refuses
+  if (on.length === 1 && nextNot) {
+    const p = on[0]; p.state = "rubber"; p.pull = { x: 0, y: 0 };
+    grab = { p, x0: x, y0: y, x, y, t: now, moved: false };
+    mood = { m: "strain", t: now };
+    text = { ...text, main: "loves me n—", not: true, t: now, hint: "" };
+    return;
+  }
+  let best = on[0], bd = 1e9;
+  for (const p of on) { const c = petalCentre(p), d = Math.hypot(c.x - x, c.y - y); if (d < bd) { bd = d; best = p; } }
+  best.state = "tug"; best.tug = now;
+  sfx("pluck");
+});
+cv.addEventListener("pointermove", e => {
+  if (!grab) return;
+  grab.x = e.clientX; grab.y = e.clientY;
+  if (Math.hypot(grab.x - grab.x0, grab.y - grab.y0) > 6) grab.moved = true;
+});
+function release() {
+  if (!grab) return;
+  const p = grab.p;
+  if (!grab.moved) { grab.auto = true; return; }        // a tap: it tugs by itself (see update)
+  snapBack(p); grab = null;
+}
+cv.addEventListener("pointerup", release);
+cv.addEventListener("pointercancel", release);
+
+function snapBack(p) {
+  p.state = "on"; p.snapT = now; p.snapD = { ...p.pull }; p.pull = { x: 0, y: 0 };
+  sfx("boing");
+  mood = { m: "smug", t: now };
+  bubble = { s: CONFIG.refuse, t: now, dur: 1500 };
+  text = { ...text, main: "loves me", not: false, t: now };
+  if (phase !== "finale") events.push({ at: now + 650, fn: finale });
+}
+
+function detach(p) {
+  p.state = "gone"; plucks++;
+  const c = petalCentre(p), dir = { x: Math.cos(p.a), y: Math.sin(p.a) };
+  const sp = (130 + Math.random()*60)*S;
+  loose.push({ x: c.x, y: c.y, vx: dir.x*sp + (Math.random() - .5)*60*S, vy: dir.y*sp*.6 - 230*S, spin: p.a, spinV: (Math.random() - .5)*3,
+    tilt: (Math.random() - .5)*.6, om: 0, ph: Math.random()*TAU, amp: .7 + Math.random()*.5, tumble: Math.random() < .25, len: p.len, wid: p.wid, seed: p.seed, landed: false, gy: groundY + (8 + Math.random()*24)*S });
+  const w = word(plucks), left = attached().length;
+  text = { ...text, main: w, not: plucks % 2 === 0, t: now, kick: "the daisy test · petal nº " + plucks, hint: "" };
+  head.shake = Math.max(head.shake, .5);
+  if (w === "loves me not" && !grown && left > 0 && left <= 3) {      // the flower panics
+    grown = true;
+    events.push({ at: now + 260, fn: () => { mood = { m: "panic", t: now }; bubble = { s: CONFIG.panic, t: now, dur: 1300 }; head.shake = 1.4; } });
+    events.push({ at: now + 640, fn: growPetal });
+  }
+  if (left === 0) events.push({ at: now + 350, fn: finale });
+}
+function growPetal() {
+  const on = attached().map(p => ((p.a % TAU) + TAU) % TAU).sort((a, b) => a - b);
+  let ga = -Math.PI/2, gw = -1;
+  for (let i = 0; i < on.length; i++) {
+    const a = on[i], b = i + 1 < on.length ? on[i + 1] : on[0] + TAU;
+    if (b - a > gw) { gw = b - a; ga = a + (b - a)/2; }
+  }
+  petals.push(makePetal(petals.length + 40, ga, now));
+  sfx("pop");
+  text = { ...text, main: "loves me…?", not: false, t: now };
+}
+function finale() {
+  if (phase === "finale") return;
+  phase = "finale"; finaleT = now;
+  mood = { m: "happy", t: now };
+  text = { ...text, main: CONFIG.name + " loves me", heart: true, not: false, t: now, kick: "the daisy test · final answer", hint: CONFIG.msg };
+  sfx("win");
+  const h = headPos();
+  for (let i = 0; i < 90; i++) {
+    const a = Math.random()*TAU, sp = (220 + Math.random()*520)*S;
+    specks.push({ x: h.x, y: h.y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 80*S, r: (3 + Math.random()*4.5)*S, rot: Math.random()*TAU, rv: (Math.random() - .5)*8, ph: Math.random()*TAU, t0: now, life: 3200 + Math.random()*2600, white: Math.random() < .55 });
+  }
+  // fireflies gather into a heart around the flower
+  const need = 46;
+  while (flies.length < need) flies.push({ x: Math.random() < .5 ? -10 : W + 10, y: H*(.2 + Math.random()*.7), p: Math.random()*TAU, s: .6 + Math.random()*.8, heart: -1, k: 0, tx: 0, ty: 0, dl: 0 });
+  flies.forEach((f, i) => {
+    const t = i/flies.length*TAU, hs = FR*.068;
+    f.tx = 16*Math.pow(Math.sin(t), 3)*hs; f.ty = -(13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t))*hs - FR*.08;
+    f.heart = now + 150 + (i % 12)*55 + Math.random()*250;
+  });
+}
+
+// ---------- drawing helpers ----------
+function petalPath(x, len, wid, seed) {
+  // hand-drawn petal from (0,0) along +x, rounded tip with a little notch
+  const N = 20, top = [], bot = [];
+  for (let i = 0; i <= N; i++) {
+    const u = i/N, hw = wid*.5*(.2 + .8*Math.pow(Math.sin(Math.PI*Math.pow(u, .78)*.94 + .03), .55));
+    const j1 = Math.sin(seed + i*1.3)*.6*S, j2 = Math.sin(seed*1.3 + i*1.7)*.6*S;
+    top.push([u*len*.97, -hw + j1]); bot.push([u*len*.97, hw + j2]);
+  }
+  const pts = [[0, 0], ...top, [len, -wid*.07], [len*.955, 0], [len, wid*.07], ...bot.reverse()];
+  x.beginPath(); x.moveTo(0, 0);
+  for (let i = 1; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1]; x.quadraticCurveTo(a[0], a[1], (a[0] + b[0])/2, (a[1] + b[1])/2); }
+  x.closePath();
+}
+function drawPetal(len, wid, seed, alpha = 1) {
+  const x = g;
+  petalPath(x, len, wid, seed);
+  const gr = x.createLinearGradient(0, 0, len, 0);
+  gr.addColorStop(0, "#ddd8c2"); gr.addColorStop(.35, "#f6f3e8"); gr.addColorStop(.8, "#fbf9f3");
+  gr.addColorStop(1, `hsl(${CONFIG.hue},72%,86%)`);
+  x.globalAlpha = alpha; x.fillStyle = gr; x.fill();
+  x.lineJoin = "round"; x.strokeStyle = "rgba(24,34,30,.9)"; x.lineWidth = 1.6*S; x.stroke();
+  // veins
+  x.strokeStyle = "rgba(120,124,104,.35)"; x.lineWidth = .9*S;
+  x.beginPath(); x.moveTo(len*.08, 0); x.quadraticCurveTo(len*.5, Math.sin(seed)*1.5*S, len*.78, 0);
+  x.moveTo(len*.16, wid*.08); x.quadraticCurveTo(len*.45, wid*.2, len*.66, wid*.16);
+  x.moveTo(len*.16, -wid*.08); x.quadraticCurveTo(len*.45, -wid*.2, len*.66, -wid*.16); x.stroke();
+  x.globalAlpha = 1;
+}
+function drawDisc(h) {
+  const x = g, r = DR;
+  x.save(); x.translate(h.x, h.y);
+  const gr = x.createRadialGradient(-r*.3, -r*.35, r*.1, 0, 0, r);
+  gr.addColorStop(0, "#ffd76a"); gr.addColorStop(.7, "#efae2e"); gr.addColorStop(1, "#d48a1c");
+  x.fillStyle = gr; x.beginPath();
+  for (let i = 0; i <= 40; i++) { const a = i/40*TAU, rr = r*(1 + Math.sin(i*2.7)*.012); x.lineTo(Math.cos(a)*rr, Math.sin(a)*rr); }
+  x.fill(); x.strokeStyle = "rgba(24,34,30,.9)"; x.lineWidth = 1.8*S; x.stroke();
+  // seeds round the rim (fermat spiral, the middle stays clear for the face)
+  x.fillStyle = "rgba(150,88,20,.55)";
+  for (let i = 30; i < 150; i++) { const a = i*2.39996, rr = r*.92*Math.sqrt(i/150); if (rr < r*.62) continue; x.beginPath(); x.arc(Math.cos(a)*rr, Math.sin(a)*rr, 1.1*S, 0, TAU); x.fill(); }
+  drawFace(r);
+  x.restore();
+}
+function drawFace(r) {
+  const x = g, m = mood.m, age = now - mood.t;
+  const ex = r*.3, ey = -r*.08, ink = "#2a1a0c";
+  x.strokeStyle = ink; x.fillStyle = ink; x.lineCap = "round"; x.lineWidth = 2*S;
+  const blink = (now % 3900) < 120 && m === "calm";
+  if (m === "panic") {
+    for (const sx of [-1, 1]) { x.fillStyle = "#fffaf0"; x.beginPath(); x.arc(sx*ex, ey, r*.17, 0, TAU); x.fill(); x.stroke(); x.fillStyle = ink; x.beginPath(); x.arc(sx*ex + Math.sin(now*.05)*1*S, ey + 1*S, r*.075, 0, TAU); x.fill(); }
+    x.beginPath(); x.ellipse(0, r*.3, r*.1, r*.13, 0, 0, TAU); x.fill();
+    // sweat drop
+    const k = clamp(age/300);
+    x.fillStyle = "#9fd3ef"; x.strokeStyle = "rgba(24,34,30,.8)"; x.lineWidth = 1.2*S;
+    const sx = r*.78, sy = -r*.55 + k*r*.35;
+    x.beginPath(); x.moveTo(sx, sy - r*.2); x.quadraticCurveTo(sx + r*.13, sy, sx, sy + r*.06); x.quadraticCurveTo(sx - r*.13, sy, sx, sy - r*.2); x.fill(); x.stroke();
+  } else if (m === "strain") {
+    for (const sx of [-1, 1]) { x.beginPath(); x.moveTo(sx*ex - sx*r*.12, ey - r*.1); x.lineTo(sx*ex + sx*r*.08, ey); x.lineTo(sx*ex - sx*r*.12, ey + r*.1); x.stroke(); }
+    x.beginPath(); x.moveTo(-r*.2, r*.3);
+    for (let i = 1; i <= 6; i++) x.lineTo(-r*.2 + i*r*.4/6, r*.3 + (i % 2 ? -1 : 1)*r*.04);
+    x.stroke();
+  } else if (m === "smug") {
+    for (const sx of [-1, 1]) { x.beginPath(); x.moveTo(sx*ex - r*.12, ey); x.lineTo(sx*ex + r*.12, ey); x.stroke(); x.beginPath(); x.arc(sx*ex, ey, r*.12, 0, Math.PI); x.fill(); }
+    x.beginPath(); x.moveTo(-r*.16, r*.28); x.quadraticCurveTo(r*.05, r*.4, r*.22, r*.2); x.stroke();
+  } else if (m === "happy") {
+    for (const sx of [-1, 1]) { x.beginPath(); x.arc(sx*ex, ey + r*.05, r*.12, Math.PI*1.1, Math.PI*1.9); x.stroke(); }
+    x.beginPath(); x.arc(0, r*.18, r*.2, Math.PI*.15, Math.PI*.85); x.stroke();
+    x.fillStyle = `hsla(${CONFIG.hue},85%,62%,.55)`;
+    for (const sx of [-1, 1]) { x.beginPath(); x.ellipse(sx*r*.55, r*.2, r*.13, r*.08, 0, 0, TAU); x.fill(); }
+  } else {
+    for (const sx of [-1, 1]) {
+      if (blink) { x.beginPath(); x.moveTo(sx*ex - r*.08, ey); x.lineTo(sx*ex + r*.08, ey); x.stroke(); }
+      else { x.beginPath(); x.ellipse(sx*ex, ey, r*.07, r*.1, 0, 0, TAU); x.fill(); x.fillStyle = "#fff4d8"; x.beginPath(); x.arc(sx*ex + r*.025, ey - r*.04, r*.025, 0, TAU); x.fill(); x.fillStyle = ink; }
+    }
+    x.beginPath(); x.arc(0, r*.16, r*.13, Math.PI*.2, Math.PI*.8); x.stroke();
+  }
+}
+function drawStem(h) {
+  const x = g, bx = hx0 + 6*S, by = H + 10;
+  x.lineCap = "round";
+  x.strokeStyle = "rgba(24,34,30,.95)"; x.lineWidth = 9*S;
+  const c1x = h.x - 10*S, c1y = h.y + (by - h.y)*.4, c2x = bx + 14*S, c2y = h.y + (by - h.y)*.7;
+  x.beginPath(); x.moveTo(h.x, h.y); x.bezierCurveTo(c1x, c1y, c2x, c2y, bx, by); x.stroke();
+  x.strokeStyle = "#4f8a4a"; x.lineWidth = 6*S; x.stroke();
+  x.strokeStyle = "rgba(170,220,140,.35)"; x.lineWidth = 1.5*S;
+  x.beginPath(); x.moveTo(h.x - 2*S, h.y); x.bezierCurveTo(c1x - 2*S, c1y, c2x - 2*S, c2y, bx - 2*S, by); x.stroke();
+  // two leaves
+  const leaf = (t, side, size) => {
+    const u = 1 - t, px = u*u*u*h.x + 3*u*u*t*c1x + 3*u*t*t*c2x + t*t*t*bx, py = u*u*u*h.y + 3*u*u*t*c1y + 3*u*t*t*c2y + t*t*t*by;
+    const L = 70*S*size, sway = Math.sin(now*.0011 + side)*.06;
+    x.save(); x.translate(px, py); x.rotate(side > 0 ? -.55 + sway : Math.PI + .55 + sway); x.scale(1, side);
+    x.beginPath(); x.moveTo(0, 0); x.quadraticCurveTo(L*.45, -L*.32, L, -L*.08); x.quadraticCurveTo(L*.5, L*.18, 0, 0);
+    const lg = x.createLinearGradient(0, 0, L, 0); lg.addColorStop(0, "#3f7a3e"); lg.addColorStop(1, "#6aa55a");
+    x.fillStyle = lg; x.fill(); x.strokeStyle = "rgba(24,34,30,.95)"; x.lineWidth = 1.6*S; x.stroke();
+    x.strokeStyle = "rgba(24,50,30,.6)"; x.lineWidth = 1*S; x.beginPath(); x.moveTo(L*.05, 0); x.quadraticCurveTo(L*.5, -L*.12, L*.9, -L*.08); x.stroke();
+    x.restore();
+  };
+  leaf(.5, 1, 1.35); leaf(.68, -1, 1.15);
+}
+function drawGrass() {
+  const x = g;
+  for (let layer = 0; layer < 2; layer++) {
+    x.fillStyle = layer ? "#0f2619" : "#0b1d14";
+    const n = Math.ceil(W/(7*S));
+    for (let i = 0; i < n; i++) {
+      const bx = i*7*S + hash(i + layer*100)*6*S, hgt = (22 + hash(i*1.7 + layer)*34)*S*(layer ? .8 : 1.15);
+      const sway = Math.sin(now*.0012 + i*.37 + layer)*4*S;
+      const y0 = H + 2;
+      x.beginPath(); x.moveTo(bx - 2.2*S, y0); x.quadraticCurveTo(bx + sway*.4, y0 - hgt*.6, bx + sway, y0 - hgt); x.quadraticCurveTo(bx + sway*.4 + 1*S, y0 - hgt*.55, bx + 2.2*S, y0); x.fill();
+    }
+  }
+}
+function drawBubble(h) {
+  if (!bubble) return;
+  const age = now - bubble.t; if (age > bubble.dur) { bubble = null; return; }
+  const k = spring(age/450), out = clamp((bubble.dur - age)/220);
+  const x = g, bx = h.x + FR*.62, by = h.y - FR*.86;
+  x.save(); x.translate(bx, by); x.scale(k*out, k*out); x.rotate(-.05);
+  x.font = `700 ${30*S}px Caveat, cursive`;
+  const tw = x.measureText(bubble.s).width, bw = tw + 30*S, bh = 44*S;
+  x.fillStyle = "#fbf7ea"; x.strokeStyle = "rgba(24,34,30,.95)"; x.lineWidth = 1.8*S;
+  x.beginPath(); x.roundRect(-bw/2, -bh/2, bw, bh, 18*S);
+  x.fill(); x.stroke();
+  x.beginPath(); x.moveTo(-bw*.25, bh/2 - 1); x.quadraticCurveTo(-bw*.33, bh/2 + 12*S, -bw*.46, bh/2 + 18*S); x.quadraticCurveTo(-bw*.18, bh/2 + 10*S, -bw*.08, bh/2 - 1);
+  x.fill(); x.stroke(); x.fillStyle = "#fbf7ea"; x.fillRect(-bw*.24, bh/2 - 3*S, bw*.15, 3.5*S);
+  x.fillStyle = "#24302b"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(bubble.s, 0, 1*S);
+  x.restore();
+}
+function heartPath(x, cx, cy, s) {
+  x.beginPath(); x.moveTo(cx, cy + s*.35);
+  x.bezierCurveTo(cx - s*.95, cy - s*.25, cx - s*.42, cy - s*.95, cx, cy - s*.42);
+  x.bezierCurveTo(cx + s*.42, cy - s*.95, cx + s*.95, cy - s*.25, cx, cy + s*.35);
+}
+function drawText() {
+  const x = g, mainY = hy0 - FR - 64*S, age = now - text.t;
+  const pop = 1 + .14*(1 - spring(age/380)), a = clamp(age/120);
+  x.textAlign = "center"; x.textBaseline = "alphabetic";
+  x.font = `500 ${10.5*S + 1.5}px "DM Mono", monospace`; x.fillStyle = "rgba(196,214,190,.62)";
+  if (x.letterSpacing !== undefined) x.letterSpacing = `${2*S}px`;
+  x.fillText(text.kick.toUpperCase(), W/2, mainY - 44*S);
+  if (x.letterSpacing !== undefined) x.letterSpacing = "0px";
+  let fs = 56*S; x.font = `italic 400 ${fs}px "Instrument Serif", serif`;
+  const heartW = text.heart ? fs*.62 : 0;
+  let tw = x.measureText(text.main).width + heartW;
+  if (tw > W - 36) { fs *= (W - 36)/tw; x.font = `italic 400 ${fs}px "Instrument Serif", serif`; tw = x.measureText(text.main).width + (text.heart ? fs*.62 : 0); }
+  const shake = text.main.endsWith("—") ? Math.sin(now*.09)*1.6*S : 0;
+  x.save(); x.translate(W/2 + shake, mainY); x.scale(pop, pop); x.globalAlpha = a;
+  x.textAlign = "left";
+  let px = -tw/2;
+  if (text.not) {                                       // "loves me" + a different coloured "not"
+    const base = text.main.replace(/ not$/, ""), rest = text.main.slice(base.length);
+    x.fillStyle = "#f3eedf"; x.fillText(base, px, 0); px += x.measureText(base).width;
+    x.fillStyle = `hsl(${CONFIG.hue},60%,72%)`; x.fillText(rest, px, 0);
+  } else {
+    x.fillStyle = "#f3eedf"; x.fillText(text.main, px, 0); px += x.measureText(text.main).width;
+  }
+  if (text.heart) {
+    const hb = 1 + .08*Math.sin(now*.008), hk = spring((age - 200)/500);
+    x.save(); x.translate(px + fs*.36, -fs*.27); x.scale(hb*hk, hb*hk);
+    heartPath(x, 0, 0, fs*.44); x.fillStyle = `hsl(${CONFIG.hue},82%,64%)`; x.fill();
+    x.strokeStyle = "rgba(24,34,30,.6)"; x.lineWidth = 1.2*S; x.stroke(); x.restore();
+  }
+  x.restore();
+  if (text.hint) {
+    const ha = text.heart ? clamp((age - 700)/600) : .8;
+    x.globalAlpha = ha; x.textAlign = "center";
+    x.font = `${text.heart ? 600 : 600} ${(text.heart ? 25 : 22)*S}px Caveat, cursive`; x.fillStyle = text.heart ? "#e9e2c9" : "rgba(220,226,206,.7)";
+    x.fillText(text.hint, W/2, mainY + 32*S);
+    x.globalAlpha = 1;
+  }
+  if (phase === "finale" && now - finaleT > 3500) {
+    x.font = `400 ${10*S + 1}px "DM Mono", monospace`; x.fillStyle = `rgba(196,214,190,${.45*clamp((now - finaleT - 3500)/800)})`;
+    x.fillText("tap the sky to pick another daisy", W/2, H - 34);
+  }
+}
+
+// ---------- update ----------
+function update(dt) {
+  const ms = dt*1000;
+  for (let i = events.length - 1; i >= 0; i--) if (now >= events[i].at) { const e = events.splice(i, 1)[0]; e.fn(); }
+  // head recoil and shake
+  head.shake = Math.max(0, head.shake - dt*2.2);
+  let pullX = 0, pullY = 0;
+  for (const p of petals) {
+    if (p.state === "tug" && now - p.tug > 150) detach(p);
+    if (p.state === "rubber") {
+      const h = headPos(), base = { x: h.x + Math.cos(p.a)*DR*.72, y: h.y + Math.sin(p.a)*DR*.72 };
+      if (grab && grab.p === p) {
+        if (grab.auto) {                                  // tapped: it tugs on its own, then snaps
+          const k = (now - grab.t)/900;
+          const d = PL*.75*easeOut(Math.min(1, k*1.15)) + Math.sin(now*.06)*3*S, da = p.a + .7*easeOut(k);
+          p.pull = { x: Math.cos(da)*(p.len + d) - Math.cos(p.a)*p.len, y: Math.sin(da)*(p.len + d) - Math.sin(p.a)*p.len };
+          if (k >= 1) { snapBack(p); grab = null; }
+        } else {
+          let dx = grab.x - (base.x + Math.cos(p.a)*p.len), dy = grab.y - (base.y + Math.sin(p.a)*p.len);
+          const d = Math.hypot(dx, dy), mx = PL*1.25;
+          if (d > mx) { dx *= mx/d; dy *= mx/d; }
+          p.pull = { x: dx, y: dy };
+        }
+      }
+      pullX += p.pull.x; pullY += p.pull.y;
+    }
+  }
+  // the head leans toward a pull, then wobbles back after a snap
+  let sx = pullX*.12, sy = pullY*.12;
+  for (const p of petals) {
+    const a = (now - p.snapT)/1000;
+    if (a >= 0 && a < 2) { const w = Math.exp(-5*a)*Math.cos(16*a); sx -= p.snapD.x*.1*w*(a < .02 ? 0 : 1); sy -= p.snapD.y*.1*w*(a < .02 ? 0 : 1); }
+  }
+  const hs = head.shake*Math.sin(now*.07)*4*S;
+  head.x = sx + hs; head.y = sy + (phase === "finale" ? -Math.abs(Math.sin((now - finaleT)*.006))*5*S*Math.exp(-(now - finaleT)/2500) : 0);
+
+  // falling petals: plate with normal drag, flutter or free tumble
+  const wind = Math.sin(now*.00045)*18*S + Math.sin(now*.0013)*8*S, gr = 900*S, KN = .17/S, KT = .9;
+  for (const f of loose) {
+    if (f.landed) continue;
+    const steps = 3, h = dt/steps;
+    for (let k = 0; k < steps; k++) {
+      const ux = f.vx - wind, uy = f.vy, tx = Math.cos(f.tilt), ty = Math.sin(f.tilt), nx = -ty, ny = tx;
+      const vn = ux*nx + uy*ny, vt = ux*tx + uy*ty, Fn = -KN*vn*Math.abs(vn), Ft = -KT*vt;
+      f.vx += (Fn*nx + Ft*tx)*h; f.vy += (gr + Fn*ny + Ft*ty)*h;
+      if (f.tumble) { f.om += (-.006/(S*S)*vn*vt - 1.4*f.om)*h; f.tilt += f.om*h; }
+      else { f.ph += (2.6 + Math.hypot(f.vx, f.vy)*.004/S)*h; const target = f.amp*Math.sin(f.ph); f.om += ((target - f.tilt)*60 - f.om*9)*h; f.tilt += f.om*h; }
+      f.x += f.vx*h; f.y += f.vy*h;
+    }
+    f.spinV *= Math.exp(-dt*.8); f.spin += (f.spinV + f.vx*.004/S)*dt;
+    if (f.y > f.gy) { f.y = f.gy; f.landed = true; f.tilt = .3 + Math.random()*.35; f.spin = (Math.random() - .5)*.5 + (Math.random() < .5 ? 0 : Math.PI); }
+  }
+  // finale specks
+  for (let i = specks.length - 1; i >= 0; i--) {
+    const s = specks[i];
+    s.vx *= Math.exp(-dt*2.6); s.vy = s.vy*Math.exp(-dt*2.6) + 120*S*dt;
+    s.ph += dt*3; s.x += (s.vx + Math.sin(s.ph)*26*S)*dt; s.y += s.vy*dt; s.rot += s.rv*dt;
+    if (now - s.t0 > s.life) specks.splice(i, 1);
+  }
+  // fireflies
+  const h = headPos();
+  for (const f of flies) {
+    f.p += dt*f.s;
+    if (f.heart > 0 && now > f.heart) {
+      f.k = Math.min(1, f.k + dt*1.4);
+      const tx = h.x + f.tx + Math.sin(f.p*2)*2.5*S, ty = h.y + f.ty + Math.cos(f.p*1.7)*2.5*S;
+      const e = .04 + f.k*f.k*.16; f.x += (tx - f.x)*e*60*dt; f.y += (ty - f.y)*e*60*dt;
+    } else {
+      f.x += Math.cos(f.p*1.3)*16*S*dt + Math.sin(f.p*.4)*6*S*dt; f.y += Math.sin(f.p*1.1)*12*S*dt - 2*S*dt;
+      if (f.x < -20) f.x = W + 20; if (f.x > W + 20) f.x = -20;
+      if (f.y < H*.15) f.y = H*.95; if (f.y > H) f.y = H*.2;
+    }
+  }
+}
+
+// ---------- render ----------
+function render() {
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.drawImage(bgCanvas, 0, 0, W, H);
+  const h = headPos();
+  // fireflies behind
+  g.globalCompositeOperation = "lighter";
+  for (const f of flies) {
+    const tw = .45 + .55*Math.pow(Math.max(0, Math.sin(f.p*2.3 + f.s*9)), 2), heart = f.heart > 0 && now > f.heart;
+    const r = (heart ? 15 : 11)*S*(.7 + tw*.5);
+    g.globalAlpha = heart ? .55 + .45*tw : .25 + .55*tw;
+    g.drawImage(glowSprite, f.x - r, f.y - r, r*2, r*2);
+  }
+  g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  // landed petals in the grass
+  for (const f of loose) if (f.landed) drawLoose(f);
+  drawStem(h);
+  // petals on the flower
+  const sorted = petals.filter(p => p.state !== "gone").sort((a, b) => (a.state === "rubber") - (b.state === "rubber"));
+  for (const p of sorted) {
+    const base = { x: h.x + Math.cos(p.a)*DR*.72, y: h.y + Math.sin(p.a)*DR*.72 };
+    let ang = p.a, len = p.len, wid = p.wid, sc = 1;
+    if (p.born > 0) { const k = (now - p.born)/600; sc = spring(k); }
+    if (p.state === "tug") { const k = clamp((now - p.tug)/150); len *= 1 + .2*k; wid *= 1 - .1*k; ang += Math.sin(k*20)*.03; }
+    let pull = p.pull;
+    const sa = (now - p.snapT)/1000;
+    if (p.state === "on" && sa >= 0 && sa < 2) { const w = Math.exp(-6*sa)*Math.cos(19*sa); pull = { x: p.snapD.x*w, y: p.snapD.y*w }; }
+    if (pull.x || pull.y) {
+      const tx = Math.cos(p.a)*p.len + pull.x, ty = Math.sin(p.a)*p.len + pull.y, L = Math.hypot(tx, ty);
+      ang = Math.atan2(ty, tx) + (p.state === "rubber" ? Math.sin(now*.11)*.025*clamp((L - p.len)/(p.len*.3)) : 0); len = L; wid = p.wid*Math.pow(p.len/L, .6);
+    }
+    g.save(); g.translate(base.x, base.y); g.rotate(ang); g.scale(sc, sc);
+    if (p.born > 0 && now - p.born < 600) g.scale(1, 1 + .3*Math.sin(clamp((now - p.born)/600)*Math.PI));
+    drawPetal(len, wid, p.seed); g.restore();
+  }
+  drawDisc(h);
+  // petals in the air
+  for (const f of loose) if (!f.landed) drawLoose(f);
+  // finale specks
+  for (const s of specks) {
+    const a = clamp((s.life - (now - s.t0))/900);
+    g.save(); g.translate(s.x, s.y); g.rotate(s.rot); g.scale(1, .4 + .6*Math.abs(Math.cos(s.ph)));
+    g.globalAlpha = a; g.fillStyle = s.white ? "#f8f4e8" : `hsl(${CONFIG.hue},80%,78%)`;
+    g.beginPath(); g.ellipse(0, 0, s.r, s.r*.42, 0, 0, TAU); g.fill(); g.restore();
+  }
+  g.globalAlpha = 1;
+  drawGrass();
+  drawBubble(h);
+  drawText();
+  g.fillStyle = grain; g.fillRect(0, 0, W, H);
+}
+function drawLoose(f) {
+  g.save(); g.translate(f.x, f.y);
+  g.scale(f.landed ? .85 : 1, f.landed ? .42 : .22 + .78*Math.abs(Math.cos(f.tilt)));
+  g.rotate(f.spin); g.translate(-f.len/2, 0);
+  drawPetal(f.len, f.wid, f.seed, f.landed ? .82 : 1);
+  g.restore();
+}
+
+function frame(t) {
+  now = t;
+  const dt = Math.min(.05, Math.max(0, (t - last)/1000)); last = t;
+  update(dt); render();
+  requestAnimationFrame(frame);
+}
+addEventListener("resize", () => { layout(); });
+layout(); now = performance.now(); last = now; reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

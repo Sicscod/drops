@@ -46,6 +46,7 @@ Saw a drop in a video? Its number is the folder.
 | 37 | [🔴 Laser Cat](37-laser-cat) | A cartoon cat chases your finger's laser dot, pounces, bonks the wall and purrs. ?fur=&speed=&dot= |
 | 38 | [✈️ Paper Plane](38-paper-plane) | A note folds into a paper plane, draws a heart in the air and lands with a reply line. ?name=&msg=&back=&hue= |
 | 39 | [🔴 Don't Press](39-dont-press) | A red button that begs you not to press it, runs away, cracks the glass and self-destructs. ?color= |
+| 40 | [🌼 Loves Me Not](40-loves-me-not) | A rigged daisy that always ends on loves me. ?name=&msg=&hue=&petals= |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
