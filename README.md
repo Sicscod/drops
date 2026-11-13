@@ -48,6 +48,7 @@ Saw a drop in a video? Its number is the folder.
 | 39 | [🔴 Don't Press](39-dont-press) | A red button that begs you not to press it, runs away, cracks the glass and self-destructs. ?color= |
 | 40 | [🌼 Loves Me Not](40-loves-me-not) | A rigged daisy that always ends on loves me. ?name=&msg=&hue=&petals= |
 | 41 | [🐉 Tiny Dragon](41-tiny-dragon) | A baby dragon pet that sneezes, roasts the bug in your code and naps on your finger. ?color= |
+| 42 | [🧸 Claw Machine](42-claw-machine) | A rigged claw machine that always wins the heart with her name. ?name=&msg=&hue= |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
