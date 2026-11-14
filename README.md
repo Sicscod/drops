@@ -49,6 +49,7 @@ Saw a drop in a video? Its number is the folder.
 | 40 | [🌼 Loves Me Not](40-loves-me-not) | A rigged daisy that always ends on loves me. ?name=&msg=&hue=&petals= |
 | 41 | [🐉 Tiny Dragon](41-tiny-dragon) | A baby dragon pet that sneezes, roasts the bug in your code and naps on your finger. ?color= |
 | 42 | [🧸 Claw Machine](42-claw-machine) | A rigged claw machine that always wins the heart with her name. ?name=&msg=&hue= |
+| 43 | [🦆 Rubber Duck](43-rubber-duck) | A rubber duck debugging buddy: tap it to squeak, on the third squeak it pecks the bug until the error pops and puts on sunglasses. |
 
 ## How to use a drop
 1. Open its folder → download `index.html`

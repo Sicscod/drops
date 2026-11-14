@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>rubber duck</title>
+<meta name="description" content="A rubber duck debugging buddy that sits on your code, listens, squeaks, and fixes the bug. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Shantell+Sans:wght@700;800&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#121316;color:#d9d6cd}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.ask{position:fixed;left:0;right:0;bottom:26px;height:36px;display:flex;align-items:center;gap:8px;padding:0 16px;z-index:2;border-top:1px solid #23252b;background:#0e0f12;font:400 12.5px "IBM Plex Mono",ui-monospace,monospace;color:#f2c94c}
+.ask input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;color:#d9d6cd;font:inherit;caret-color:#f2c94c;font-size:16px;user-select:text;-webkit-user-select:text}
+.ask input::placeholder{color:#5d616c}
+.credit{position:fixed;left:0;right:0;bottom:0;height:26px;display:flex;align-items:center;justify-content:center;z-index:3;background:#0e0f12;font:400 10.5px "IBM Plex Mono",ui-monospace,monospace;color:#6f7380}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<label class="ask"><span>&gt;</span><input id="ask" maxlength="64" autocomplete="off" spellcheck="false" placeholder="explain your bug to the duck, then enter"></label>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:400 20px 'IBM Plex Mono'">a</span><span class="pre" style="font:500 20px 'IBM Plex Mono'">a</span><span class="pre" style="font:800 20px 'Shantell Sans'">a</span><span class="pre" style="font:700 20px 'Shantell Sans'">a</span>
+<script>
+// ===== Rubber Duck · free code by @sicscod.drops =====
+// Try: yoursite/?color=ff7ab6   (any hex colour for the duck)
+const P = new URLSearchParams(location.search);
+const hexOk = v => /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v || "");
+const CONFIG = {
+  color: hexOk(P.get("color")) ? "#" + P.get("color").replace("#", "") : "#ffcf3a",  // the duck
+  squeaksToFix: 3,      // the duck fixes the bug on this squeak
+  file: "checkout.js",
+  // the bugs the duck finds, one per round. code = the broken line, bad = the part that's wrong, fix = what it becomes
+  errors: [
+    { code: "  return sum + cart.shiping * TAX;",   bad: "shiping", fix: "shipping", msg: "TypeError: cart.shiping is undefined" },
+    { code: "  return sum + cart.shipping * TAXX;", bad: "TAXX",    fix: "TAX",      msg: "ReferenceError: TAXX is not defined" },
+    { code: "  retrun sum + cart.shipping * TAX;",  bad: "retrun",  fix: "return",   msg: "SyntaxError: unexpected identifier" },
+    { code: "  return sum + cart.shipping() * TAX;", bad: "()",     fix: "",         msg: "TypeError: cart.shipping is not a function" },
+  ],
+  says: ["squeak!", "squeak?", "SQUEAK!"],   // what it says on each squeak
+  proud: "ship it.",                          // after the fix
+  sound: true,
+};
+
+// ---------- the code on screen (line 10 is where the bugs live) ----------
+const CODE = [
+  "// " + CONFIG.file + " · worked yesterday",
+  'import { cart } from "./store.js";',
+  "",
+  "const TAX = 1.2;",
+  "",
+  "export function total(cart) {",
+  "  const sum = cart.items.reduce(",
+  "    (s, it) => s + it.price * it.qty, 0",
+  "  );",
+  null,
+  "}",
+  "",
+  "console.log(total(cart)); // NaN ?!",
+];
+const BUG_LINE = 9;
+const COL = { text: "#d9d6cd", kw: "#f29e6b", str: "#a7cf86", num: "#e8c46a", com: "#686c78", fn: "#82b6ec", pun: "#8f9099", err: "#ff5f57", ok: "#7fdc8f", gut: "#4a4d57" };
+const KW = new Set(["import", "from", "const", "let", "export", "function", "return", "retrun"]);
+function hl(s) {   // tiny syntax highlighter -> [[text, colour], ...]
+  const out = []; let m; const re = /(\/\/.*$)|("[^"]*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)|(\s+)|([^\sA-Za-z_$\d"]+)/g;
+  while ((m = re.exec(s))) {
+    if (m[1]) out.push([m[1], COL.com]); else if (m[2]) out.push([m[2], COL.str]); else if (m[3]) out.push([m[3], COL.num]);
+    else if (m[4]) out.push([m[4], KW.has(m[4]) ? COL.kw : s[re.lastIndex] === "(" ? COL.fn : COL.text]);
+    else if (m[5]) out.push([m[5], COL.text]); else out.push([m[6], COL.pun]);
+  }
+  return out;
+}
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d"), ask = document.getElementById("ask");
+let W = 0, H = 0, DPR = 1, S = 1, DS = 1, FS = 13, LH = 21, CW = 8, GX = 40, TOP = 40, ED1 = 300, CON = 0;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = (v, target, rate, dt) => v + (target - v) * (1 - Math.exp(-rate * dt));
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2));
+const outBounce = x => { x = clamp(x, 0, 1); const n = 7.5625, d = 2.75;
+  return x < 1 / d ? n * x * x : x < 2 / d ? n * (x -= 1.5 / d) * x + .75 : x < 2.5 / d ? n * (x -= 2.25 / d) * x + .9375 : n * (x -= 2.625 / d) * x + .984375; };
+function shade(hex, k) {   // k<0 darker, k>0 lighter
+  let h = hex.replace("#", ""); if (h.length === 3) h = h.replace(/./g, "$&$&");
+  const c = [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16));
+  const r = c.map((v, i) => k < 0 ? v * (1 + k) * (i === 2 ? .8 : 1) : v + (255 - v) * k);
+  return "rgb(" + r.map(v => Math.round(clamp(v, 0, 255))).join(",") + ")";
+}
+const DUCK = { body: CONFIG.color, dark: shade(CONFIG.color, -.28), light: shade(CONFIG.color, .45), beak: "#ff8a2a", beakDark: "#d9631a" };
+
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  S = clamp(Math.min(W / 480, H / 520), .78, 1.15); DS = S * 1.15;
+  FS = 13 * S; LH = 21.5 * S; TOP = 38 * S; GX = 42 * S;
+  ctx.font = `400 ${FS}px "IBM Plex Mono", monospace`; CW = ctx.measureText("m").width || FS * .6;
+  CON = 86 * S; ED1 = H - 62 - CON;
+  if (!duck.placed) { duck.x = duck.tx = W * .76; duck.y = duck.ty = lineY(4) + 16 * S; }
+  duck.x = clamp(duck.x, 60 * DS, W - 60 * DS);
+}
+const lineY = i => TOP + 14 * S + (i + .78) * LH;           // baseline of line i
+const lineMid = i => lineY(i) - FS * .34;
+
+// ---------- state ----------
+let now = 0, last = 0;
+const duck = { x: 0, y: 0, tx: 0, ty: 0, placed: false, sq: 0, sqv: 0, tilt: 0, tiltv: 0, face: 1, faceS: 1,
+  float: 0, drag: false, gx: 0, gy: 0, rock: 0, hop: 0, peck: 0, glasses: 0, gOff: -1, blinkAt: 2 };
+let mode = "idle", squeaks = 0, round = 0, fixed = false, found = 0, foundBump = -9;
+let walk = null, peckT0 = 0, hits = 0, balloonT0 = -1, fixT = -9, errT0 = -9, swell = 0, swellV = 0, proudSaid = false;
+const ripples = [], bits = [], words = [];
+let ptr = null, lastRipple = 0, listenUntil = -9;
+const err = () => CONFIG.errors[round % CONFIG.errors.length];
+
+// ---------- sound (Web Audio, starts on first tap) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return null; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } return AC; }
+function tone(type, f0, f1, len, vol, at = 0) {
+  if (!AC) return; const t = AC.currentTime + at, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len * .6);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(.0008, t + len);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + len + .02);
+}
+function noise(len, vol, fc) {
+  if (!AC) return; const n = AC.sampleRate * len | 0, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  f.type = "bandpass"; f.frequency.value = fc; g.gain.value = vol; s.buffer = b; s.connect(f).connect(g).connect(AC.destination); s.start();
+}
+const sfx = {
+  squeak(k) { tone("triangle", 820 + k * 90, 1500 + k * 120, .2, .22); tone("sine", 1640, 2900, .14, .06, .02); },
+  peck() { tone("square", 1400, 700, .05, .05); },
+  pop() { noise(.18, .9, 1800); tone("sine", 260, 80, .18, .3); },
+  cool() { tone("sine", 140, 55, .45, .35); tone("triangle", 660, 990, .25, .07, .12); },
+};
+
+// ---------- the duck reacts ----------
+function say(text, big) {
+  const s = duck.faceS >= 0 ? 1 : -1;
+  words.push({ text, t0: now, x: clamp(duck.x - s * 78 * DS, 56 * S, W - 56 * S), y: Math.max(TOP + 20 * S, duck.y - 106 * DS), rot: -s * (.08 + Math.random() * .1), big });
+}
+function burst(x, y, n, color, speed) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = speed * (.5 + Math.random());
+    bits.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - speed * .4, r: Math.random() * 6, vr: (Math.random() - .5) * 18, t0: now, life: .7 + Math.random() * .4, color, w: (3 + Math.random() * 5) * S }); }
+}
+function squeak() {
+  if (mode === "walk" || mode === "peck") return;
+  if (mode === "cool") nextBug();
+  squeaks++; const k = Math.min(squeaks, CONFIG.says.length) - 1;
+  duck.sq = -.06; duck.sqv = -13 - k * 2;                        // big squash, springs back
+  duck.tiltv += (k % 2 ? -1 : 1) * 7;
+  say(CONFIG.says[k], squeaks >= CONFIG.squeaksToFix);
+  const s = duck.faceS >= 0 ? 1 : -1;
+  for (let i = 0; i < 3; i++) { const a = (-.55 + i * .5) + (s > 0 ? Math.PI : 0);   // little squeak lines by the beak
+    bits.push({ line: true, x: duck.x - s * 70 * DS, y: duck.y - 72 * DS, a: s > 0 ? Math.PI - (-.55 + i * .5) : (-.55 + i * .5), t0: now, life: .35 }); }
+  sfx.squeak(k);
+  if (squeaks >= CONFIG.squeaksToFix && !fixed) startWalk();
+}
+function startWalk() {
+  const e = err(), col = e.code.indexOf(e.bad), cx = GX + (col + e.bad.length / 2) * CW;
+  const tx = clamp(cx + 98 * DS, 70 * DS, W - 58 * DS), ty = lineMid(BUG_LINE) + 17 * DS;
+  const dist = Math.hypot(tx - duck.x, ty - duck.y);
+  walk = { t0: now + .38, x0: duck.x, y0: duck.y, x1: tx, y1: ty, dur: clamp(dist / (190 * DS), .55, 1.5) };
+  mode = "walk"; duck.float = 0; duck.drag = false;
+}
+function nextBug() {
+  round++; fixed = false; squeaks = 0; errT0 = now; swell = 0; hits = 0; balloonT0 = -1; proudSaid = false;
+  duck.gOff = now; mode = "idle";
+}
+function addRipple(x, y, amp) { ripples.push({ x, y, t0: now, amp: amp * S }); if (ripples.length > 24) ripples.shift(); }
+
+// ---------- input ----------
+const onDuck = (x, y) => Math.hypot(x - duck.x, (y - (duck.y - 52 * DS)) * 1.1) < 64 * DS;
+cv.addEventListener("pointerdown", e => {
+  audio(); if (document.activeElement === ask) ask.blur();
+  ptr = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, onDuck: onDuck(e.clientX, e.clientY), moved: false };
+  if (ptr.onDuck && (mode === "idle" || mode === "cool")) { duck.gx = duck.x - e.clientX; duck.gy = duck.y - e.clientY; }
+});
+addEventListener("pointermove", e => {
+  if (!ptr) return; ptr.x = e.clientX; ptr.y = e.clientY;
+  if (!ptr.moved && Math.hypot(ptr.x - ptr.sx, ptr.y - ptr.sy) > 7) {
+    ptr.moved = true;
+    if (ptr.onDuck && (mode === "idle" || mode === "cool")) { duck.drag = true; duck.placed = true; addRipple(duck.x, duck.y, 5); }
+  }
+});
+addEventListener("pointerup", e => {
+  if (!ptr) return;
+  if (!ptr.moved) {
+    if (ptr.onDuck) squeak();
+    else { addRipple(ptr.x, ptr.y, 4); listenUntil = now + .9; duck.tiltv += (ptr.x < duck.x ? -1 : 1) * 5; }
+  }
+  if (duck.drag) { duck.drag = false; addRipple(duck.x, duck.y, 6); }
+  ptr = null;
+});
+ask.addEventListener("input", () => { listenUntil = now + 1.2; duck.tiltv += (Math.random() < .5 ? -1 : 1) * 3.5; duck.sqv += 1.5; });
+ask.addEventListener("keydown", e => { if (e.key === "Enter") { audio(); ask.value = ""; ask.blur(); squeak(); } });
+addEventListener("resize", resize);
+
+// ---------- drawing ----------
+function wob(x, y) {   // ripples wobble the code like water
+  let o = 0;
+  for (const r of ripples) { const age = now - r.t0, rad = age * 150 * S, d = Math.hypot(x - r.x, (y - r.y) * 2.3), b = d - rad;
+    if (b > -60 * S && b < 60 * S) o += r.amp * Math.exp(-age * 1.5) * Math.sin(b * .15 / S) * Math.exp(-((b / (26 * S)) ** 2)); }
+  return o;
+}
+function drawText(str, x, y, color, wavy) {
+  ctx.fillStyle = color;
+  if (!wavy) { ctx.fillText(str, x, y); return; }
+  for (let i = 0; i < str.length; i++) if (str[i] !== " ") ctx.fillText(str[i], x + i * CW, y + wob(x + i * CW, y));
+}
+function squiggle(x0, x1, y, amp, lw, color) {
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  const step = 3 * S; for (let x = x0, i = 0; x <= x1 + .1; x += step, i++) { const yy = y + (i % 2 ? amp : -amp); i ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); }
+  ctx.stroke();
+}
+
+function drawEditor() {
+  ctx.fillStyle = "#121316"; ctx.fillRect(0, 0, W, H);
+  // tab bar
+  ctx.fillStyle = "#0e0f12"; ctx.fillRect(0, 0, W, TOP);
+  ctx.fillStyle = "#121316"; const tw = 150 * S; ctx.fillRect(0, 0, tw, TOP);
+  ctx.fillStyle = "#f2c94c"; ctx.fillRect(0, 0, tw, 2);
+  ctx.font = `500 ${12 * S}px "IBM Plex Mono", monospace`; ctx.textBaseline = "middle";
+  ctx.fillStyle = "#e8b04a"; ctx.fillText("JS", 14 * S, TOP / 2 + 1);
+  ctx.fillStyle = COL.text; ctx.fillText(CONFIG.file, 36 * S, TOP / 2 + 1);
+  ctx.beginPath(); ctx.fillStyle = fixed ? COL.ok : COL.err; ctx.arc(tw - 16 * S, TOP / 2, 3.5 * S, 0, 7); ctx.fill();
+  // counter
+  const b = 1 + .35 * Math.exp(-(now - foundBump) * 6) * Math.max(0, Math.cos((now - foundBump) * 14)) * (now > foundBump ? 1 : 0);
+  ctx.save(); ctx.translate(W - 16 * S, TOP / 2 + 1); ctx.scale(b, b); ctx.textAlign = "right";
+  ctx.font = `500 ${15 * S}px "IBM Plex Mono", monospace`; ctx.fillStyle = "#f2c94c"; ctx.fillText(found, 0, 0);
+  const nw = ctx.measureText(String(found)).width;
+  ctx.font = `400 ${11.5 * S}px "IBM Plex Mono", monospace`; ctx.fillStyle = "#8b8f9a"; ctx.fillText("bugs found by duck  ", -nw, 0);
+  ctx.restore(); ctx.textAlign = "left";
+
+  // code
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TOP, W, ED1 - TOP); ctx.clip();
+  ctx.textBaseline = "alphabetic"; ctx.font = `400 ${FS}px "IBM Plex Mono", monospace`;
+  const wavy = ripples.length > 0, e = err();
+  const fixAge = now - fixT, inA = clamp((now - errT0) / .45, 0, 1);
+  for (let i = 0; i < CODE.length; i++) {
+    const y = lineY(i);
+    if (i === BUG_LINE) {   // line highlight: red while broken, green flash when fixed
+      const g = fixed ? Math.exp(-fixAge * 1.6) : 0;
+      ctx.fillStyle = fixed ? `rgba(127,220,143,${.16 * g + .025})` : "rgba(255,95,87,.075)";
+      ctx.fillRect(0, y - LH * .72, W, LH);
+      if (!fixed) { ctx.fillStyle = COL.err; ctx.fillRect(0, y - LH * .72, 2.5 * S, LH); }
+    }
+    ctx.fillStyle = i === BUG_LINE ? (fixed ? COL.ok : COL.err) : COL.gut;
+    ctx.textAlign = "right"; ctx.fillText(i + 1, GX - 12 * S, y); ctx.textAlign = "left";
+    if (i !== BUG_LINE) { let col = 0; for (const [t, c] of hl(CODE[i])) { drawText(t, GX + col * CW, y, c, wavy); col += t.length; } continue; }
+    // the bug line
+    const pos = e.code.indexOf(e.bad), pre = e.code.slice(0, pos), post = e.code.slice(pos + e.bad.length);
+    let shown = inA < 1 ? Math.floor(e.code.length * inA) : 1e9;            // types in when a new bug arrives
+    if (!fixed) {
+      let col = 0;
+      for (const [t, c] of hl(pre)) { drawText(t.slice(0, Math.max(0, shown - col)), GX + col * CW, y, c, wavy); col += t.length; }
+      drawText(e.bad.slice(0, Math.max(0, shown - col)), GX + col * CW, y, COL.err, wavy); col += e.bad.length;
+      for (const [t, c] of hl(post)) { drawText(t.slice(0, Math.max(0, shown - col)), GX + col * CW, y, c, wavy); col += t.length; }
+    } else {
+      const n = Math.floor(clamp(fixAge / .28, 0, 1) * e.fix.length);   // the fix types itself
+      const line = pre + e.fix.slice(0, n) + post; let col = 0;
+      for (const [t, c] of hl(line)) { drawText(t, GX + col * CW, y, c, wavy); col += t.length; }
+      if (fixAge < 1.4) { ctx.fillStyle = `rgba(127,220,143,${.5 * (1 - fixAge / 1.4)})`; ctx.fillRect(GX + pos * CW, y + 4 * S, Math.max(1, e.fix.length) * CW, 2 * S); }
+    }
+  }
+  ctx.restore();
+}
+
+function drawBug() {   // the red underline that swells up and pops like a balloon
+  if (fixed || now - errT0 < .45) return;
+  const e = err(), pos = e.code.indexOf(e.bad), x0 = GX + pos * CW, x1 = x0 + e.bad.length * CW, y = lineY(BUG_LINE) + 4.5 * S;
+  if (balloonT0 < 0) {
+    const a = (1.6 + swell * 1.2) * S, lw = (1.4 + swell * .9) * S;
+    ctx.save(); ctx.translate((x0 + x1) / 2, y); ctx.scale(1 + swell * .08, 1); ctx.translate(-(x0 + x1) / 2, -y);
+    squiggle(x0, x1, y, a, lw, COL.err); ctx.restore(); return;
+  }
+  const u = clamp((now - balloonT0) / .22, 0, 1), cx = (x0 + x1) / 2, w = (x1 - x0) / 2 * (1 + .25 * u) + 3 * S, h = (2 + 15 * u * u) * S;
+  ctx.save(); ctx.translate(cx, y - h * .55);
+  const g = ctx.createRadialGradient(-w * .3, -h * .4, 1, 0, 0, w * 1.1); g.addColorStop(0, "#ff9a8f"); g.addColorStop(.45, COL.err); g.addColorStop(1, "#b8302b");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, w, h, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = "#b8302b"; ctx.beginPath(); ctx.moveTo(w * .9, h * .2); ctx.lineTo(w + 6 * S, h * .5); ctx.lineTo(w + 1 * S, -h * .1); ctx.fill();  // the knot
+  ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.beginPath(); ctx.ellipse(-w * .45, -h * .45, w * .18, h * .16, -.2, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+function drawRipples() {
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const r = ripples[i], age = now - r.t0, rad = age * 150 * S, a = Math.exp(-age * 1.5);
+    if (a < .03) { ripples.splice(i, 1); continue; }
+    ctx.lineWidth = 1.5 * S;
+    for (const k of [1, .62, .32]) { if (rad * k < 4) continue;
+      ctx.strokeStyle = `rgba(140,190,255,${.38 * a * k})`; ctx.beginPath(); ctx.ellipse(r.x, r.y, rad * k, rad * k * .36, 0, 0, 7); ctx.stroke(); }
+  }
+}
+
+function drawDuck() {
+  const d = duck, s = DS;
+  // shadow / water line
+  ctx.save(); ctx.translate(d.x, d.y);
+  ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.beginPath(); ctx.ellipse(0, 2 * s, (46 + d.hop * -.6) * s, 7 * s, 0, 0, 7); ctx.fill();
+  if (d.float > .02) { ctx.strokeStyle = `rgba(140,190,255,${.45 * d.float})`; ctx.lineWidth = 1.6 * S;
+    ctx.beginPath(); ctx.ellipse(0, 0, 54 * s, 9 * s, 0, 0, 7); ctx.stroke(); }
+  ctx.restore();
+
+  ctx.save();
+  const bob = Math.sin(now * 4.4) * 3.2 * S * d.float;
+  ctx.translate(d.x, d.y + d.hop * s + bob);
+  ctx.rotate(d.rock + Math.sin(now * 3.1) * .07 * d.float);
+  const sq = clamp(d.sq, -.55, .5);
+  ctx.scale(d.faceS * (1 - sq * .85), 1 + sq);
+  ctx.scale(s, s);
+  // peck: tip forward around the chest
+  ctx.translate(-20, 0); ctx.rotate(-d.peck * .8); ctx.translate(20, 0);
+
+  // body
+  const g = ctx.createLinearGradient(0, -95, 0, 4); g.addColorStop(0, DUCK.light); g.addColorStop(.45, DUCK.body); g.addColorStop(1, DUCK.dark);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(-40, -24);
+  ctx.bezierCurveTo(-48, -6, -30, 2, -6, 2);
+  ctx.bezierCurveTo(26, 2, 50, -2, 55, -22);
+  ctx.bezierCurveTo(59, -36, 63, -54, 56, -64);
+  ctx.bezierCurveTo(48, -58, 40, -49, 28, -47);
+  ctx.bezierCurveTo(10, -45, -4, -50, -14, -47);
+  ctx.bezierCurveTo(-30, -42, -38, -36, -40, -24);
+  ctx.closePath(); ctx.fill();
+  // wing
+  ctx.fillStyle = DUCK.dark; ctx.globalAlpha = .55;
+  ctx.beginPath(); ctx.moveTo(2, -34); ctx.bezierCurveTo(22, -46, 46, -32, 36, -17); ctx.bezierCurveTo(26, -8, 6, -14, 2, -34); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = DUCK.dark; ctx.lineWidth = 2; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(14, -24); ctx.quadraticCurveTo(24, -22, 30, -26); ctx.stroke();
+  // gloss
+  ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.beginPath(); ctx.ellipse(-24, -30, 6, 11, .5, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(50, -50, 2.5, 7, .3, 0, 7); ctx.fill();
+
+  // head (tilts while listening)
+  ctx.save(); ctx.translate(-12, -48); ctx.rotate(d.tilt); ctx.translate(12, 48);
+  const hg = ctx.createRadialGradient(-24, -86, 2, -16, -70, 30); hg.addColorStop(0, DUCK.light); hg.addColorStop(.55, DUCK.body); hg.addColorStop(1, DUCK.dark);
+  ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(-16, -71, 25, 0, 7); ctx.fill();
+  // beak
+  ctx.fillStyle = DUCK.beakDark;
+  ctx.beginPath(); ctx.moveTo(-36, -64); ctx.quadraticCurveTo(-50, -56, -59, -62); ctx.quadraticCurveTo(-50, -66, -36, -66); ctx.fill();
+  ctx.fillStyle = DUCK.beak;
+  ctx.beginPath(); ctx.moveTo(-36, -75); ctx.bezierCurveTo(-48, -78, -62, -74, -64, -67); ctx.bezierCurveTo(-60, -63, -46, -64, -36, -65); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.beginPath(); ctx.ellipse(-50, -72, 6, 1.6, -.15, 0, 7); ctx.fill();
+  // cheek
+  ctx.fillStyle = "rgba(255,110,70,.22)"; ctx.beginPath(); ctx.ellipse(-20, -62, 6, 4, 0, 0, 7); ctx.fill();
+  // eye (blinks)
+  const bl = now > d.blinkAt && now < d.blinkAt + .12 ? .15 : 1;
+  ctx.fillStyle = "#17120c"; ctx.beginPath(); ctx.ellipse(-25, -77, 4.4, 5.6 * bl, 0, 0, 7); ctx.fill();
+  if (bl > .5) { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-26.5, -79, 1.6, 0, 7); ctx.fill(); }
+  // head gloss
+  ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.beginPath(); ctx.ellipse(-8, -88, 8, 3.5, .45, 0, 7); ctx.fill();
+  // sunglasses
+  if (d.glasses > 0) {
+    let gy = 0, gr = 0, ga = 1;
+    if (d.gOff > 0) { const u = (now - d.gOff) / .5; gy = -u * u * 160; gr = u * 1.2; ga = 1 - u; }
+    else { const u = d.glasses; gy = -(1 - outBounce(u)) * 130; gr = (1 - u) * .5; }
+    if (ga > 0) {
+      ctx.save(); ctx.globalAlpha = ga; ctx.translate(-22, -77 + gy); ctx.rotate(gr); ctx.scale(1.22, 1.22); ctx.translate(22, 77);
+      const p = 3;
+      ctx.fillStyle = "#0b0b0d";
+      ctx.fillRect(-44, -85, 54, 5);                               // the bar, back to the ear
+      ctx.fillRect(-41, -82, 26, 7); ctx.fillRect(-38, -75, 20, 3); ctx.fillRect(-35, -72, 14, 3);   // pixel lens
+      ctx.fillRect(-49, -82, 6, 6);                                  // far lens peeking past the beak
+      ctx.fillStyle = "#fff"; ctx.fillRect(-37, -81, p, p); ctx.fillRect(-34, -78, p, p); ctx.fillRect(-47, -81, 2, 2);
+      ctx.restore();
+    }
+  }
+  ctx.restore();   // head
+  ctx.restore();
+}
+
+function drawFx(dt) {
+  for (let i = bits.length - 1; i >= 0; i--) {
+    const b = bits[i], age = now - b.t0, u = age / b.life;
+    if (u >= 1) { bits.splice(i, 1); continue; }
+    if (b.line) {   // squeak lines
+      const r0 = (8 + age * 90) * DS, len = 12 * DS * (1 - u);
+      ctx.strokeStyle = `rgba(255,240,200,${1 - u})`; ctx.lineWidth = 2.6 * S; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(b.x + Math.cos(b.a) * r0, b.y + Math.sin(b.a) * r0); ctx.lineTo(b.x + Math.cos(b.a) * (r0 + len), b.y + Math.sin(b.a) * (r0 + len)); ctx.stroke();
+      continue;
+    }
+    b.vy += 900 * S * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.r += b.vr * dt;
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.globalAlpha = 1 - u * u; ctx.fillStyle = b.color;
+    if (b.ring) { ctx.restore(); continue; }
+    ctx.beginPath(); ctx.ellipse(0, 0, b.w, b.w * .45, 0, 0, 7); ctx.fill(); ctx.restore();
+  }
+}
+function drawWords() {
+  for (let i = words.length - 1; i >= 0; i--) {   // speech pops
+    const w = words[i], age = now - w.t0, life = w.big ? 1.5 : 1.15;
+    if (age > life) { words.splice(i, 1); continue; }
+    const sc = outBack(age / .22) * (w.big ? 1.25 : 1), a = clamp((life - age) / .3, 0, 1);
+    ctx.save(); ctx.translate(w.x, w.y - age * 22 * S); ctx.rotate(w.rot); ctx.scale(sc, sc); ctx.globalAlpha = a;
+    ctx.font = `800 ${24 * S}px "Shantell Sans", cursive`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.lineJoin = "round"; ctx.lineWidth = 6 * S; ctx.strokeStyle = "#121316"; ctx.strokeText(w.text, 0, 0);
+    ctx.fillStyle = w.gold ? "#7fdc8f" : "#fff3cf"; ctx.fillText(w.text, 0, 0);
+    ctx.restore();
+  }
+}
+function drawPop() {   // pop flash
+  const pa = now - fixT;
+  if (pa >= 0 && pa < .35) {
+    const e = err(), pos = e.code.indexOf(e.bad), cx = GX + (pos + e.bad.length / 2) * CW, cy = lineMid(BUG_LINE);
+    ctx.strokeStyle = `rgba(255,240,220,${1 - pa / .35})`; ctx.lineWidth = 3 * S * (1 - pa / .35);
+    ctx.beginPath(); ctx.arc(cx, cy, (10 + pa * 160) * S, 0, 7); ctx.stroke();
+    ctx.save(); ctx.translate(cx - 6 * S, cy - 26 * S); const sc = outBack(pa / .15); ctx.scale(sc, sc);
+    ctx.font = `800 ${22 * S}px "Shantell Sans", cursive`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.lineWidth = 6 * S; ctx.strokeStyle = "#121316"; ctx.strokeText("pop!", 0, 0); ctx.fillStyle = "#ff8a80"; ctx.fillText("pop!", 0, 0);
+    ctx.restore();
+  }
+}
+
+function drawConsole() {
+  const y0 = ED1, e = err();
+  ctx.fillStyle = "#0e0f12"; ctx.fillRect(0, y0, W, H - y0);
+  ctx.fillStyle = "#23252b"; ctx.fillRect(0, y0, W, 1);
+  ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  ctx.font = `500 ${10.5 * S}px "IBM Plex Mono", monospace`;
+  ctx.fillStyle = "#c9c6bd"; ctx.fillText("PROBLEMS", 16 * S, y0 + 17 * S);
+  const pw = ctx.measureText("PROBLEMS").width;
+  ctx.fillStyle = fixed ? "rgba(127,220,143,.18)" : "rgba(255,95,87,.2)";
+  ctx.beginPath(); ctx.roundRect(16 * S + pw + 7 * S, y0 + 10 * S, 16 * S, 14 * S, 7 * S); ctx.fill();
+  ctx.fillStyle = fixed ? COL.ok : COL.err; ctx.textAlign = "center"; ctx.fillText(fixed ? 0 : 1, 16 * S + pw + 15 * S, y0 + 17.5 * S); ctx.textAlign = "left";
+  ctx.fillStyle = "#555965"; ctx.fillText("OUTPUT    TERMINAL", 16 * S + pw + 36 * S, y0 + 17 * S);
+  ctx.fillStyle = "#c9c6bd"; ctx.fillRect(16 * S, y0 + 27 * S, pw, 1.5);
+  const l1 = y0 + 46 * S, l2 = y0 + 68 * S;
+  ctx.font = `400 ${12 * S}px "IBM Plex Mono", monospace`;
+  if (!fixed) {
+    const col = e.code.indexOf(e.bad) + 1;
+    ctx.fillStyle = COL.err; ctx.fillText("✗", 16 * S, l1);
+    ctx.fillStyle = "#6d717c"; ctx.fillText(`${BUG_LINE + 1}:${col}`, 32 * S, l1);
+    ctx.fillStyle = "#e9a19b"; ctx.fillText(e.msg, 32 * S + 6 * CW, l1, W - 48 * S - 6 * CW);
+    const lines = ["duck is listening...", "duck: squeak.", "duck: squeak?", "duck: SQUEAK. on it."];
+    ctx.fillStyle = "#6d717c"; ctx.fillText(lines[Math.min(squeaks, 3)], 32 * S, l2);
+  } else {
+    const a = now - fixT - .1, t1 = "✓ 0 errors", t2 = "reviewed by duck · " + CONFIG.file;
+    ctx.font = `500 ${14 * S}px "IBM Plex Mono", monospace`; ctx.fillStyle = COL.ok;
+    ctx.fillText(t1.slice(0, clamp(Math.floor(a * 40), 0, t1.length)), 16 * S, l1);
+    ctx.font = `400 ${12 * S}px "IBM Plex Mono", monospace`; ctx.fillStyle = "#6d717c";
+    ctx.fillText(t2.slice(0, clamp(Math.floor((a - .3) * 60), 0, t2.length)), 16 * S, l2);
+  }
+}
+
+// ---------- one loop for everything ----------
+function frame(t) {
+  now = t / 1000; const dt = Math.min(.05, last ? now - last : 1 / 60); last = now;
+  const d = duck;
+  // squash spring + head tilt spring
+  d.sqv += (-430 * d.sq - 10 * d.sqv) * dt; d.sq += d.sqv * dt;
+  const listening = now < listenUntil || ask.value.length > 0;
+  const idleTilt = mode === "idle" ? Math.sin(now * 1.3) * .06 + (listening ? Math.sin(now * 2.2) * .22 : 0) : mode === "cool" ? -.12 : 0;
+  d.tiltv += (-160 * (d.tilt - idleTilt) - 9 * d.tiltv) * dt; d.tilt += d.tiltv * dt;
+  if (now > d.blinkAt + .3) d.blinkAt = now + 1.8 + Math.random() * 2.6;
+
+  if (mode === "idle" || mode === "cool") {
+    if (d.drag && ptr) {
+      const tx = clamp(ptr.x + d.gx, 60 * DS, W - 60 * DS), ty = clamp(ptr.y + d.gy, TOP + 110 * DS, ED1 - 8 * S);
+      const ox = d.x; d.x = ease(d.x, tx, 9, dt); d.y = ease(d.y, ty, 9, dt);
+      d.float = ease(d.float, 1, 6, dt); d.rock = ease(d.rock, clamp((d.x - ox) / dt / 900, -.3, .3), 8, dt);
+      if (Math.abs(d.x - ox) > .3) d.face = d.x - ox > 0 ? -1 : 1;
+      if (now - lastRipple > .2) { addRipple(d.x, d.y, 4.5); lastRipple = now; }
+    } else { d.float = ease(d.float, 0, 1.3, dt); d.rock = ease(d.rock, 0, 6, dt); }
+    if (mode === "cool" && d.gOff < 0) d.face = 1;
+  }
+  if (mode === "walk" && walk) {
+    const u = (now - walk.t0) / walk.dur;
+    if (u > 0) {
+      const p = sm(u) * .3 + clamp(u, 0, 1) * .7, ph = (now - walk.t0) * 15;
+      d.x = walk.x0 + (walk.x1 - walk.x0) * p; d.y = walk.y0 + (walk.y1 - walk.y0) * p;
+      d.hop = -Math.abs(Math.sin(ph / 2)) * 7 * (u < 1 ? 1 : 0); d.rock = Math.sin(ph / 2) * .16 * (u < 1 ? 1 : 0);
+      d.face = Math.abs(walk.x1 - walk.x0) < 4 || u > .85 ? 1 : walk.x1 < walk.x0 ? 1 : -1;
+      if (u >= 1) { mode = "peck"; peckT0 = now + .06; hits = 0; d.hop = 0; d.rock = 0; d.face = 1; }
+    }
+  }
+  if (mode === "peck") {
+    const a = now - peckT0, P = .26, k = Math.floor(a / P), u = (a - k * P) / P;
+    d.peck = a < 0 || k >= 3 ? ease(d.peck, 0, 14, dt) : u < .4 ? sm(u / .4) : 1 - sm((u - .4) / .6);
+    if (a >= 0 && k < 3 && u >= .4 && hits === k) {
+      hits++; swellV += 9; sfx.peck(); d.sq = -.04; d.sqv = -4;
+      const e = err(), pos = e.code.indexOf(e.bad); burst(GX + (pos + e.bad.length / 2) * CW, lineY(BUG_LINE) + 4 * S, 4, "#ffd0c8", 140 * S);
+      if (hits === 3) balloonT0 = now;
+    }
+    if (balloonT0 > 0 && now - balloonT0 > .24) {   // POP
+      const e = err(), pos = e.code.indexOf(e.bad), cx = GX + (pos + e.bad.length / 2) * CW, cy = lineY(BUG_LINE);
+      burst(cx, cy, 22, COL.err, 330 * S); burst(cx, cy, 8, "#ff9a8f", 220 * S);
+      fixed = true; fixT = now; found++; foundBump = now + .25; mode = "fixed"; d.peck = 0; sfx.pop();
+    }
+  }
+  if (mode === "fixed") {
+    d.peck = ease(d.peck, 0, 14, dt);
+    const g = (now - fixT - .35) / .5; d.glasses = clamp(g, 0, 1); d.gOff = -1;
+    if (g >= 1) { mode = "cool"; d.sq = -.03; d.sqv = -7; sfx.cool(); }
+  }
+  if (mode === "cool" && !proudSaid && now - fixT > 1.05) { proudSaid = true; say(CONFIG.proud, true); words[words.length - 1].gold = true; }
+  if (d.gOff > 0 && now - d.gOff > .5) { d.gOff = -1; d.glasses = 0; }
+  d.faceS = ease(d.faceS, d.face, 16, dt);
+  swellV += (-120 * (swell - hits * .9) - 8 * swellV) * dt; swell += swellV * dt;
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawEditor();
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TOP, W, ED1 - TOP); ctx.clip();
+  drawRipples(); drawBug(); drawDuck(); drawFx(dt); drawPop();
+  ctx.restore();
+  drawWords();
+  drawConsole();
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
