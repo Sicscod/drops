@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>love.exe</title>
+<meta name="description" content="A retro installer that installs love for your person. It gets stuck at 99%: missing file you.png. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;600;700&family=VT323&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#2a1c22}
+canvas{position:fixed;left:0;top:0;width:100%;height:calc(100% - 30px);display:block}
+.task{position:fixed;left:0;right:0;bottom:0;height:30px;display:flex;align-items:center;gap:8px;padding:0 4px;background:#c3c3c3;box-shadow:inset 0 1px #dfdfdf,inset 0 2px #fff;font:500 13px "Pixelify Sans",system-ui,sans-serif;color:#111;z-index:2}
+.start{height:22px;display:flex;align-items:center;gap:5px;padding:0 8px 0 6px;background:#c3c3c3;box-shadow:inset -1px -1px #0b0b0b,inset 1px 1px #fff,inset -2px -2px #808080,inset 2px 2px #dfdfdf;font-weight:700}
+.start i{width:10px;height:9px;display:block;background:var(--pink,#e8457c);clip-path:polygon(0 22%,22% 0,50% 22%,78% 0,100% 22%,100% 50%,50% 100%,0 50%)}
+.credit{flex:1;text-align:center;font:400 17px "VT323",ui-monospace,monospace;color:#333;white-space:nowrap;overflow:hidden}
+.credit a{color:inherit}
+.tray{height:22px;display:flex;align-items:center;padding:0 9px;box-shadow:inset 1px 1px #808080,inset -1px -1px #fff;font:400 17px "VT323",ui-monospace,monospace}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="task"><span class="start"><i></i>start</span><span class="credit">free code by <a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></span><span class="tray" id="clock">12:00</span></div>
+<span class="pre" style="font:400 20px VT323">a</span><span class="pre" style="font:500 20px 'Pixelify Sans'">a</span><span class="pre" style="font:600 20px 'Pixelify Sans'">a</span><span class="pre" style="font:700 20px 'Pixelify Sans'">a</span>
+<script>
+// ===== love.exe · free code by @sicscod.drops =====
+// Try: yoursite/?name=Delly&msg=running%20in%20the%20background.%20forever.&hue=340
+const P = new URLSearchParams(location.search);
+const hueP = parseFloat(P.get("hue"));
+const CONFIG = {
+  name: (P.get("name") || "Delly").slice(0, 14),                    // who love gets installed for
+  msg: (P.get("msg") || "running in the background. forever.").slice(0, 64),   // the balloon after "Run"
+  hue: isFinite(hueP) ? ((hueP % 360) + 360) % 360 : 340,             // 340 pink, 0 red, 280 purple, 200 blue
+  installSeconds: 2.0,                                                // how long the bar races to 99%
+  missing: "you.png",                                                 // the file it can't finish without
+  // the install log. {name} becomes the name
+  log: [
+    "copying butterflies…",
+    "unpacking inside_jokes.zip",
+    "deleting ex.dll…",                 // this one flies into the recycle bin
+    "overthinking.sys removed",
+    "patching trust_issues.cfg",
+    "registering {name} as favourite",
+    "setting heartbeat to 130 bpm",
+    "linking good_morning_texts",
+    "allocating 100% attention",
+    "installing late_night_calls",
+  ],
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d"), clockEl = document.getElementById("clock");
+const T0 = performance.now();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.4 * Math.pow(x - 1, 3) + 1.4 * Math.pow(x - 1, 2));
+const inOut = x => (x = clamp(x, 0, 1), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const H = (l, s = 80, dh = 0) => `hsl(${CONFIG.hue + dh},${s}%,${l}%)`;
+const nm = s => s.replace(/\{name\}/g, CONFIG.name);
+document.documentElement.style.setProperty("--pink", H(58, 85));
+
+const CW = 440, CH = 520;                        // the design is drawn in a 440 x 520 box, scaled to the screen
+const WIN = { x: 0, y: 0, w: 440, h: 300 };
+const SLOT = { x: 76, y: 224, w: 288, h: 50 };   // dashed drop slot inside the error dialog
+const ICON = { x: 50, y: 452 };                  // you.png on the desktop (centre)
+const BIN = { x: 404, y: 452 };
+const HEART_C = { x: 220, y: 150 }, CELL = 15;
+const CARD = { x: 70, y: 250, w: 300, h: 134 }, RUN = { x: 168, y: 346, w: 104, h: 28 };
+let W = 0, Hh = 0, DPR = 1, S = 1, OX = 0, OY = 0;
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; Hh = Math.max(200, innerHeight - 30);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(Hh * DPR);
+  S = Math.min((W - 16) / CW, (Hh - 10) / CH, 1.5); OX = (W - CW * S) / 2; OY = (Hh - CH * S) / 2;
+  desk = null;
+}
+const toU = (x, y) => ({ x: (x - OX) / S, y: (y - OY) / S });
+const inR = (p, r, m = 0) => p.x > r.x - m && p.x < r.x + r.w + m && p.y > r.y - m && p.y < r.y + r.h + m;
+
+// ---------- pixel art ----------
+const HEART = [
+  "..XXX...XXX..",
+  ".XXXXX.XXXXX.",
+  "XXXXXXXXXXXXX",
+  "XXXXXXXXXXXXX",
+  "XXXXXXXXXXXXX",
+  ".XXXXXXXXXXX.",
+  "..XXXXXXXXX..",
+  "...XXXXXXX...",
+  "....XXXXX....",
+  ".....XXX.....",
+  "......X......"];
+const MINI = [".hX.XX.", "hXXXXXd", "XXXXXXd", ".XXXXd.", "..XXd..", "...d..."];
+const FLOPPY = [
+  "bbbbbbbbbbb.",
+  "bbmmmmmmmdbb",
+  "bbmmmmdmmdbb",
+  "bbmmmmdmmdbb",
+  "bbbbbbbbbbbb",
+  "bbbbbbbbbbbb",
+  "bblllllllbbb",
+  "bblpplpplbbb",
+  "bblppppplbbb",
+  "bbllpppllbbb",
+  "bblllplllbbb",
+  "bbbbbbbbbbbb"];
+function pix(g, rows, x, y, s, pal) {
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].length; c++) {
+    const k = rows[r][c], col = pal[k]; if (!col) continue;
+    g.fillStyle = col; g.fillRect(x + c * s, y + r * s, s + .02, s + .02);
+  }
+}
+const heartPal = () => ({ X: H(60, 85), h: H(84, 95), d: H(44, 72) });
+const floppyPal = () => ({ b: H(30, 45), m: "#cfcfcf", d: "#333", l: "#f4f1ea", p: H(60, 85) });
+const miniHeart = (g, x, y, s) => pix(g, MINI, x, y, s, heartPal());
+const floppy = (g, x, y, s) => pix(g, FLOPPY, x, y, s, floppyPal());
+
+// ---------- win98-ish primitives ----------
+const fr = (g, c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+function bevel(g, x, y, w, h, inset) {
+  const [a, b, c, d] = inset ? ["#808080", "#0b0b0b", "#fff", "#dfdfdf"] : ["#dfdfdf", "#fff", "#0b0b0b", "#808080"];
+  fr(g, a, x, y, w, 1); fr(g, a, x, y, 1, h); fr(g, c, x, y + h - 1, w, 1); fr(g, c, x + w - 1, y, 1, h);
+  fr(g, b, x + 1, y + 1, w - 2, 1); fr(g, b, x + 1, y + 1, 1, h - 2); fr(g, d, x + 1, y + h - 2, w - 2, 1); fr(g, d, x + w - 2, y + 1, 1, h - 2);
+}
+function txt(g, s, x, y, font, color, align = "left") { g.font = font; g.fillStyle = color; g.textAlign = align; g.fillText(s, x, y); }
+const F = { vt: s => `400 ${s}px VT323, ui-monospace, monospace`, px: (w, s) => `${w} ${s}px "Pixelify Sans", system-ui, sans-serif` };
+function button(g, x, y, w, h, label, opt = {}) {
+  if (opt.def && !opt.down) fr(g, "#0b0b0b", x - 1, y - 1, w + 2, h + 2);
+  fr(g, "#c3c3c3", x, y, w, h);
+  if (opt.down) { fr(g, "#0b0b0b", x, y, w, h); fr(g, "#c3c3c3", x + 1, y + 1, w - 2, h - 2); bevel(g, x + 1, y + 1, w - 2, h - 2, true); }
+  else bevel(g, x, y, w, h, false);
+  const o = opt.down ? 1 : 0, f = F.px(opt.bold ? 700 : 500, opt.size || 13), cy = y + h / 2 + (opt.size || 13) * .36 + o;
+  if (opt.off) { txt(g, label, x + w / 2 + 1 + o, cy + 1, f, "#fff", "center"); txt(g, label, x + w / 2 + o, cy, f, "#808080", "center"); }
+  else txt(g, label, x + w / 2 + o, cy, f, "#111", "center");
+  if (opt.focus) { g.save(); g.strokeStyle = "#222"; g.lineWidth = 1; g.setLineDash([1.5, 1.5]); g.strokeRect(x + 4.5, y + 4.5, w - 9, h - 9); g.restore(); }
+}
+function titleBar(g, x, y, w, label, icon = true) {
+  const gr = g.createLinearGradient(x, 0, x + w, 0); gr.addColorStop(0, H(27, 62)); gr.addColorStop(1, H(56, 66));
+  fr(g, gr, x, y, w, 21);
+  if (icon) floppy(g, x + 4, y + 4, 1.1);
+  txt(g, label, x + (icon ? 22 : 7), y + 15, F.px(600, 13), "#fff");
+  for (let i = 0; i < 3; i++) {
+    const bx = x + w - 19 - (2 - i) * 18 - (i === 2 ? 0 : 2); fr(g, "#c3c3c3", bx, y + 3, 16, 14); bevel(g, bx, y + 3, 16, 14, false);
+    g.fillStyle = "#111";
+    if (i === 0) g.fillRect(bx + 4, y + 12, 6, 2);
+    if (i === 1) { g.fillRect(bx + 3, y + 5, 9, 2); g.strokeStyle = "#111"; g.lineWidth = 1; g.strokeRect(bx + 3.5, y + 5.5, 8, 7); }
+    if (i === 2) { g.strokeStyle = "#111"; g.lineWidth = 1.6; g.beginPath(); g.moveTo(bx + 4.5, y + 6); g.lineTo(bx + 11, y + 12.5); g.moveTo(bx + 11, y + 6); g.lineTo(bx + 4.5, y + 12.5); g.stroke(); }
+  }
+}
+function fileIcon(g, x, y, s = 1) {        // you.png: a little picture file, centred on x,y
+  g.save(); g.translate(x, y); g.scale(s, s);
+  g.fillStyle = "#fff"; g.strokeStyle = "#1a1a1a"; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(-15, -20); g.lineTo(7, -20); g.lineTo(15, -12); g.lineTo(15, 20); g.lineTo(-15, 20); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = "#d9d9d9"; g.beginPath(); g.moveTo(7, -20); g.lineTo(7, -12); g.lineTo(15, -12); g.closePath(); g.fill(); g.stroke();
+  fr(g, H(74, 80), -11, -9, 22, 22); g.strokeStyle = H(40, 60); g.strokeRect(-11, -9, 22, 22);
+  g.fillStyle = "#fff"; g.beginPath(); g.arc(0, -1, 4.2, 0, 7); g.fill();               // a tiny "you"
+  g.beginPath(); g.ellipse(0, 12, 8, 6.5, 0, Math.PI, 0); g.fill();
+  g.fillStyle = H(40, 60); g.fillRect(-2, -2, 1.3, 1.3); g.fillRect(1, -2, 1.3, 1.3);
+  g.restore();
+}
+function binIcon(g, x, y, full, wob) {
+  g.save(); g.translate(x, y + 18); g.rotate(wob); g.translate(0, -18);
+  g.fillStyle = "#e9e9e9"; g.strokeStyle = "#222"; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(-13, -12); g.lineTo(13, -12); g.lineTo(10, 18); g.lineTo(-10, 18); g.closePath(); g.fill(); g.stroke();
+  g.strokeStyle = "#9a9a9a"; g.beginPath(); for (const k of [-6, 0, 6]) { g.moveTo(k, -8); g.lineTo(k * .8, 15); } g.stroke();
+  if (full) { g.fillStyle = "#fff"; g.strokeStyle = "#555"; g.beginPath(); g.moveTo(-8, -12); g.lineTo(-4, -19); g.lineTo(3, -16); g.lineTo(8, -21); g.lineTo(10, -12); g.fill(); g.stroke(); }
+  g.fillStyle = "#cfcfcf"; g.strokeStyle = "#222"; g.lineWidth = 1.2;
+  const lid = full ? -.18 : 0; g.save(); g.translate(-15, -13); g.rotate(lid); g.fillRect(0, -3, 30, 4); g.strokeRect(0, -3, 30, 4); g.restore();
+  g.restore();
+}
+function label(g, s, x, y) { txt(g, s, x + 1, y + 1, F.vt(18), "rgba(0,0,0,.7)", "center"); txt(g, s, x, y, F.vt(18), "#fff", "center"); }
+function errIcon(g, x, y) {
+  g.fillStyle = "#d4202f"; g.beginPath(); g.arc(x, y, 14, 0, 7); g.fill(); g.strokeStyle = "#5a0b12"; g.lineWidth = 1.2; g.stroke();
+  g.strokeStyle = "#fff"; g.lineWidth = 3.2; g.lineCap = "square"; g.beginPath(); g.moveTo(x - 5.5, y - 5.5); g.lineTo(x + 5.5, y + 5.5); g.moveTo(x + 5.5, y - 5.5); g.lineTo(x - 5.5, y + 5.5); g.stroke(); g.lineCap = "butt";
+}
+
+// ---------- sound (Web Audio, starts on first touch) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } }
+function tone(type, f0, f1, len, vol, at = 0) {
+  if (!AC) return; const t = AC.currentTime + at, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len * .7);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .01); g.gain.exponentialRampToValueAtTime(.0008, t + len);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + len + .02);
+}
+const sfx = {
+  pick() { tone("triangle", 500, 900, .12, .12); },
+  drop() { tone("square", 700, 1400, .08, .06); tone("triangle", 1047, 1047, .2, .1, .05); },
+  done() { [523, 659, 784, 1047].forEach((f, i) => tone("triangle", f, f, .3, .1, i * .07)); },
+  pop() { tone("sine", 220, 70, .25, .35); [1319, 1568].forEach((f, i) => tone("triangle", f, f, .35, .07, .08 + i * .06)); },
+  run() { [784, 988, 1175, 1568].forEach((f, i) => tone("square", f, f, .12, .04, i * .05)); },
+  nope() { tone("square", 180, 120, .18, .08); },
+};
+const EV = window.__ev = [];                       // event log (the video renderer reads it to sync the music)
+const ev = k => EV.push([k, +now.toFixed(3)]);
+
+// ---------- state ----------
+let now = 0, desk = null;
+const logL = [{ s: "extracting love.exe", ok: true, t: -1 }, { s: nm("checking compatibility with {name}… 100%"), ok: true, t: -1 }];
+let nextLine = 0, p = .1, stuckT = -1, errT = -1, dropT = -1, doneT = -1, breakT = -1, heartT = -1, runT = -1, runN = 0;
+let haveYou = false, iconGone = false, drag = null, fly = null, exT = -1, binHit = -9, nopeT = -9, scroll = 0, runDown = -9;
+let snap = null, cells = [], shards = [], confetti = [], floaters = [];
+const BREAK = .78;
+const thr = k => .15 + k * (.84 / CONFIG.log.length);
+function prog(t) { const x = clamp(t / CONFIG.installSeconds, 0, 1); return .12 + .87 * (1 - Math.pow(1 - x, 1.45)); }
+function addLog(s, kind = "ok") { logL.push({ s, ok: kind === "ok", err: kind === "err", t: now }); }
+
+// ---------- you.png: drag it in ----------
+const slotC = () => errOpen() ? { x: SLOT.x + SLOT.w / 2, y: SLOT.y + SLOT.h / 2 } : { x: 220, y: 190 };
+const errOpen = () => errT >= 0 && (dropT < 0 || now < dropT + .16);
+function flyTo(x0, y0, x1, y1, dur, then) { fly = { x0, y0, x1, y1, t0: now, dur, then }; }
+function accept() {
+  iconGone = true; sfx.drop(); ev("drop");
+  if (stuckT >= 0) { dropT = now; addLog("found " + CONFIG.missing); } else haveYou = true;
+}
+function release(u) {
+  const inWin = inR(u, WIN) || (errOpen() && inR(u, { x: 60, y: 140, w: 320, h: 150 }));
+  if (!drag.moved || inWin) { const c = slotC(); iconGone = true; flyTo(u.x - drag.dx, u.y - drag.dy, c.x, c.y, drag.moved ? .2 : .5, accept); }
+  else { flyTo(u.x - drag.dx, u.y - drag.dy, ICON.x, ICON.y, .3, () => { iconGone = false; }); iconGone = true; }
+  drag = null;
+}
+cv.addEventListener("pointerdown", e => {
+  audio(); const u = toU(e.clientX, e.clientY);
+  if (!iconGone && !fly && dropT < 0 && !haveYou && Math.abs(u.x - ICON.x) < 34 && u.y > ICON.y - 28 && u.y < ICON.y + 48) {
+    drag = { dx: u.x - ICON.x, dy: u.y - ICON.y, sx: u.x, sy: u.y, x: u.x, y: u.y, vx: 0, moved: false }; return;
+  }
+  if (heartT >= 0 && now > heartT + .45 && inR(u, RUN, 4)) { run(); return; }
+  if (heartT >= 0 && Math.hypot(u.x - HEART_C.x, u.y - HEART_C.y) < 95) { burst(14); return; }
+  if (breakT < 0 && inR(u, { x: 356, y: 262, w: 68, h: 26 })) { nopeT = now; sfx.nope(); }
+});
+addEventListener("pointermove", e => {
+  if (!drag) return; const u = toU(e.clientX, e.clientY);
+  drag.vx = u.x - drag.x; drag.x = u.x; drag.y = u.y;
+  if (!drag.moved && Math.hypot(u.x - drag.sx, u.y - drag.sy) > 6) { drag.moved = true; sfx.pick(); ev("drag"); }
+});
+addEventListener("pointerup", e => { if (drag) release(toU(e.clientX, e.clientY)); });
+addEventListener("resize", resize);
+
+function run() {
+  runT = now; runN++; runDown = now; sfx.run(); ev("run"); burst(24);
+  for (let i = 0; i < 16; i++) floaters.push({ x: HEART_C.x + (i % 2 ? 1 : -1) * (85 + Math.random() * 70), y: HEART_C.y + 20 + Math.random() * 50, c: ["#fff", H(84, 95), H(70, 90)][i % 3], t0: now + i * .09, sp: 70 + Math.random() * 60, ph: Math.random() * 6, s: 1.6 + Math.random() * 1.4 });
+}
+function burst(n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, v = 230 + Math.random() * 300;
+    confetti.push({ x: HEART_C.x + Math.cos(a) * 30, y: HEART_C.y + Math.sin(a) * 25, vx: Math.cos(a) * v, vy: Math.sin(a) * v * .8 - 220, t0: now, life: 1.3 + Math.random() * .8,
+      heart: Math.random() < .55, s: 1.5 + Math.random() * 1.3, spin: 4 + Math.random() * 8, ph: Math.random() * 6,
+      c: [H(60, 85), H(78, 92), H(48, 75, -12), "#fff", H(70, 90, 18)][i % 5] });
+  }
+}
+
+// ---------- the window breaks into pixels that build the heart ----------
+function breakWindow() {
+  snap = document.createElement("canvas"); snap.width = Math.ceil(WIN.w * S * DPR); snap.height = Math.ceil(WIN.h * S * DPR);
+  const g = snap.getContext("2d"); g.setTransform(S * DPR, 0, 0, S * DPR, 0, 0); drawWindow(g);
+  const R = HEART.length, C = HEART[0].length, cw = WIN.w / C, ch = WIN.h / R, hx = HEART_C.x - C * CELL / 2, hy = HEART_C.y - R * CELL / 2;
+  const filled = (r, c) => r >= 0 && r < R && c >= 0 && c < C && HEART[r][c] === "X";
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+    const sx = c * cw, sy = r * ch, x0 = sx + cw / 2, y0 = sy + ch / 2;
+    if (filled(r, c)) {
+      let col = H(60, 85);
+      if (!filled(r + 1, c) || !filled(r, c + 1)) col = H(46, 72); else if (!filled(r - 1, c) || !filled(r, c - 1)) col = H(55, 82);
+      if ((r === 1 && c === 3) || (r === 2 && (c === 1 || c === 2))) col = H(80, 95);
+      if (r === 1 && c === 2) col = "#fff6f9";
+      const d = Math.hypot(c - 6, r - 5);
+      cells.push({ sx, sy, cw, ch, x0, y0, x1: hx + c * CELL + CELL / 2, y1: hy + r * CELL + CELL / 2, col, d: .05 + d * .024 + Math.random() * .05, rot: (Math.random() - .5) * 1.6 });
+    } else {
+      const dx = x0 - 220, dy = y0 - 150, L = Math.hypot(dx, dy) || 1, v = 260 + Math.random() * 320;
+      shards.push({ sx, sy, cw, ch, x: x0, y: y0, vx: dx / L * v, vy: dy / L * v * .6 - 160 - Math.random() * 200, r: 0, vr: (Math.random() - .5) * 9, d: Math.random() * .07 });
+    }
+  }
+}
+
+// ---------- drawing ----------
+function drawDesk() {
+  if (!desk) {   // dithered desktop, cached
+    desk = document.createElement("canvas"); desk.width = cv.width; desk.height = cv.height;
+    const g = desk.getContext("2d"); g.fillStyle = H(21, 30); g.fillRect(0, 0, desk.width, desk.height);
+    const pat = document.createElement("canvas"); pat.width = pat.height = 4; const q = pat.getContext("2d");
+    q.fillStyle = H(25, 32); q.fillRect(0, 0, 1, 1); q.fillRect(2, 2, 1, 1);
+    g.fillStyle = g.createPattern(pat, "repeat"); g.fillRect(0, 0, desk.width, desk.height);
+    const rg = g.createRadialGradient(desk.width / 2, desk.height * .4, 10, desk.width / 2, desk.height * .4, Math.max(desk.width, desk.height) * .7);
+    rg.addColorStop(0, "rgba(255,190,215,.10)"); rg.addColorStop(1, "rgba(0,0,0,.28)"); g.fillStyle = rg; g.fillRect(0, 0, desk.width, desk.height);
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(desk, 0, 0);
+}
+function drawWindow(g) {
+  const { x, y, w, h } = WIN;
+  fr(g, "#c3c3c3", x, y, w, h); bevel(g, x, y, w, h, false);
+  titleBar(g, x + 3, y + 3, w - 6, "love.exe  Setup");
+  // header strip
+  fr(g, "#fff", x + 3, y + 25, w - 6, 58);
+  txt(g, "Installing love.exe", x + 18, y + 50, F.px(700, 19), "#111");
+  txt(g, nm("for {name} · please don't turn off your heart"), x + 18, y + 71, F.vt(18), "#666");
+  pix(g, HEART, x + w - 62, y + 36, 3.4, { X: H(60, 85) }); floppy(g, x + w - 44, y + 52, 2);
+  fr(g, "#808080", x + 3, y + 83, w - 6, 1); fr(g, "#fff", x + 3, y + 84, w - 6, 1);
+  // status + bar
+  const pct = Math.floor(p * 100 + 1e-6);
+  let st = logL[logL.length - 1].s;
+  if (doneT >= 0) st = "Done."; else if (stuckT >= 0 && dropT < 0) st = "waiting for " + CONFIG.missing + ".".repeat(1 + Math.floor(now * 3) % 3);
+  txt(g, st, x + 17, y + 104, F.vt(19), "#111");
+  txt(g, pct + "%", x + w - 17, y + 104, F.vt(19), stuckT >= 0 && dropT < 0 ? "#c0182a" : "#111", "right");
+  fr(g, "#fff", x + 16, y + 110, w - 32, 22); bevel(g, x + 16, y + 110, w - 32, 22, true);
+  const N = 34, bw = (w - 38 - (N - 1) * 2) / N, n = Math.floor(p * N + 1e-6);
+  for (let i = 0; i < N; i++) {
+    let on = i < n; if (i === n && stuckT >= 0 && dropT < 0) on = Math.floor(now * 4) % 2 === 0;
+    if (on) fr(g, i === N - 1 && p >= 1 ? H(52, 85) : H(46, 72), x + 19 + i * (bw + 2), y + 113, bw, 16);
+  }
+  // log
+  const LX = x + 16, LY = y + 140, LW = w - 32, LH = 110, RH = 17.5;
+  fr(g, "#fff", LX, LY, LW, LH); bevel(g, LX, LY, LW, LH, true);
+  g.save(); g.beginPath(); g.rect(LX + 2, LY + 2, LW - 4, LH - 4); g.clip();
+  for (let i = 0; i < logL.length; i++) {
+    const L = logL[i], yy = LY + 18 + i * RH - scroll, a = clamp((now - L.t) / .06, 0, 1);
+    if (yy < LY - RH || yy > LY + LH + RH) continue;
+    g.globalAlpha = L.t < 0 ? 1 : a;
+    if (L.err) { fr(g, "rgba(212,32,47,.12)", LX + 2, yy - 13, LW - 4, RH); txt(g, "ERROR  " + L.s, LX + 9, yy, F.vt(18), "#c0182a"); }
+    else { txt(g, "> " + L.s, LX + 9, yy, F.vt(18), "#222"); if (L.ok) txt(g, "OK", LX + LW - 10, yy, F.vt(18), "#1d8a45", "right"); }
+  }
+  g.globalAlpha = 1; g.restore();
+  // buttons
+  button(g, x + 196, y + 262, 72, 26, "< Back", { off: true });
+  button(g, x + 274, y + 262, 72, 26, doneT >= 0 ? "Finish" : "Next >", { off: doneT < 0, def: doneT >= 0, focus: doneT >= 0 });
+  button(g, x + 356, y + 262, 68, 26, "Cancel", { down: now - nopeT < .12 });
+}
+function drawError() {
+  if (!errOpen()) return;
+  const a = now - errT, k = dropT >= 0 ? 1 - clamp((now - dropT) / .16, 0, 1) : 1;
+  const sc = (.7 + .3 * outBack(a / .22)) * (.6 + .4 * k), x = 60, y = 140, w = 320, h = 150;
+  ctx.save(); ctx.translate(220, 215); ctx.scale(sc, sc); ctx.translate(-220, -215); ctx.globalAlpha = clamp(a / .06, 0, 1) * k;
+  fr(ctx, "rgba(0,0,0,.35)", x + 5, y + 6, w, h);
+  fr(ctx, "#c3c3c3", x, y, w, h); bevel(ctx, x, y, w, h, false); titleBar(ctx, x + 3, y + 3, w - 6, "love.exe", false);
+  errIcon(ctx, x + 32, y + 52);
+  txt(ctx, "missing file: " + CONFIG.missing, x + 58, y + 50, F.px(700, 16), "#111");
+  txt(ctx, "can't finish without it. drag it in.", x + 58, y + 69, F.vt(18), "#333");
+  const over = drag && drag.moved && (inR({ x: drag.x, y: drag.y }, WIN) || inR({ x: drag.x, y: drag.y }, { x, y, w, h }));
+  const S2 = SLOT; fr(ctx, over ? H(92, 90) : "#d4d4d4", S2.x, S2.y, S2.w, S2.h);
+  ctx.strokeStyle = over ? H(45, 75) : "#6b6b6b"; ctx.lineWidth = 1.4; ctx.setLineDash([5, 4]); ctx.lineDashOffset = -now * 18;
+  ctx.strokeRect(S2.x + .5, S2.y + .5, S2.w - 1, S2.h - 1); ctx.setLineDash([]);
+  if (!fly) {
+    ctx.globalAlpha *= .45; ctx.strokeStyle = "#555"; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]);
+    ctx.strokeRect(S2.x + 22, S2.y + 10, 22, 30); ctx.setLineDash([]); ctx.globalAlpha /= .45;
+  }
+  txt(ctx, over ? "yes. right there." : "drop " + CONFIG.missing + " here", S2.x + 58, S2.y + 31, F.vt(20), over ? H(32, 70) : "#444");
+  ctx.restore();
+}
+function drawIcons() {
+  const bw = Math.exp(-(now - binHit) * 6) * Math.sin((now - binHit) * 30) * .18 * (now > binHit ? 1 : 0);
+  binIcon(ctx, BIN.x, BIN.y - 4, exT >= 0 && now > exT + .55, bw); label(ctx, "Recycle Bin", BIN.x, BIN.y + 42);
+  if (!iconGone && !drag) {
+    const hop = errT >= 0 ? Math.abs(Math.sin((now - errT) * 5.2)) * 7 * (Math.floor((now - errT) * 5.2 / Math.PI) % 3 < 2 ? 1 : 0) : 0;
+    if (errT >= 0) { ctx.strokeStyle = H(80, 90); ctx.lineWidth = 1; ctx.setLineDash([2, 2]); ctx.strokeRect(ICON.x - 30.5, ICON.y - 26.5, 61, 76); ctx.setLineDash([]); }
+    fileIcon(ctx, ICON.x, ICON.y - hop);
+    if (errT >= 0) { fr(ctx, H(38, 70), ICON.x - 30, ICON.y + 32, 60, 17); txt(ctx, CONFIG.missing, ICON.x, ICON.y + 45, F.vt(18), "#fff", "center"); }
+    else label(ctx, CONFIG.missing, ICON.x, ICON.y + 45);
+  } else if (drag) { ctx.globalAlpha = .35; fileIcon(ctx, ICON.x, ICON.y); ctx.globalAlpha = 1; }
+  if (exT >= 0 && now < exT + .6) {            // ex.dll flies into the bin
+    const u = clamp((now - exT) / .55, 0, 1), x = 150 + (BIN.x - 150) * u, y = 215 + (BIN.y - 30 - 215) * u - Math.sin(u * Math.PI) * 120;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(u * 5); ctx.scale(1 - u * .45, 1 - u * .45);
+    fr(ctx, "#fff", -11, -14, 22, 28); ctx.strokeStyle = "#222"; ctx.lineWidth = 1; ctx.strokeRect(-11, -14, 22, 28);
+    txt(ctx, "ex", 0, 0, F.vt(15), "#c0182a", "center"); txt(ctx, ".dll", 0, 10, F.vt(13), "#555", "center"); ctx.restore();
+  }
+}
+function drawDragged() {
+  if (drag && drag.moved) {
+    ctx.save(); ctx.translate(drag.x - drag.dx, drag.y - drag.dy); ctx.rotate(clamp(drag.vx * .02, -.3, .3));
+    fr(ctx, "rgba(0,0,0,.25)", -13, -16, 32, 42); fileIcon(ctx, 0, 0, 1.08); ctx.restore();
+  }
+  if (fly) {
+    const u = clamp((now - fly.t0) / fly.dur, 0, 1), e = inOut(u), sh = fly.then === accept ? 1 - .55 * e : 1;
+    const x = fly.x0 + (fly.x1 - fly.x0) * e, y = fly.y0 + (fly.y1 - fly.y0) * e - Math.sin(u * Math.PI) * (fly.dur > .4 ? 60 : 10);
+    fileIcon(ctx, x, y, sh * 1.05);
+    if (u >= 1) { const f = fly; fly = null; f.then(); }
+  }
+}
+function drawCell(c, x, y, w, h, rot, tint, col, alpha = 1) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalAlpha = alpha;
+  if (tint < 1) ctx.drawImage(snap, c.sx * S * DPR, c.sy * S * DPR, c.cw * S * DPR, c.ch * S * DPR, -w / 2, -h / 2, w, h);
+  if (tint > 0) { ctx.globalAlpha = alpha * tint; fr(ctx, col, -w / 2, -h / 2, w, h); }
+  ctx.restore();
+}
+function heartScale() {
+  if (heartT < 0) return 1;
+  const u = now - heartT, pop = 1 + .24 * Math.sin(u * 15) * Math.exp(-u * 6);
+  const running = runT >= 0, per = running ? .6 : 1.05, ph = (u % per) / per;
+  const beat = (running ? .09 : .05) * (Math.exp(-(((ph - .04) / .045) ** 2)) + .6 * Math.exp(-(((ph - .22) / .045) ** 2)));
+  return pop * (1 + (u > .45 ? beat : 0));
+}
+function drawHeart() {
+  const u = now - breakT;
+  const gap = clamp(u / .08, 0, 1) * 1.4;
+  for (const s of shards) {        // the rest of the window flies apart
+    const t = u - s.d; if (t < 0) { drawCell(s, s.x, s.y, s.cw - gap, s.ch - gap, 0, 0); continue; }
+    const a = 1 - clamp((t - .45) / .5, 0, 1); if (a <= 0) continue;
+    drawCell(s, s.x + s.vx * t, s.y + s.vy * t + 900 * t * t, (s.cw - gap) * (1 - t * .3), (s.ch - gap) * (1 - t * .3), s.vr * t, clamp(t * 2, 0, .5), "#c3c3c3", a);
+  }
+  const hs = heartScale();
+  ctx.save(); ctx.translate(HEART_C.x, HEART_C.y); ctx.scale(hs, hs); ctx.translate(-HEART_C.x, -HEART_C.y);
+  if (heartT >= 0) { ctx.globalAlpha = .22 + .12 * (hs - 1) * 6; const rg = ctx.createRadialGradient(HEART_C.x, HEART_C.y, 10, HEART_C.x, HEART_C.y, 150); rg.addColorStop(0, H(70, 90)); rg.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = rg; ctx.fillRect(HEART_C.x - 160, HEART_C.y - 160, 320, 320); ctx.globalAlpha = 1; }
+  for (const c of cells) {
+    const t = clamp((u - c.d) / .5, 0, 1), e = inOut(t);
+    const x = c.x0 + (c.x1 - c.x0) * e, y = c.y0 + (c.y1 - c.y0) * e - Math.sin(t * Math.PI) * 26;
+    const w = (c.cw + (CELL - c.cw) * e) - gap * (1 - e) - .9 * e, h = (c.ch + (CELL - c.ch) * e) - gap * (1 - e) - .9 * e;
+    drawCell(c, x, y, w, h, c.rot * Math.sin(t * Math.PI), sm((t - .05) / .6), c.col);
+  }
+  ctx.restore();
+}
+function drawCard() {
+  if (heartT < 0) return;
+  const a = now - heartT - .45; if (a < 0) return;
+  const { x, y, w, h } = CARD, sc = .75 + .25 * outBack(a / .3);
+  ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.scale(sc, sc); ctx.translate(-x - w / 2, -y - h / 2); ctx.globalAlpha = clamp(a / .08, 0, 1);
+  fr(ctx, "rgba(0,0,0,.35)", x + 5, y + 6, w, h);
+  fr(ctx, "#c3c3c3", x, y, w, h); bevel(ctx, x, y, w, h, false); titleBar(ctx, x + 3, y + 3, w - 6, "Setup complete");
+  txt(ctx, "love.exe installed for", x + w / 2, y + 48, F.vt(20), "#333", "center");
+  ctx.font = F.px(700, 26); const nw = ctx.measureText(CONFIG.name).width, tot = nw + 8 + 24 + 4 + 21, sx = x + w / 2 - tot / 2;
+  txt(ctx, CONFIG.name, sx, y + 79, F.px(700, 26), "#111");
+  floppy(ctx, sx + nw + 8, y + 59, 2); miniHeart(ctx, sx + nw + 36, y + 62, 3);
+  const blink = Math.floor((now - heartT) * 2.2) % 2 === 0;
+  button(ctx, RUN.x, RUN.y, RUN.w, RUN.h, runT >= 0 ? "Run again" : "Run", { def: true, focus: runT >= 0 || blink, down: now - runDown < .14, bold: true, size: 15 });
+  ctx.restore();
+}
+function drawBalloon() {
+  if (runT < 0) return;
+  const a = now - runT; if (a < 0) return;
+  const x = 36, y = 400, w = 336, h = 54, sc = .8 + .2 * outBack(a / .25);
+  ctx.save(); ctx.translate(x + w - 40, y + h + 14); ctx.scale(sc, sc); ctx.translate(-(x + w - 40), -(y + h + 14)); ctx.globalAlpha = clamp(a / .06, 0, 1);
+  ctx.fillStyle = "#ffffe1"; ctx.strokeStyle = "#111"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, 7) : ctx.rect(x, y, w, h); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + w - 66, y + h - .5); ctx.lineTo(x + w - 40, y + h + 14); ctx.lineTo(x + w - 46, y + h - .5); ctx.fill(); ctx.stroke();
+  fr(ctx, "#ffffe1", x + w - 65, y + h - 1.5, 18, 2.5);
+  miniHeart(ctx, x + 11, y + 10, 1.8);
+  txt(ctx, "love.exe", x + 28, y + 20, F.px(700, 13), "#111");
+  const n = Math.floor(clamp((a - .15) * 30, 0, CONFIG.msg.length)), cur = n < CONFIG.msg.length || Math.floor(now * 2.5) % 2 ? "_" : "";
+  txt(ctx, CONFIG.msg.slice(0, n) + cur, x + 11, y + 42, F.vt(20), "#111");
+  ctx.restore();
+}
+function drawParticles(dt) {
+  for (let i = confetti.length - 1; i >= 0; i--) {
+    const c = confetti[i], t = now - c.t0; if (t > c.life) { confetti.splice(i, 1); continue; }
+    c.vx *= Math.pow(.25, dt); c.vy = c.vy * Math.pow(.4, dt) + 700 * dt; c.x += c.vx * dt; c.y += c.vy * dt;
+    const a = 1 - clamp((t - c.life + .4) / .4, 0, 1), fl = Math.cos(c.ph + t * c.spin);
+    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(fl, 1); ctx.globalAlpha = a;
+    if (c.heart) pix(ctx, MINI, -3.5 * c.s, -3 * c.s, c.s, { X: c.c, h: c.c, d: c.c }); else fr(ctx, c.c, -3, -2, 6, 4);
+    ctx.restore();
+  }
+  for (let i = floaters.length - 1; i >= 0; i--) {
+    const f = floaters[i], t = now - f.t0; if (t < 0) continue; if (t > 2.2) { floaters.splice(i, 1); continue; }
+    const a = Math.min(1, t * 5) * (1 - clamp((t - 1.4) / .8, 0, 1));
+    ctx.globalAlpha = a; pix(ctx, MINI, f.x + Math.sin(f.ph + t * 3) * 12 - 3.5 * f.s, f.y - f.sp * t - 3 * f.s, f.s, { X: f.c, h: "#fff", d: f.c }); ctx.globalAlpha = 1;
+  }
+}
+
+// ---------- main loop ----------
+let lastW = 0, lastH = 0, lastClock = "";
+function frame(ms) {
+  const t = (ms - T0) / 1000, dt = clamp(t - now, 0, .05); now = t;
+  if (innerWidth !== lastW || innerHeight !== lastH) { lastW = innerWidth; lastH = innerHeight; resize(); }
+  // install
+  if (dropT >= 0) { p = Math.max(p, .99 + .01 * sm((now - dropT) / .3)); if (p >= 1 - 1e-9 && doneT < 0) { p = 1; doneT = now; addLog("installation complete"); sfx.done(); ev("done"); } }
+  else if (stuckT < 0) {
+    p = prog(now);
+    while (nextLine < CONFIG.log.length && p >= thr(nextLine)) { addLog(nm(CONFIG.log[nextLine])); ev("line"); if (nextLine === 2) { exT = now; binHit = now + .55; } nextLine++; }
+    if (p >= .99) { p = .99; stuckT = now; addLog("looking for " + CONFIG.missing + "…", "wait"); ev("stuck"); if (haveYou) { dropT = now + .25; addLog("found " + CONFIG.missing); } }
+  }
+  if (stuckT >= 0 && errT < 0 && dropT < 0 && now > stuckT + .35) { errT = now; addLog("missing file: " + CONFIG.missing, "err"); sfx.nope(); ev("error"); }
+  if (doneT >= 0 && breakT < 0 && now > doneT + .35) { breakT = now; breakWindow(); ev("break"); }
+  if (breakT >= 0 && heartT < 0 && now > breakT + BREAK) { heartT = now; burst(46); sfx.pop(); ev("pop"); }
+  scroll += (Math.max(0, logL.length - 6) * 17.5 - scroll) * (1 - Math.exp(-dt * 22));
+
+  drawDesk();
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, OX * DPR, OY * DPR);
+  drawIcons();
+  if (breakT < 0) {
+    const e = errT >= 0 ? now - errT : 9, sh = Math.sin(e * 46) * 5 * Math.exp(-e * 7);
+    ctx.save(); ctx.translate(sh, 0); fr(ctx, "rgba(0,0,0,.3)", WIN.x + 6, WIN.y + 7, WIN.w, WIN.h); drawWindow(ctx); ctx.restore();
+    if (now - nopeT < 1.1) { fr(ctx, "#ffffe1", 300, 296, 124, 24); ctx.strokeStyle = "#111"; ctx.lineWidth = 1; ctx.strokeRect(300.5, 296.5, 123, 23); txt(ctx, "nice try.", 362, 313, F.vt(19), "#111", "center"); }
+  } else drawHeart();
+  drawError(); drawCard(); drawBalloon(); drawParticles(dt); drawDragged();
+  const d = new Date(), c = d.getHours() % 12 + ":" + String(d.getMinutes()).padStart(2, "0") + (d.getHours() < 12 ? " AM" : " PM");
+  if (c !== lastClock) { lastClock = c; clockEl.textContent = c; }
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
