@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>friday deploy</title>
+<meta name="description" content="A deploy button that panics at 16:59 on a Friday. Four confirm dialogs, a smoking server rack, burning logs, and then... it works. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700;800&family=IBM+Plex+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#131316;color:#dcd9d0}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.credit{position:fixed;left:0;right:0;bottom:0;height:26px;display:flex;align-items:center;justify-content:center;z-index:3;background:#0b0b0d;border-top:1px solid #1e1f24;font:400 10.5px "IBM Plex Mono",ui-monospace,monospace;color:#6f7380}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:400 20px 'IBM Plex Mono'">a</span><span class="pre" style="font:500 20px 'IBM Plex Mono'">a</span><span class="pre" style="font:800 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:700 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:400 20px 'Bricolage Grotesque'">a</span>
+<script>
+// ===== Friday Deploy · free code by @sicscod.drops =====
+// Try: yoursite/?day=Fri&time=16:59&hue=152   (?auto=1 plays the whole thing by itself)
+const P = new URLSearchParams(location.search);
+const num = (k, d) => P.get(k) && isFinite(+P.get(k)) ? +P.get(k) : d;
+const CONFIG = {
+  day: (P.get("day") || "fri").slice(0, 3).toLowerCase(),   // the clock in the corner
+  time: /^\d{1,2}:\d{2}$/.test(P.get("time")) ? P.get("time") : "16:59",
+  hue: num("hue", 152),           // the button colour, 0-360 (0 red, 210 blue)
+  auto: P.get("auto") === "1",    // a cursor plays it by itself
+  project: "checkout-api",
+  button: "Deploy to prod",
+  hint: "click it. what could go wrong.",
+  // one dialog per click, each one a little less patient. {time} and {day} get filled in
+  dialogs: [
+    { title: "are you sure?",                       body: "this pushes main straight to production.", yes: "yes", no: "cancel",    icon: "info" },
+    { title: "it's friday.",                        body: "it is {time}. on a {day}.",                 yes: "yes", no: "go home",   icon: "warn" },
+    { title: "your weekend will remember this",     body: "on-call this weekend: you.",                yes: "yes", no: "wait",      icon: "warn" },
+    { title: "ok but don't say we didn't warn you", body: "47 files changed. 0 tests.",                yes: "YES", no: "fine. no.", icon: "stop" },
+  ],
+  // deploy log. at = progress (0..1) when the line shows up. lvl: info, ok, warn, err
+  logs: [
+    { at: .00, lvl: "info", text: "building checkout-api@main" },
+    { at: .10, lvl: "ok",   text: "build ok (it compiled, so)" },
+    { at: .22, lvl: "warn", text: "skipping tests. it's friday." },
+    { at: .34, lvl: "warn", text: "migrating database... live" },
+    { at: .47, lvl: "err",  text: "cpu 99% · rack 2 is warm" },
+    { at: .59, lvl: "err",  text: "smoke detected in rack 2" },
+    { at: .71, lvl: "err",  text: "paging on-call... on-call is you" },
+    { at: .84, lvl: "err",  text: "the logs are on fire. literally." },
+  ],
+  deploySeconds: 2.65,           // 0 -> 99%
+  done: "✓ deployed. 0 errors.",
+  after: "...wait, it worked?",
+  cancelled: "deploy cancelled. see you monday.",
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1, S = 1, TOP = 40, FOOT = 26, PH = 170, ED = 360, BX = 0, BY = 0, BW = 280, BH = 84, MX = 0, MY = 0, RX = 0, RY = 0;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2));
+const outBounce = x => { x = clamp(x, 0, 1); const n = 7.5625, d = 2.75;
+  return x < 1 / d ? n * x * x : x < 2 / d ? n * (x -= 1.5 / d) * x + .75 : x < 2.5 / d ? n * (x -= 2.25 / d) * x + .9375 : n * (x -= 2.625 / d) * x + .984375; };
+const DAYS = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" };
+if (!DAYS[CONFIG.day]) CONFIG.day = "fri";
+const HUE = ((CONFIG.hue % 360) + 360) % 360, hsl = (s, l, a = 1) => `hsla(${HUE},${s}%,${l}%,${a})`;
+const DAY = CONFIG.day[0].toUpperCase() + CONFIG.day.slice(1);
+const plusMin = (t, m) => { let [h, mm] = t.split(":").map(Number); mm += m; h = (h + Math.floor(mm / 60)) % 24; mm = ((mm % 60) + 60) % 60; return String(h).padStart(2, "0") + ":" + String(mm).padStart(2, "0"); };
+const fill = s => s.replace("{time}", CONFIG.time).replace("{day}", DAYS[CONFIG.day]);
+const F = { ui: '"Bricolage Grotesque", system-ui, sans-serif', mono: '"IBM Plex Mono", ui-monospace, monospace' };
+const COL = { info: "#8b8f9a", ok: "#7fdc8f", warn: "#f2c94c", err: "#ff6b5e", cmd: "#c9c6bd", dim: "#4c4f58" };
+
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  S = clamp(Math.min(W / 500, H / 560), .7, 1.35);
+  TOP = 40 * S; FOOT = 26;
+  PH = clamp(H * .31, 150 * S, 300 * S); ED = H - FOOT - PH;
+  BX = W / 2; BY = Math.max(TOP + (ED - TOP) * .46, ED - 240 * S);
+  ctx.font = `800 ${24 * S}px ${F.ui}`;
+  BW = Math.max(250 * S, ctx.measureText(CONFIG.button).width + 112 * S); BH = 84 * S;
+  MX = 18 * S + 34 * S; MY = ED - 12 * S;
+  RX = W - 18 * S - 30 * S; RY = MY + 2 * S;
+}
+
+// ---------- state ----------
+let now = 0, last = 0, at = 0;                      // at = animation clock (it stops when everything freezes)
+let mode = "idle", dlgs = [], depT0 = 0, stallT0 = 0, doneT = -99, prog = 0, heat = 0, cancelT = -99, logged = 0;
+const btn = { dx: 0, dy: 0, tdx: 0, tdy: 0, vx: 0, vy: 0, sq: 0, sqv: 0, press: 0, panic: CONFIG.auto ? 1.2 : .3, dodged: false, k: 260, lx: 0, ly: 0 };
+const mug = { lx: 0, ly: 0 };
+const parts = [], logs = [];
+let hov = null;                                      // where the mouse / cursor is
+const cur = { x: 0, y: 0, on: false, down: -9, seg: null };
+const events = window.__events = [];
+const ev = name => events.push([name, +now.toFixed(3)]);
+
+// ---------- sound (Web Audio, starts on the first tap) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return null; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } return AC; }
+function tone(type, f0, f1, len, vol, delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len * .7);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .01); g.gain.exponentialRampToValueAtTime(.0008, t + len);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + len + .02);
+}
+function noise(len, vol, fc, q = 1) {
+  if (!AC) return; const n = AC.sampleRate * len | 0, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  f.type = "bandpass"; f.frequency.value = fc; f.Q.value = q; g.gain.value = vol; s.buffer = b; s.connect(f).connect(g).connect(AC.destination); s.start();
+}
+const sfx = {
+  click() { tone("square", 2200, 1400, .03, .05); },
+  whoosh() { noise(.25, .5, 900, .7); tone("sine", 500, 1200, .2, .06); },
+  pop(i) { tone("sine", 420 + i * 90, 900 + i * 140, .12, .16); tone("triangle", 1300, 1300, .06, .04, .05); },
+  beep() { tone("square", 1250, 1250, .09, .05); tone("square", 940, 940, .09, .05, .12); },
+  ding() { [1568, 2093, 2637].forEach((f, i) => tone("sine", f, f, 1.2, .12, i * .06)); },
+  boing() { tone("triangle", 220, 660, .3, .14); },
+  popper() { noise(.35, 1, 2200, .5); tone("sine", 180, 60, .2, .3); },
+};
+
+// ---------- the story ----------
+function log(text, lvl) { logs.push({ text, lvl, t0: now, ts: lvl === "done" ? plusMin(CONFIG.time, 1) + ":00" : CONFIG.time + ":" + String(Math.min(59, 11 + logs.length * 3)).padStart(2, "0") }); }
+function sweat(x, y, n, spread) {
+  for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + (Math.random() - .5) * spread;
+    parts.push({ k: "drop", x: x + (Math.random() - .5) * 16 * S, y: y + (Math.random() - .5) * 8 * S, vx: Math.cos(a) * (60 + Math.random() * 90) * S, vy: Math.sin(a) * (90 + Math.random() * 80) * S, t0: at, life: .9, s: (.7 + Math.random() * .5) * S }); }
+}
+function dodge(fromX) {
+  if (btn.dodged || mode !== "idle") return;
+  btn.dodged = true; const side = fromX > BX + btn.dx ? -1 : 1;
+  btn.tdx = side * Math.min(100 * S, W / 2 - BW / 2 - 14 * S); btn.tdy = -16 * S; btn.k = 320;
+  btn.vx += side * 900 * S; btn.sqv += 9; btn.panic = 1.4;
+  sweat(BX + btn.dx - side * BW * .35, BY - BH * .4, 5, 1.6); sweat(BX + btn.dx + side * BW * .3, BY - BH * .45, 3, 1.2);
+  sfx.whoosh(); ev("dodge");
+}
+function pressButton() {
+  mode = "confirm"; btn.press = 1; btn.sq = -.08; btn.sqv = -9; btn.tdx = 0; btn.tdy = 0; btn.k = 40;
+  dlgs = [{ i: 0, t0: now + .1, out: -1, shake: -9 }]; sfx.click(); ev("press"); ev("dialog0@" + (now + .1).toFixed(3));
+  log("./deploy.sh --env=prod", "cmd");
+}
+function yes() {
+  const top = dlgs[dlgs.length - 1], n = CONFIG.dialogs.length; sfx.click(); ev("yes" + top.i);
+  log(`confirm ${top.i + 1}/${n}: ${CONFIG.dialogs[top.i].yes.toLowerCase()}`, "info");
+  if (top.i + 1 < n) { dlgs.push({ i: top.i + 1, t0: now + .1, out: -1, shake: -9 }); ev("dialog" + (top.i + 1) + "@" + (now + .1).toFixed(3)); }
+  else { dlgs.forEach((d, k) => d.out = now + (dlgs.length - 1 - k) * .03); mode = "deploy"; depT0 = now + .12; logged = 0; ev("deploy@" + depT0.toFixed(3)); }
+}
+function cancel() {
+  dlgs.forEach((d, k) => d.out = now + (dlgs.length - 1 - k) * .03); mode = "idle"; cancelT = now; btn.dodged = false; btn.k = 200;
+  log(CONFIG.cancelled, "ok"); sfx.click();
+}
+function reveal() {
+  mode = "done"; doneT = now; prog = 1; heat = 0; log(CONFIG.done, "done"); sfx.ding(); ev("reveal");
+}
+function reset() {
+  mode = "idle"; dlgs = []; prog = 0; heat = 0; doneT = -99; btn.dodged = false; btn.tdx = btn.tdy = 0; btn.k = 200; btn.panic = .3;
+  logs.length = 0; parts.length = 0; boot(); ev("reset");
+}
+function boot() { log("git push origin main", "cmd"); log("waiting for someone brave...", "info"); }
+
+// ---------- dialogs: layout + hit tests ----------
+function wrap(text, font, maxW) {
+  ctx.font = font; const out = []; let line = "";
+  for (const w of text.split(" ")) { const t = line ? line + " " + w : w; if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; }
+  if (line) out.push(line); return out;
+}
+function dlgBox(i) {
+  const d = CONFIG.dialogs[i], w = Math.min(300 * S, W - 40 * S), pad = 16 * S, ix = 40 * S;
+  const tf = `800 ${17 * S}px ${F.ui}`, bf = `400 ${11.5 * S}px ${F.mono}`, btf = `700 ${14 * S}px ${F.ui}`;
+  const tl = wrap(d.title, tf, w - pad * 2 - ix), bl = d.body ? wrap(fill(d.body), bf, w - pad * 2 - ix) : [];
+  const h = pad + tl.length * 21 * S + (bl.length ? 4 * S + bl.length * 16 * S : 0) + 14 * S + 32 * S + pad;
+  const n = CONFIG.dialogs.length, cx = W / 2 + (i - (n - 1) / 2) * 13 * S, cy = BY - 18 * S + i * 17 * S;
+  ctx.font = btf; const yw = ctx.measureText(d.yes).width + 34 * S, nw = ctx.measureText(d.no).width + 26 * S;
+  const yesR = { x: w / 2 - pad - yw, y: h / 2 - pad - 32 * S, w: yw, h: 32 * S }, noR = { x: yesR.x - 8 * S - nw, y: yesR.y, w: nw, h: 32 * S };
+  return { d, w, h, pad, ix, tf, bf, btf, tl, bl, cx, cy, rot: [-.035, .028, -.022, .04][i % 4], yesR, noR };
+}
+function toLocal(b, x, y) { const c = Math.cos(-b.rot), s = Math.sin(-b.rot), dx = x - b.cx, dy = y - b.cy; return { x: dx * c - dy * s, y: dx * s + dy * c }; }
+function toWorld(b, x, y) { const c = Math.cos(b.rot), s = Math.sin(b.rot); return { x: b.cx + x * c - y * s, y: b.cy + x * s + y * c }; }
+const inR = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+const yesAt = i => { const b = dlgBox(i); return toWorld(b, b.yesR.x + b.yesR.w * .55, b.yesR.y + b.yesR.h * .55); };
+const onButton = (x, y, m = 0) => Math.abs(x - (BX + btn.dx)) < BW / 2 + m && Math.abs(y - (BY + btn.dy)) < BH / 2 + m;
+
+// ---------- input ----------
+function press(x, y) {
+  audio();
+  if (mode === "idle") { if (onButton(x, y)) btn.dodged ? pressButton() : dodge(x); return; }
+  if (mode === "confirm") {
+    const top = dlgs[dlgs.length - 1]; if (now < top.t0 + .12) return;
+    const b = dlgBox(top.i), p = toLocal(b, x, y);
+    if (inR(p, b.yesR)) yes(); else if (inR(p, b.noR)) cancel(); else if (!inR(p, { x: -b.w / 2, y: -b.h / 2, w: b.w, h: b.h })) { top.shake = now; sfx.click(); }
+    return;
+  }
+  if (mode === "done" && now - doneT > 1.6) reset();
+}
+cv.addEventListener("pointerdown", e => { hov = { x: e.clientX, y: e.clientY }; if (!CONFIG.auto) press(e.clientX, e.clientY); });
+addEventListener("pointermove", e => { if (e.pointerType === "mouse" && !CONFIG.auto) hov = { x: e.clientX, y: e.clientY }; });
+addEventListener("resize", resize);
+
+// ---------- ?auto=1: a scripted cursor plays the story (used for the video) ----------
+const AUTO = [
+  [0.00, "move", .52, () => ({ x: BX + 70 * S, y: BY + 6 * S }), () => ({ x: W * .84, y: ED - 40 * S })],
+  [0.52, "move", .32, () => ({ x: BX + btn.tdx + 30 * S, y: BY + btn.tdy + 10 * S })],
+  [0.86, "click"],
+  [1.00, "move", .48, () => yesAt(0)], [1.60, "click"],
+  [1.74, "move", .36, () => yesAt(1)], [2.18, "click"],
+  [2.30, "move", .26, () => yesAt(2)], [2.64, "click"],
+  [2.76, "move", .2, () => yesAt(3)], [3.02, "click"],
+  [3.22, "move", .8, () => ({ x: W * .64, y: ED - 34 * S })],
+];
+let autoT0 = 0, autoI = 0;
+function runAuto() {
+  const t = now - autoT0;
+  while (autoI < AUTO.length && t >= AUTO[autoI][0]) {
+    const a = AUTO[autoI++];
+    if (a[1] === "move") { const from = a[4] ? a[4]() : { x: cur.x, y: cur.y }; cur.seg = { t0: autoT0 + a[0], len: a[2], from, to: a[3](), first: !!a[4] }; cur.on = true; }
+    else { cur.down = now; press(cur.x, cur.y); }
+  }
+  if (cur.seg) { const u = clamp((now - cur.seg.t0) / cur.seg.len, 0, 1), e = cur.seg.first ? 1 - (1 - u) * (1 - u) : sm(u), arc = Math.sin(u * Math.PI) * 18 * S;
+    cur.x = lerp(cur.seg.from.x, cur.seg.to.x, e); cur.y = lerp(cur.seg.from.y, cur.seg.to.y, e) - arc; }
+  hov = { x: cur.x, y: cur.y };
+  if (mode === "done" && now - doneT > 3.4) { reset(); autoT0 = now; autoI = 0; }
+}
+
+// ---------- drawing helpers ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function eyes(x, y, gap, r, look, emo, scale = 1) {   // two cartoon eyes. emo: calm, panic, squeeze, stunned, happy
+  for (const sx of [-1, 1]) {
+    const ex = x + sx * gap;
+    if (emo === "squeeze") { ctx.strokeStyle = "#141414"; ctx.lineWidth = 2.6 * scale; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.beginPath(); ctx.moveTo(ex - sx * r * .7, y - r * .55); ctx.lineTo(ex + sx * r * .5, y); ctx.lineTo(ex - sx * r * .7, y + r * .55); ctx.stroke(); continue; }
+    if (emo === "happy") { ctx.strokeStyle = "#141414"; ctx.lineWidth = 2.6 * scale; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.arc(ex, y + r * .35, r * .62, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); continue; }
+    const big = emo === "stunned" ? 1.22 : emo === "panic" ? 1.12 : 1, pr = r * (emo === "stunned" ? .3 : emo === "panic" ? .36 : .48);
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(ex, y, r * .86 * big, r * big, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.lineWidth = 1 * scale; ctx.stroke();
+    const lx = emo === "stunned" ? 0 : look.x, ly = emo === "stunned" ? 0 : look.y;
+    ctx.fillStyle = "#141414"; ctx.beginPath(); ctx.arc(ex + lx * r * .42, y + ly * r * .5, pr, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex + lx * r * .42 - pr * .35, y + ly * r * .5 - pr * .4, pr * .32, 0, 7); ctx.fill();
+  }
+}
+function mouth(x, y, w, emo, scale = 1, t = 0) {
+  ctx.strokeStyle = "#141414"; ctx.fillStyle = "#3a1414"; ctx.lineWidth = 2.4 * scale; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (emo === "stunned") { ctx.beginPath(); ctx.ellipse(x, y + 1 * scale, w * .2, w * .26, 0, 0, 7); ctx.fill(); return; }
+  if (emo === "happy") { ctx.beginPath(); ctx.moveTo(x - w * .45, y - w * .08); ctx.quadraticCurveTo(x, y + w * .55, x + w * .45, y - w * .08); ctx.closePath(); ctx.fill(); ctx.stroke(); return; }
+  if (emo === "calm") { ctx.beginPath(); ctx.moveTo(x - w * .35, y); ctx.quadraticCurveTo(x, y + w * .2, x + w * .35, y); ctx.stroke(); return; }
+  ctx.beginPath(); const n = 6;                                     // wobbly worried line
+  for (let i = 0; i <= n; i++) { const xx = x - w * .45 + w * .9 * i / n, yy = y + (i % 2 ? -1 : 1) * w * .09 + Math.sin(t * 30 + i) * w * .02; i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); }
+  ctx.stroke();
+}
+function lookAt(o, x, y, tx, ty, dt) { const d = Math.hypot(tx - x, ty - y) || 1, k = Math.min(1, d / (60 * S)); o.lx += ((tx - x) / d * k - o.lx) * Math.min(1, dt * 12); o.ly += ((ty - y) / d * k - o.ly) * Math.min(1, dt * 12); }
+
+function checkText(str, x, y) {   // draws a leading ✓ as a path, the rest as text
+  if (str[0] !== "✓") { ctx.fillText(str, x, y); return; }
+  const m = ctx.measureText("m").width, s = m * .9, al = ctx.textAlign;
+  const w = m * 2 + ctx.measureText(str.slice(2)).width, x0 = al === "center" ? x - w / 2 : x;
+  ctx.save(); ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = Math.max(1.5, s * .2); ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(x0 + s * .08, y + s * .02); ctx.lineTo(x0 + s * .4, y + s * .32); ctx.lineTo(x0 + s * .95, y - s * .42); ctx.stroke(); ctx.restore();
+  ctx.textAlign = "left"; ctx.fillText(str.slice(2), x0 + m * 2, y); ctx.textAlign = al;
+}
+
+// ---------- scene ----------
+function drawBar() {
+  ctx.fillStyle = "#0b0b0d"; ctx.fillRect(0, 0, W, TOP); ctx.fillStyle = "#1e1f24"; ctx.fillRect(0, TOP - 1, W, 1);
+  ctx.textBaseline = "middle"; const y = TOP / 2 + 1;
+  const live = mode === "done" ? COL.ok : heat > .3 ? (Math.sin(at * 14) > 0 ? COL.err : "#5a1f1b") : mode === "deploy" ? COL.warn : COL.ok;
+  ctx.fillStyle = live; ctx.beginPath(); ctx.arc(18 * S, y, 4 * S, 0, 7); ctx.fill();
+  ctx.font = `500 ${12.5 * S}px ${F.mono}`; ctx.fillStyle = "#dcd9d0"; ctx.textAlign = "left"; ctx.fillText(CONFIG.project, 30 * S, y);
+  const pw = ctx.measureText(CONFIG.project).width; ctx.font = `400 ${11 * S}px ${F.mono}`;
+  ctx.fillStyle = "#1c1d22"; rr(30 * S + pw + 9 * S, y - 9 * S, 54 * S, 18 * S, 9 * S); ctx.fill();
+  ctx.fillStyle = "#9a9da8"; ctx.fillText("⎇ main", 30 * S + pw + 16 * S, y + .5);
+  // the clock
+  const flip = mode === "done" ? clamp((now - doneT - .05) / .25, 0, 1) : 0;
+  const time = flip > .5 ? plusMin(CONFIG.time, 1) : CONFIG.time, colon = mode === "done" || Math.floor(now * 2) % 2 === 0;
+  ctx.textAlign = "right"; ctx.font = `500 ${14 * S}px ${F.mono}`;
+  const tw = ctx.measureText("00:00").width, x = W - 16 * S;
+  ctx.save(); ctx.translate(x - tw / 2, y); ctx.scale(1, flip ? Math.abs(Math.cos(flip * Math.PI)) * .9 + .1 : 1);
+  ctx.fillStyle = flip > .5 ? COL.ok : "#f4f1ea"; ctx.textAlign = "center";
+  ctx.fillText(colon ? time : time.replace(":", " "), 0, 0); ctx.restore();
+  ctx.textAlign = "right"; ctx.font = `400 ${12.5 * S}px ${F.mono}`; ctx.fillStyle = "#8b8f9a"; ctx.fillText(DAY, x - tw - 8 * S, y);
+  const dw = ctx.measureText(DAY).width;   // the little alarm lamp
+  ctx.fillStyle = heat > .3 && Math.sin(at * 14) > 0 ? COL.err : "#2a2b31"; ctx.beginPath(); ctx.arc(x - tw - 16 * S - dw, y, 3.2 * S, 0, 7); ctx.fill();
+  ctx.textAlign = "left";
+}
+function drawStageBg() {
+  ctx.fillStyle = "#131316"; ctx.fillRect(0, TOP, W, ED - TOP);
+  ctx.fillStyle = "rgba(255,255,255,.035)"; const g = 22 * S;
+  for (let y = TOP + g * .7; y < ED; y += g) for (let x = (W % g) / 2; x < W; x += g) ctx.fillRect(x, y, 1.4 * S, 1.4 * S);
+  ctx.font = `400 ${11 * S}px ${F.mono}`; ctx.textBaseline = "middle"; ctx.fillStyle = "#5d616c";
+  if (mode !== "done") ctx.fillText("main → production · +2,413 −1,987", 16 * S, TOP + 18 * S);
+  if (mode === "idle") { ctx.textAlign = "center"; ctx.font = `400 ${12 * S}px ${F.mono}`; ctx.fillStyle = `rgba(139,143,154,${.8 - .5 * clamp(btn.panic - .5, 0, 1)})`;
+    ctx.fillText(CONFIG.hint, BX, BY + BH / 2 + 30 * S); ctx.textAlign = "left"; }
+}
+
+function drawButton(dt) {
+  const b = btn, x = BX + b.dx, y = BY + b.dy, w = BW, h = BH, lip = 10 * S, p = b.press * lip * .8;
+  const wob = mode === "done" && now - doneT < .55 ? 0 : (b.panic * .035 + heat * .03) * Math.sin(at * 27) + Math.sin(at * 2) * .01;
+  ctx.save(); ctx.translate(x, y + h / 2); ctx.rotate(wob + b.vx / (9000 * S));
+  const sq = clamp(b.sq, -.3, .3); ctx.scale(1 - sq * .5, 1 + sq); ctx.translate(0, -h / 2);
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.beginPath(); ctx.ellipse(0, h / 2 + 8 * S, w * .46, 9 * S, 0, 0, 7); ctx.fill();
+  // base lip + body
+  ctx.fillStyle = hsl(52, 20); rr(-w / 2, -h / 2 + lip, w, h - lip, (h - lip) / 2); ctx.fill();
+  const g = ctx.createLinearGradient(0, -h / 2 + p, 0, h / 2 - lip + p); g.addColorStop(0, hsl(72, 63)); g.addColorStop(.55, hsl(66, 48)); g.addColorStop(1, hsl(62, 38));
+  ctx.fillStyle = g; rr(-w / 2, -h / 2 + p, w, h - lip, (h - lip) / 2); ctx.fill();
+  ctx.strokeStyle = hsl(85, 80, .55); ctx.lineWidth = 1.5 * S; rr(-w / 2 + 1, -h / 2 + p + 1, w - 2, h - lip - 2, (h - lip) / 2); ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,.28)"; rr(-w / 2 + 16 * S, -h / 2 + p + 5 * S, w - 32 * S, (h - lip) * .36, (h - lip) * .18); ctx.fill();
+  // face
+  const fy = -lip / 2 + p, fx = -w / 2 + 44 * S;
+  const emo = mode === "done" ? (now - doneT < .55 ? "stunned" : "happy") : mode === "deploy" || mode === "stall" ? "squeeze" : now - cancelT < 1.2 ? "calm" : b.panic > .55 ? "panic" : "calm";
+  eyes(fx, fy - 5 * S, 11 * S, 9 * S, { x: b.lx, y: b.ly }, emo, S);
+  if (emo === "panic") { ctx.strokeStyle = "#141414"; ctx.lineWidth = 2.2 * S; ctx.lineCap = "round";
+    for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(fx + sx * 5 * S, fy - 19 * S); ctx.lineTo(fx + sx * 16 * S, fy - 16 * S - 3 * S * b.panic); ctx.stroke(); } }
+  mouth(fx, fy + 13 * S, 18 * S, emo === "squeeze" ? "panic" : emo, S, at);
+  // label
+  ctx.font = `800 ${24 * S}px ${F.ui}`; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  ctx.fillStyle = hsl(60, 22, .55); ctx.fillText(CONFIG.button, fx + 34 * S, fy + 2 * S);
+  ctx.fillStyle = "#fff"; ctx.fillText(CONFIG.button, fx + 34 * S, fy);
+  // party hat
+  if (mode === "done" && now - doneT > .55) {
+    const u = (now - doneT - .55) / .45, hx = -w / 2 + 58 * S, hy = -h / 2 + p + 4 * S - (1 - outBounce(u)) * 160 * S;
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(-.32 + (1 - clamp(u, 0, 1)) * .6);
+    const hw = 17 * S, hh = 46 * S;
+    ctx.fillStyle = "#ff5c8a"; ctx.beginPath(); ctx.moveTo(-hw, 0); ctx.lineTo(0, -hh); ctx.lineTo(hw, 0); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.clip(); ctx.fillStyle = "#ffd23f";
+    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(-hw * 2, -k * 12 * S - 4 * S); ctx.lineTo(hw * 2, -k * 12 * S - 12 * S); ctx.lineTo(hw * 2, -k * 12 * S - 17 * S); ctx.lineTo(-hw * 2, -k * 12 * S - 9 * S); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = "#fff6e0"; rr(-hw - 2 * S, -3 * S, hw * 2 + 4 * S, 6 * S, 3 * S); ctx.fill();
+    ctx.fillStyle = "#7ee0ff"; ctx.beginPath(); ctx.arc(0, -hh, 5.5 * S, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawMug() {
+  const t = at, j = heat * 1.6 * S * Math.sin(t * 61), x = MX + j, y = MY;
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.beginPath(); ctx.ellipse(4 * S, 2 * S, 36 * S, 6 * S, 0, 0, 7); ctx.fill();
+  // steam (gets frantic while deploying)
+  if (!(mode === "done" && now - doneT < .55)) for (let k = 0; k < 2; k++) {
+    ctx.strokeStyle = `rgba(220,215,205,${.22 + heat * .2})`; ctx.lineWidth = 2.4 * S; ctx.lineCap = "round"; ctx.beginPath();
+    for (let i = 0; i <= 10; i++) { const v = i / 10, yy = -66 * S - v * 30 * S, xx = (k ? 7 : -7) * S + Math.sin(v * 5 + t * (3 + heat * 9) + k * 2) * 4 * S; i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); }
+    ctx.stroke();
+  }
+  // handle
+  ctx.strokeStyle = "#cfc5b1"; ctx.lineWidth = 7 * S; ctx.beginPath(); ctx.arc(28 * S, -30 * S, 13 * S, -Math.PI / 2.2, Math.PI / 2.2); ctx.stroke();
+  // body
+  const g = ctx.createLinearGradient(-28 * S, 0, 28 * S, 0); g.addColorStop(0, "#d9cfbc"); g.addColorStop(.35, "#f4eee2"); g.addColorStop(1, "#cdc2ad");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-28 * S, -58 * S); ctx.lineTo(28 * S, -58 * S); ctx.lineTo(26 * S, -10 * S); ctx.quadraticCurveTo(25 * S, 0, 14 * S, 0);
+  ctx.lineTo(-14 * S, 0); ctx.quadraticCurveTo(-25 * S, 0, -26 * S, -10 * S); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = hsl(60, 45); ctx.fillRect(-27 * S, -16 * S, 53 * S, 5 * S);
+  ctx.fillStyle = "#cbbfa8"; ctx.beginPath(); ctx.ellipse(0, -58 * S, 28 * S, 6 * S, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = "#3b2418"; ctx.beginPath(); ctx.ellipse(0, -57.5 * S, 24.5 * S, 4.4 * S, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.beginPath(); ctx.ellipse(-8 * S, -58.5 * S, 8 * S, 1.4 * S, 0, 0, 7); ctx.fill();
+  // face
+  const emo = mode === "done" ? (now - doneT < .55 ? "stunned" : "happy") : heat > .15 || mode === "stall" ? "panic" : mode === "confirm" || btn.panic > .9 ? "panic" : "calm";
+  eyes(-1 * S, -37 * S, 9 * S, 6.2 * S, { x: mug.lx, y: mug.ly }, emo === "happy" && now - doneT < 1.0 ? "stunned" : emo, S);
+  mouth(-1 * S, -24 * S, 12 * S, emo === "happy" && now - doneT < 1.0 ? "stunned" : emo, S * .9, at);
+  ctx.fillStyle = "rgba(255,120,90,.25)"; ctx.beginPath(); ctx.ellipse(-15 * S, -27 * S, 4 * S, 2.6 * S, 0, 0, 7); ctx.ellipse(13 * S, -27 * S, 4 * S, 2.6 * S, 0, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+function drawRack() {
+  const p = 3.6 * S, cols = 16, rows = 26, x0 = RX - cols * p / 2 + heat * Math.sin(at * 53) * 1.2 * S, y0 = RY - rows * p;
+  const px = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x0 + x * p, y0 + y * p, w * p + .5, h * p + .5); };
+  if (heat > 0) { const g = ctx.createRadialGradient(RX, RY - rows * p / 2, 4, RX, RY - rows * p / 2, 70 * S); g.addColorStop(0, `rgba(255,80,40,${.35 * heat})`); g.addColorStop(1, "rgba(255,80,40,0)"); ctx.fillStyle = g; ctx.fillRect(RX - 80 * S, RY - rows * p - 40 * S, 160 * S, rows * p + 50 * S); }
+  ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.beginPath(); ctx.ellipse(RX, RY + 2 * S, 34 * S, 5 * S, 0, 0, 7); ctx.fill();
+  px(0, 0, cols, rows - 1, "#2b2e36"); px(1, 1, cols - 2, rows - 3, "#17181d");
+  px(1, rows - 1, 2, 1, "#2b2e36"); px(cols - 3, rows - 1, 2, 1, "#2b2e36");
+  for (let u = 0; u < 4; u++) {
+    const yy = 2 + u * 5.6 | 0; px(2, yy, cols - 4, 4, "#363a44"); px(2, yy, cols - 4, 1, "#454a56");
+    for (let s = 0; s < 5; s++) px(3 + s * 1.4, yy + 2, 1, 1, "#22242a");
+    const blink = Math.sin(at * (mode === "done" ? 2 : 6 + heat * 20) + u * 1.7) > 0;
+    const c1 = mode === "done" ? COL.ok : heat > .4 && u >= 1 ? (blink ? "#ff4b3e" : "#5a1f1b") : heat > .1 ? (blink ? "#ffb02e" : "#5c4316") : (blink ? "#5fe08a" : "#1f4a2c");
+    px(cols - 5, yy + 2, 1, 1, c1); px(cols - 3.5, yy + 2, 1, 1, u === 1 && heat > .3 ? "#ff4b3e" : "#5fe08a");
+  }
+  if (heat > .45) { const f = Math.sin(at * 30) > 0; px(5, -2, 2, 2, f ? "#ffb02e" : "#ff6b2b"); px(8, -3, 2, 3, f ? "#ff6b2b" : "#ffd23f"); px(6, -1, 4, 1, "#ff4b3e"); }
+  // smoke
+  if (mode === "deploy" && heat > .02 && Math.random() < heat * .5) parts.push({ k: "smoke", x: x0 + (5 + Math.random() * 6) * p, y: y0 - p, vx: (Math.random() - .3) * 14 * S, vy: -(34 + Math.random() * 30) * S, t0: at, life: 1.6, s: p * (1 + Math.random()) });
+}
+
+function flame(x, y, w, h, t, seed) {
+  const sway = Math.sin(t * 9 + seed) * w * .35, sway2 = Math.sin(t * 13 + seed * 2) * w * .2;
+  const layer = (k, c) => { const ww = w * k, hh = h * (.35 + .65 * k);
+    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x - ww / 2, y);
+    ctx.bezierCurveTo(x - ww / 2, y - hh * .45, x - ww * .1 + sway2 * k, y - hh * .6, x + sway * k, y - hh);
+    ctx.bezierCurveTo(x + ww * .25 + sway2 * k, y - hh * .55, x + ww / 2, y - hh * .4, x + ww / 2, y);
+    ctx.quadraticCurveTo(x, y + ww * .28, x - ww / 2, y); ctx.fill(); };
+  ctx.lineWidth = 2 * S; ctx.strokeStyle = "#7a1d05";
+  layer(1, "#ff5a1f"); ctx.stroke(); layer(.68, "#ffa21f"); layer(.36, "#fff1a8");
+}
+function drawPanel() {
+  const y0 = ED, red = heat * (.6 + .4 * Math.sin(at * 12));
+  ctx.fillStyle = "#0d0e10"; ctx.fillRect(0, y0, W, H - y0);
+  if (heat > 0) { ctx.fillStyle = `rgba(255,50,30,${.1 * red})`; ctx.fillRect(0, y0, W, H - y0); }
+  ctx.fillStyle = heat > .3 ? `rgba(255,90,60,${.3 + .4 * red})` : "#23252b"; ctx.fillRect(0, y0, W, 1);
+  ctx.textBaseline = "middle"; ctx.font = `500 ${10.5 * S}px ${F.mono}`; ctx.fillStyle = "#c9c6bd"; ctx.textAlign = "left";
+  ctx.fillText("DEPLOY LOG", 16 * S, y0 + 16 * S); const lw = ctx.measureText("DEPLOY LOG").width;
+  ctx.fillRect(16 * S, y0 + 25 * S, lw, 1.5); ctx.fillStyle = "#4f535e"; ctx.fillText("PROBLEMS    OUTPUT", 16 * S + lw + 22 * S, y0 + 16 * S);
+  const pct = Math.round(prog * 100);
+  const st = mode === "idle" ? "idle" : mode === "confirm" ? `confirming ${Math.min(dlgs.length, CONFIG.dialogs.length)}/${CONFIG.dialogs.length}` : mode === "done" ? "live" : `deploying ${pct}%`;
+  ctx.textAlign = "right"; ctx.fillStyle = mode === "done" ? COL.ok : heat > .3 ? COL.err : "#8b8f9a"; ctx.fillText(st, W - 16 * S, y0 + 16 * S); ctx.textAlign = "left";
+  // progress bar
+  const bx = 16 * S, bw = W - 32 * S, by = y0 + 33 * S, bh = 6 * S;
+  ctx.fillStyle = "#1c1e23"; rr(bx, by, bw, bh, bh / 2); ctx.fill();
+  if (prog > 0) {
+    const c = mode === "done" ? COL.ok : prog < .4 ? hsl(65, 52) : prog < .7 ? "#ffb02e" : "#ff5a3c";
+    ctx.save(); rr(bx, by, Math.max(bh, bw * prog), bh, bh / 2); ctx.clip(); ctx.fillStyle = c; ctx.fillRect(bx, by, bw, bh);
+    if (mode !== "done") { ctx.fillStyle = "rgba(0,0,0,.18)"; for (let s = -2; s < bw / (10 * S) + 2; s++) { const sx = bx + s * 10 * S + (at * 40 * S) % (10 * S); ctx.beginPath(); ctx.moveTo(sx, by + bh); ctx.lineTo(sx + 5 * S, by); ctx.lineTo(sx + 9 * S, by); ctx.lineTo(sx + 4 * S, by + bh); ctx.fill(); } }
+    ctx.restore();
+  }
+  // log lines
+  const lh = 19 * S, top = by + bh + 16 * S, maxN = Math.max(2, Math.floor((H - FOOT - top - 4 * S) / lh));
+  const doneLine = logs.length && logs[logs.length - 1].lvl === "done";
+  const show = logs.slice(-maxN + (doneLine ? 1 : 0));
+  let yy = top;
+  for (const l of show) {
+    const age = now - l.t0, n = clamp(Math.floor(age * 70), 0, l.text.length);
+    ctx.font = `400 ${11 * S}px ${F.mono}`; ctx.fillStyle = "#4c4f58"; ctx.fillText(l.ts, 16 * S, yy);
+    const tx = 16 * S + ctx.measureText("00:00:00").width + 12 * S;
+    if (l.lvl === "done") {
+      const m = clamp(Math.floor(age * 40), 0, l.text.length);
+      ctx.font = `500 ${15 * S}px ${F.mono}`; ctx.fillStyle = COL.ok; checkText(l.text.slice(0, m), tx, yy + 2 * S);
+    } else {
+      const dead = mode === "done" && (l.lvl === "err" || l.lvl === "warn");
+      const pre = l.lvl === "cmd" ? "$ " : l.lvl === "err" ? "✗ " : l.lvl === "warn" ? "! " : l.lvl === "ok" ? "✓ " : "› ";
+      ctx.fillStyle = dead ? COL.dim : COL[l.lvl]; checkText(pre + l.text.slice(0, n), tx, yy);
+      if (dead) { ctx.fillStyle = COL.dim; ctx.fillRect(tx, yy, ctx.measureText(pre + l.text).width, 1); }
+    }
+    yy += lh;
+  }
+  // flames dance on the logs
+  if (heat > .01) {
+    const xs = [.08, .27, .46, .63, .8, .95], base = H - FOOT;
+    xs.forEach((f, i) => { const k = clamp(heat * 1.6 - i * .12, 0, 1); if (k <= 0) return;
+      const hh = (30 + 26 * Math.abs(Math.sin(at * (3 + i) + i * 2))) * S * k, ww = (20 + 6 * (i % 2)) * S * (.5 + .5 * k);
+      flame(f * W, base + 2 * S, ww, hh, at, i * 1.9); });
+    [[.38, ED], [.74, ED]].forEach(([f, yb], i) => { const k = clamp(heat * 1.4 - .35 - i * .2, 0, 1); if (k > 0) flame(f * W, yb + 1, 16 * S * k, (22 + 10 * Math.sin(at * 7 + i)) * S * k, at, 7 + i); });
+  }
+}
+
+function drawDialogs() {
+  if (!dlgs.length) return;
+  const dimA = mode === "confirm" ? clamp((now - dlgs[0].t0) / .25, 0, 1) * .45 : clamp(1 - (now - (dlgs[0].out || now)) / .3, 0, 1) * .45;
+  if (dimA > 0) { ctx.fillStyle = `rgba(8,8,10,${dimA})`; ctx.fillRect(0, TOP, W, ED - TOP); }
+  dlgs.forEach((d, k) => {
+    if (now < d.t0) return;
+    const b = dlgBox(d.i), u = (now - d.t0) / .2;
+    let sc = .72 + .28 * outBack(u), a = clamp(u * 2, 0, 1), oy = 0, orot = 0;
+    if (d.out > 0 && now > d.out) { const v = (now - d.out) / .3; if (v >= 1) return; oy = v * v * 260 * S; orot = v * (k % 2 ? .35 : -.35); a *= 1 - v; }
+    const sh = now - d.shake < .35 ? Math.sin((now - d.shake) * 60) * 7 * S * (1 - (now - d.shake) / .35) : 0;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(b.cx + sh, b.cy + oy); ctx.rotate(b.rot + orot); ctx.scale(sc, sc);
+    ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 26 * S; ctx.shadowOffsetY = 12 * S;
+    ctx.fillStyle = "#f4f1ea"; rr(-b.w / 2, -b.h / 2, b.w, b.h, 14 * S); ctx.fill();
+    ctx.shadowColor = "transparent";
+    const depth = dlgs.length - 1 - k; if (depth > 0 && mode === "confirm") { ctx.fillStyle = `rgba(20,20,24,${Math.min(.3, depth * .1)})`; rr(-b.w / 2, -b.h / 2, b.w, b.h, 14 * S); ctx.fill(); }
+    const x0 = -b.w / 2 + b.pad, y0 = -b.h / 2 + b.pad;
+    // icon
+    const ic = b.d.icon, icx = x0 + 13 * S, icy = y0 + 12 * S;
+    if (ic === "info") { ctx.fillStyle = "#3d7bf2"; ctx.beginPath(); ctx.arc(icx, icy, 12 * S, 0, 7); ctx.fill(); ctx.fillStyle = "#fff"; ctx.font = `800 ${15 * S}px ${F.ui}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("i", icx, icy + 1 * S); }
+    else if (ic === "warn") { ctx.fillStyle = k === 2 ? "#f28c28" : "#f2b51f"; ctx.beginPath(); ctx.moveTo(icx, icy - 12 * S); ctx.lineTo(icx + 13 * S, icy + 10 * S); ctx.lineTo(icx - 13 * S, icy + 10 * S); ctx.closePath(); ctx.lineJoin = "round"; ctx.lineWidth = 4 * S; ctx.strokeStyle = ctx.fillStyle; ctx.stroke(); ctx.fill();
+      ctx.fillStyle = "#1b1b1b"; ctx.font = `800 ${14 * S}px ${F.ui}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("!", icx, icy + 2.5 * S); }
+    else { ctx.fillStyle = "#e5483b"; ctx.beginPath(); for (let q = 0; q < 8; q++) { const an = Math.PI / 8 + q * Math.PI / 4; ctx.lineTo(icx + Math.cos(an) * 13 * S, icy + Math.sin(an) * 13 * S); } ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = `800 ${15 * S}px ${F.ui}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("!", icx, icy + 1 * S); }
+    // text
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.font = b.tf; ctx.fillStyle = "#17181b"; b.tl.forEach((l, i) => ctx.fillText(l, x0 + b.ix, y0 + 15 * S + i * 21 * S));
+    ctx.font = b.bf; ctx.fillStyle = "#6a6c72"; b.bl.forEach((l, i) => ctx.fillText(l, x0 + b.ix, y0 + 15 * S + b.tl.length * 21 * S + 2 * S + i * 16 * S));
+    // buttons
+    ctx.font = b.btf; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const hot = k === dlgs.length - 1 && cur.on && now - cur.down < .15 && mode === "confirm";
+    ctx.fillStyle = "#e6e1d5"; rr(b.noR.x, b.noR.y, b.noR.w, b.noR.h, 9 * S); ctx.fill(); ctx.fillStyle = "#45464c"; ctx.fillText(b.d.no, b.noR.x + b.noR.w / 2, b.noR.y + b.noR.h / 2 + 1 * S);
+    ctx.fillStyle = hot ? hsl(62, 34) : hsl(62, 42); rr(b.yesR.x, b.yesR.y, b.yesR.w, b.yesR.h, 9 * S); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.fillText(b.d.yes, b.yesR.x + b.yesR.w / 2, b.yesR.y + b.yesR.h / 2 + 1 * S);
+    ctx.restore();
+  });
+}
+
+function drawParts(dtA) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const q = parts[i], age = at - q.t0, u = age / q.life;
+    if (u >= 1) { parts.splice(i, 1); continue; }
+    if (q.k === "drop") {
+      q.vy += 700 * S * dtA; q.x += q.vx * dtA; q.y += q.vy * dtA;
+      ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(Math.atan2(q.vy, q.vx) - Math.PI / 2); ctx.globalAlpha = 1 - u * u; ctx.scale(q.s, q.s);
+      ctx.fillStyle = "#8fd8ff"; ctx.beginPath(); ctx.moveTo(0, -8); ctx.quadraticCurveTo(5, 0, 4.2, 3); ctx.arc(0, 3, 4.2, 0, Math.PI); ctx.quadraticCurveTo(-5, 0, 0, -8); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.beginPath(); ctx.arc(-1.4, 2.4, 1.2, 0, 7); ctx.fill(); ctx.restore();
+    } else if (q.k === "smoke" || q.k === "puff") {
+      q.x += q.vx * dtA; q.y += q.vy * dtA; const s = q.s * (1 + u * 2.2);
+      if (q.k === "smoke") { ctx.fillStyle = `rgba(120,122,130,${.55 * (1 - u)})`; ctx.fillRect(Math.round(q.x - s / 2), Math.round(q.y - s / 2), s, s); }
+      else { ctx.fillStyle = `rgba(190,190,196,${.22 * (1 - u)})`; ctx.beginPath(); ctx.arc(q.x, q.y, s * .6, 0, 7); ctx.arc(q.x + s * .5, q.y + s * .2, s * .45, 0, 7); ctx.arc(q.x - s * .5, q.y + s * .25, s * .4, 0, 7); ctx.fill(); }
+    } else if (q.k === "conf") {
+      q.vy += 520 * S * dtA; q.vx *= Math.pow(.25, dtA); q.vy = Math.min(q.vy, 170 * S); q.x += q.vx * dtA; q.y += q.vy * dtA; q.r += q.vr * dtA;
+      ctx.save(); ctx.translate(q.x + Math.sin(at * 6 + q.r) * 6 * S, q.y); ctx.rotate(q.r); ctx.scale(Math.cos(at * 9 + q.r * 3), 1); ctx.globalAlpha = clamp((1 - u) * 3, 0, 1);
+      ctx.fillStyle = q.c; ctx.fillRect(-q.s, -q.s * .45, q.s * 2, q.s * .9); ctx.restore();
+    }
+  }
+}
+function drawToast() {
+  if (mode !== "done") return;
+  const u = (now - doneT) / .3, sc = outBack(u), txt = CONFIG.done;
+  ctx.save(); ctx.translate(BX, TOP + 26 * S); ctx.scale(sc, sc);
+  ctx.font = `500 ${14.5 * S}px ${F.mono}`; const w = ctx.measureText(txt).width + 34 * S;
+  ctx.fillStyle = "#132a1b"; rr(-w / 2, -16 * S, w, 32 * S, 16 * S); ctx.fill(); ctx.strokeStyle = "rgba(127,220,143,.55)"; ctx.lineWidth = 1.2 * S; ctx.stroke();
+  ctx.fillStyle = COL.ok; ctx.textAlign = "center"; ctx.textBaseline = "middle"; checkText(txt, 0, 1 * S); ctx.restore(); ctx.textAlign = "left";
+}
+function drawSpeech() {
+  if (mode !== "done" || now - doneT < 1.05) return;
+  const u = (now - doneT - 1.05) / .25, sc = outBack(u);
+  ctx.font = `800 ${17 * S}px ${F.ui}`; const tw = ctx.measureText(CONFIG.after).width, w = tw + 30 * S, h = 38 * S;
+  const x = clamp(MX + 26 * S, 10 * S, W - w - 10 * S), y = MY - 74 * S - h;
+  ctx.save(); ctx.translate(x + 8 * S, y + h); ctx.scale(sc, sc); ctx.rotate(-.03); ctx.translate(-8 * S, -h);
+  ctx.fillStyle = "#f4f1ea"; rr(0, 0, w, h, 12 * S); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(14 * S, h - 1); ctx.lineTo(4 * S, h + 13 * S); ctx.lineTo(28 * S, h - 1); ctx.fill();
+  ctx.fillStyle = "#17181b"; ctx.textBaseline = "middle"; ctx.fillText(CONFIG.after, 15 * S, h / 2 + 1 * S); ctx.restore();
+}
+function drawCursor() {
+  if (!cur.on) return;
+  const k = now - cur.down, s = 1.3 * S * (k < .12 ? .86 : 1);
+  if (k < .4) { ctx.strokeStyle = `rgba(255,255,255,${.7 * (1 - k / .4)})`; ctx.lineWidth = 2 * S; ctx.beginPath(); ctx.arc(cur.x, cur.y, (6 + k * 70) * S, 0, 7); ctx.stroke(); }
+  ctx.save(); ctx.translate(cur.x, cur.y); ctx.scale(s, s);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 17); ctx.lineTo(4.2, 13.2); ctx.lineTo(7, 19.6); ctx.lineTo(9.8, 18.4); ctx.lineTo(7.1, 12.2); ctx.lineTo(12.4, 12.2); ctx.closePath();
+  ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1.5;
+  ctx.fillStyle = "#fff"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = "#111"; ctx.lineWidth = 1.1; ctx.lineJoin = "round"; ctx.stroke(); ctx.restore();
+}
+
+// ---------- one loop for everything ----------
+function frame(t) {
+  now = t / 1000; const dt = Math.min(.05, last ? now - last : 1 / 60); last = now;
+  if (CONFIG.auto) runAuto();
+  const frozen = mode === "done" && now - doneT < .55;
+  const speed = frozen ? 0 : mode === "stall" ? .12 : 1, dtA = dt * speed; at += dtA;
+
+  // story clock
+  if (mode === "deploy") {
+    const u = clamp((now - depT0) / CONFIG.deploySeconds, 0, 1);
+    prog = now < depT0 ? 0 : .99 * clamp(u - Math.sin(u * Math.PI * 6) / (Math.PI * 6) * .6, 0, 1);
+    while (logged < CONFIG.logs.length && now >= depT0 && prog >= CONFIG.logs[logged].at) { const l = CONFIG.logs[logged++]; log(l.text, l.lvl); }
+    const h0 = heat; heat = clamp((prog - .3) / .55, 0, 1);
+    if (h0 === 0 && heat > 0) ev("fire");
+    if (heat > .3 && Math.floor(now * 2.6) !== Math.floor((now - dt) * 2.6)) sfx.beep();
+    if (Math.random() < .05 + heat * .25) sweat(MX + (Math.random() - .5) * 40 * S, MY - 50 * S, 1, 1.4);
+    if (Math.random() < heat * .12) sweat(BX + btn.dx + (Math.random() - .5) * BW * .8, BY - BH * .4, 1, 1.4);
+    if (u >= 1) { mode = "stall"; stallT0 = now; ev("stall"); }
+  } else if (mode === "stall" && now - stallT0 > .4) reveal();
+  if (mode === "done") {
+    if (!btnHat && now - doneT > .55) { btnHat = true; btn.sqv = -6; sfx.boing(); ev("hat"); }
+    if (!popped && now - doneT > .82) { popped = true; ev("popper");
+      const hx = BX + btn.dx - BW / 2 + 58 * S - 46 * S * Math.sin(.32), hy = BY + btn.dy - BH / 2 + 4 * S - 46 * S * Math.cos(.32);
+      const cs = ["#ff5c8a", "#ffd23f", "#7ee0ff", "#7fdc8f", "#f4f1ea", "#b48cff"];
+      for (let i = 0; i < 64; i++) { const a = -Math.PI / 2 + (Math.random() - .5) * 2.4, v = (170 + Math.random() * 240) * S;
+        parts.push({ k: "conf", x: hx, y: hy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: Math.random() * 6, vr: (Math.random() - .5) * 14, t0: at, life: 2.4 + Math.random() * .8, s: (3 + Math.random() * 2.5) * S, c: cs[i % cs.length] }); }
+      sfx.popper(); }
+    if (!said && now - doneT > 1.05) { said = true; ev("speech"); }
+  } else { btnHat = popped = said = false; }
+
+  // button physics: spring to its spot, squash spring, panic level
+  const b = btn;
+  if (!frozen) {
+    b.vx += (-b.k * (b.dx - b.tdx) - 2 * Math.sqrt(b.k) * .75 * b.vx) * dt; b.dx += b.vx * dt;
+    b.vy += (-b.k * (b.dy - b.tdy) - 2 * Math.sqrt(b.k) * .75 * b.vy) * dt; b.dy += b.vy * dt;
+    b.sqv += (-380 * b.sq - 11 * b.sqv) * dt; b.sq += b.sqv * dt;
+    b.press += ((mode === "deploy" || mode === "stall" ? .5 : 0) - b.press) * Math.min(1, dt * 10);
+  }
+  if (mode === "idle") {
+    let target = .3;
+    if (hov) { const d = Math.hypot(Math.max(0, Math.abs(hov.x - BX - b.dx) - BW / 2), Math.max(0, Math.abs(hov.y - BY - b.dy) - BH / 2));
+      target = Math.max(target, clamp(1.5 - d / (160 * S), 0, 1.4)); if (d < 26 * S) dodge(hov.x); }
+    b.panic += (target - b.panic) * Math.min(1, dt * 6);
+    if (Math.random() < (b.panic - .25) * .18) sweat(BX + b.dx + (Math.random() < .5 ? -1 : 1) * BW * (.3 + Math.random() * .15), BY + b.dy - BH * .42, 1, 1.2);
+  } else b.panic += ((mode === "confirm" ? 1 : .3) - b.panic) * Math.min(1, dt * 4);
+  if (!frozen) {
+    const lt = mode === "confirm" && dlgs.length ? { x: dlgBox(dlgs[dlgs.length - 1].i).cx, y: TOP } : hov || { x: BX, y: BY + 100 };
+    lookAt(b, BX + b.dx - BW / 2 + 44 * S, BY + b.dy, lt.x, lt.y, dt);
+    lookAt(mug, MX, MY - 37 * S, mode === "deploy" ? RX : BX + b.dx, mode === "deploy" ? RY - 60 * S : BY + b.dy, dt);
+  }
+
+  // draw
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const shake = heat > .2 ? heat * 2.2 * S : 0;
+  ctx.save(); ctx.translate(Math.sin(at * 71) * shake, Math.cos(at * 57) * shake * .6);
+  drawStageBg(); drawRack(); drawMug(); drawButton(dt);
+  ctx.restore();
+  drawPanel();
+  drawParts(dtA);
+  if (heat > .2) { const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .75);
+    g.addColorStop(0, "rgba(255,40,20,0)"); g.addColorStop(1, `rgba(255,40,20,${.28 * heat * (.6 + .4 * Math.sin(at * 12))})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  drawDialogs(); drawToast(); drawSpeech(); drawBar(); drawCursor();
+  requestAnimationFrame(frame);
+}
+let btnHat = false, popped = false, said = false;
+resize(); boot();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
