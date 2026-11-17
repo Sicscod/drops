@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Heart Wi-Fi</title>
+<meta name="description" content="A Wi-Fi list full of funny networks and one that glows pink: Delly ♥. Guess the password, the bars turn into a filling heart. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#141015}
+canvas{position:fixed;left:0;top:0;width:100%;height:calc(100% - 30px);display:block}
+#pw{position:fixed;left:-999px;top:0;width:10px;height:10px;opacity:0;border:0;padding:0;font-size:16px;background:transparent;color:transparent;caret-color:transparent;outline:none}
+.credit{position:fixed;left:0;right:0;bottom:0;height:30px;display:flex;align-items:center;justify-content:center;font:400 11.5px "Geist Mono",ui-monospace,monospace;letter-spacing:.02em;color:#6f636c}
+.credit a{color:#a3949e;text-decoration:none}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<input id="pw" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="join" aria-label="password">
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:400 20px Geist">a</span><span class="pre" style="font:500 20px Geist">a</span><span class="pre" style="font:600 20px Geist">a</span><span class="pre" style="font:400 20px 'Geist Mono'">a</span><span class="pre" style="font:500 20px 'Geist Mono'">a</span><span class="pre" style="font:italic 400 20px 'Instrument Serif'">a</span>
+<script>
+// ===== Heart Wi-Fi · free code by @sicscod.drops =====
+// Try: yoursite/?name=Delly&pass=%E2%99%A5&msg=auto-join%3A%20on.%20forever.&hue=340
+const P = new URLSearchParams(location.search);
+const hueP = parseFloat(P.get("hue"));
+const CONFIG = {
+  name: (P.get("name") || "Delly").slice(0, 16),                 // whose Wi-Fi glows pink
+  pass: (P.get("pass") || "♥").slice(0, 16),                      // the secret password (shown as the hint)
+  msg: (P.get("msg") || "auto-join: on. forever.").slice(0, 48),  // last line on the final card
+  hue: isFinite(hueP) ? ((hueP % 360) + 360) % 360 : 340,          // 340 pink, 0 red, 280 purple, 200 blue
+  // the Wi-Fi list, top to bottom. at = seconds after opening when it shows up, bars = 1..3
+  // {name} becomes the name. love: true marks the one you have to connect to
+  networks: [
+    { name: "{name} ♥", bars: 3, lock: true, at: 0.03, love: true },
+    { name: "FBI van #4", bars: 3, lock: true, at: 0 },
+    { name: "your wifi is slow lol", bars: 2, lock: true, at: 0.42 },
+    { name: "no free wifi", bars: 2, lock: true, at: 0 },
+    { name: "404 network not found", bars: 1, lock: false, at: 1.0 },
+    { name: "mom use the other one", bars: 2, lock: true, at: 1.28 },
+    { name: "my ex's hotspot (weak)", bars: 1, lock: false, at: 0.7, flicker: true },
+  ],
+  guesses: ["password123", "admin"],                               // the suggestion chips (the real password is added last)
+  wrong: ["wrong. try what you feel.", "nope. even softer.", "think less. feel more."],
+  also: ["you", "<3", "love"],                                     // other answers that also work
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d"), pw = document.getElementById("pw");
+const T0 = performance.now();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.2 * Math.pow(x - 1, 3) + 1.2 * Math.pow(x - 1, 2));
+const outCub = x => (x = clamp(x, 0, 1), 1 - Math.pow(1 - x, 3));
+const inOut = x => (x = clamp(x, 0, 1), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const H = (l, s = 85, a = 1, dh = 0) => `hsla(${CONFIG.hue + dh},${s}%,${l}%,${a})`;
+const nm = s => s.replace(/\{name\}/g, CONFIG.name);
+const norm = s => s.replace(/️/g, "").trim().toLowerCase();
+const C = { bg: "#141015", tile: "#1f1820", tile2: "#271e29", line: "rgba(255,255,255,.07)", text: "#f5ecef", mute: "#8e8089", dim: "#574c55", red: "#ff6b6b" };
+const F = { ui: (w, s) => `${w} ${s}px Geist, system-ui, sans-serif`, mono: (w, s) => `${w} ${s}px "Geist Mono", ui-monospace, monospace`, serif: s => `italic 400 ${s}px "Instrument Serif", Georgia, serif` };
+
+const CH = 540, ROW0 = 104, PITCH = 52, ROWH = 46, SHEET_Y = 280;
+let W = 0, Hh = 0, DPR = 1, S = 1, OX = 0, OY = 0, DW = 400, L = 14, R = 386;
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; Hh = Math.max(240, innerHeight - 30);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(Hh * DPR);
+  S = Math.min(Hh / CH, W / 360, 1.45); DW = Math.min(W / S, 460); L = 14; R = DW - 14;
+  OX = (W - DW * S) / 2; OY = (Hh - CH * S) / 2;
+}
+addEventListener("resize", resize);
+const toU = (x, y) => ({ x: (x - OX) / S, y: (y - OY) / S });
+const inR = (p, r) => p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
+
+// ---------- drawing helpers ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+// heart outline as points (unit size: ~1.32 wide, ~1.2 tall, centred)
+function heartPt(t) { const x = 16 * Math.sin(t) ** 3, y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t); return [x / 16 * .66, -(y + 2.5) / 14.5 * .6]; }
+function heartPath(g, cx, cy, s) { g.beginPath(); for (let i = 0; i <= 48; i++) { const [x, y] = heartPt(i / 48 * Math.PI * 2); i ? g.lineTo(cx + x * s, cy + y * s) : g.moveTo(cx + x * s, cy + y * s); } g.closePath(); }
+function heart(g, cx, cy, s, col) { heartPath(g, cx, cy, s); g.fillStyle = col; g.fill(); }
+// text where every ♥ is drawn as a real heart (fonts draw ♥ very differently)
+function measure(str, font, fs) { ctx.font = font; return str.split("♥").reduce((w, p, i) => w + ctx.measureText(p).width + (i ? fs * .78 : 0), 0); }
+function text(str, x, y, font, fs, col, align = "left", hcol) {
+  const w = measure(str, font, fs); let cx = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
+  ctx.fillStyle = col; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  str.split("♥").forEach((p, i) => {
+    if (i) { heart(ctx, cx + fs * .39, y - fs * .33, fs * .56, hcol || col); cx += fs * .78; ctx.fillStyle = col; }
+    ctx.fillText(p, cx, y); cx += ctx.measureText(p).width;
+  });
+  return w;
+}
+// Wi-Fi icon: 3 arcs + dot, centre (cx, cy), radius r, `on` bars lit
+function wifi(cx, cy, r, on, col, off) {
+  const by = cy + r * .45; ctx.lineCap = "round"; ctx.lineWidth = r * .19;
+  [.36, .68, 1].forEach((k, i) => {
+    ctx.strokeStyle = i < on ? col : off; ctx.beginPath(); ctx.arc(cx, by, r * k, -Math.PI * .75, -Math.PI * .25); ctx.stroke();
+  });
+  ctx.fillStyle = on > 0 ? col : off; ctx.beginPath(); ctx.arc(cx, by, r * .11, 0, Math.PI * 2); ctx.fill();
+}
+function lock(x, y, s, col) {
+  ctx.strokeStyle = col; ctx.lineWidth = s * .16; ctx.beginPath(); ctx.arc(x, y - s * .12, s * .3, Math.PI, 0); ctx.lineTo(x + s * .3, y + s * .05); ctx.moveTo(x - s * .3, y - s * .12); ctx.lineTo(x - s * .3, y + s * .05); ctx.stroke();
+  ctx.fillStyle = col; rr(x - s * .46, y, s * .92, s * .66, s * .14); ctx.fill();
+}
+
+// ---------- sound (tiny Web Audio blips, starts after the first tap) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } }
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur + .02);
+}
+const sfx = {
+  tap() { tone("sine", 900, 600, .06, .08); },
+  tick() { tone("square", 2400 + Math.random() * 500, 1800, .025, .02); },
+  nope() { tone("square", 150, 110, .22, .07); tone("square", 156, 115, .22, .05, .02); },
+  yes() { [659, 831, 988, 1319].forEach((f, i) => tone("triangle", f, f, .35, .09, i * .07)); },
+  fill() { tone("sine", 300, 900, 1.1, .05); },
+  full() { tone("sine", 200, 70, .25, .25); [1568, 2093, 2637].forEach((f, i) => tone("triangle", f, f, .3, .05, .06 + i * .05)); },
+};
+const EV = window.__ev = [];                         // event log (the video renderer reads it to sync the music)
+const ev = k => EV.push([k, +now.toFixed(3)]);
+
+// ---------- state ----------
+const NETS = CONFIG.networks.map((n, i) => ({ ...n, name: nm(n.name), i, y: 0, vis: false, shown: 0, fall: null }));
+const LOVE = NETS.find(n => n.love) || NETS[0];
+const CHIPS = [...CONFIG.guesses, CONFIG.pass];
+let now = 0, last = 0, phase = "list", openT = -1, closeT = -1, typed = "", typeQ = null, wrongT = -1, wrongN = 0;
+let clearAt = -1, okT = -1, rowNope = { n: null, t: -9 }, focus = false, beatT = -9, parts = [], floaters = [], floatAcc = 0;
+// connect timeline (seconds after the password is accepted)
+const K = { close: .3, fall: .38, fly: .42, morph: .9, fill: 1.3, full: 2.35, card: 2.5 };
+let fired = {};
+
+function rowRect(n) { return { x: L, y: n.y, w: R - L, h: ROWH }; }
+function sheetY() {
+  if (openT < 0) return 999;
+  const o = outCub((now - openT) / .38);
+  const c = closeT >= 0 ? inOut((now - closeT) / .34) : 0;
+  return SHEET_Y + (1 - o) * 280 + c * 300;
+}
+const sheetOpen = () => openT >= 0 && closeT < 0;
+function chipRects() {
+  const y = SHEET_Y + 160; let x = L; return CHIPS.map(c => { const w = measure(c, F.mono(500, 14), 14) + 28, r = { x, y, w, h: 34, c }; x += w + 8; return r; });
+}
+const FIELD = () => ({ x: L, y: SHEET_Y + 78, w: R - L, h: 46 });
+const JOIN = () => ({ x: R - 112, y: SHEET_Y + 210, w: 112, h: 40 });
+const CANCEL = () => ({ x: L - 6, y: SHEET_Y + 210, w: 90, h: 40 });
+const HEART_C = () => ({ x: DW / 2, y: 252 });
+
+function typeText(str) { clearAt = -1; typeQ = { str, t: now, n: 0 }; typed = ""; pw.value = ""; }
+function join() {
+  if (!sheetOpen() || okT >= 0) return;
+  if (typeQ) { typed = typeQ.str; typeQ = null; }
+  const ans = norm(typed), good = [CONFIG.pass, ...CONFIG.also].map(norm);
+  if (ans && good.includes(ans)) { okT = now; sfx.yes(); ev("accept"); pw.blur(); return; }
+  wrongT = now; wrongN++; clearAt = now + .55; sfx.nope(); ev("wrong");
+}
+
+// ---------- input ----------
+addEventListener("pointerdown", e => {
+  audio(); const u = toU(e.clientX, e.clientY);
+  if (phase === "list" && !sheetOpen()) {
+    const hit = NETS.find(n => n.vis && !n.fall && inR(u, rowRect(n)));
+    if (hit === LOVE) { openT = now; closeT = -1; typed = ""; pw.value = ""; wrongT = -1; sfx.tap(); ev("open"); }
+    else if (hit) { rowNope = { n: hit, t: now }; sfx.nope(); }
+    return;
+  }
+  if (sheetOpen() && okT < 0) {
+    const c = chipRects().find(r => inR(u, r));
+    if (c) { typeText(c.c); sfx.tap(); ev("chip"); e.preventDefault(); return; }
+    if (inR(u, JOIN())) { sfx.tap(); ev("join"); join(); e.preventDefault(); return; }
+    if (inR(u, CANCEL())) { closeT = now; pw.blur(); sfx.tap(); return; }
+    if (inR(u, FIELD())) { focus = true; typeQ = null; pw.value = typed; pw.focus({ preventScroll: true }); return; }
+    if (u.y < sheetY() - 10) { closeT = now; pw.blur(); }
+    return;
+  }
+  if (phase === "done") { const h = HEART_C(); if (Math.hypot(u.x - h.x, u.y - h.y) < 90) { beatT = now; burst(18); sfx.full(); ev("beat"); } }
+});
+pw.addEventListener("input", () => { clearAt = -1; typed = pw.value.slice(0, 20); pw.value = typed; typeQ = null; sfx.tick(); });
+pw.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); join(); } });
+pw.addEventListener("blur", () => { focus = false; });
+
+// ---------- particles ----------
+function burst(n) {
+  const h = HEART_C();
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 90 + Math.random() * 220; parts.push({ x: h.x, y: h.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, t: now, life: .8 + Math.random() * .6, s: 3 + Math.random() * 5, h: Math.random() < .55 }); }
+}
+function drawParts(dt) {
+  parts = parts.filter(p => now - p.t < p.life);
+  for (const p of parts) {
+    p.vx *= Math.exp(-dt * 2.2); p.vy = p.vy * Math.exp(-dt * 2.2) + 140 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    const k = 1 - (now - p.t) / p.life; ctx.globalAlpha = Math.min(1, k * 1.6);
+    if (p.h) heart(ctx, p.x, p.y, p.s * 1.4, H(70, 95)); else { ctx.fillStyle = "#fff6f9"; ctx.beginPath(); ctx.arc(p.x, p.y, p.s * .32, 0, 7); ctx.fill(); }
+  }
+  ctx.globalAlpha = 1;
+}
+function drawFloaters(dt, on) {
+  if (on) { floatAcc += dt * 7; while (floatAcc > 1) { floatAcc--; floaters.push({ x: 20 + Math.random() * (DW - 40), y: CH + 10, s: 5 + Math.random() * 7, v: 40 + Math.random() * 45, ph: Math.random() * 6, t: now }); } }
+  floaters = floaters.filter(f => f.y > -20);
+  for (const f of floaters) {
+    f.y -= f.v * dt; const a = Math.min(1, (now - f.t) * 2) * clamp((f.y - 20) / 160, 0, 1) * .55;
+    ctx.globalAlpha = a; heart(ctx, f.x + Math.sin(now * 2 + f.ph) * 8, f.y, f.s, H(66, 90));
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- scene ----------
+function drawHeader(e) {
+  ctx.textBaseline = "alphabetic";
+  text("Wi-Fi", L + 2, 44, F.ui(600, 32), 32, C.text);
+  // toggle (always on, it's a love story)
+  const tx = R - 52, ty = 18; rr(tx, ty, 52, 30, 15); ctx.fillStyle = H(60, 85); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(tx + 37, ty + 15, 12, 0, 7); ctx.fill();
+  const sub = okT >= 0 && now - okT > K.full ? "connected · strong forever" : okT >= 0 ? "connecting…" : "scanning for networks" + ".".repeat(1 + Math.floor(now * 3) % 3);
+  text(sub, L + 2, 67, F.mono(400, 12), 12, okT >= 0 && now - okT > K.full ? H(72, 80) : C.mute);
+  // section label + spinner
+  const lab = 1 - sm((now - okT - K.fall) / .3) * (okT >= 0 ? 1 : 0);
+  ctx.globalAlpha = lab; text("NEARBY NETWORKS", L + 2, 94, F.mono(500, 10.5), 10.5, C.dim);
+  if (okT < 0) { ctx.strokeStyle = C.mute; ctx.lineWidth = 1.6; ctx.lineCap = "round"; ctx.beginPath(); ctx.arc(R - 7, 90, 5.5, now * 7, now * 7 + 4.2); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+}
+function drawRow(n, dt) {
+  const e = now - n.shown, pop = outBack(e / .32), love = n === LOVE;
+  const conn = okT >= 0 && love;
+  let x = 0, rot = 0, a = sm(e / .18);
+  if (n.fall) { const f = now - n.fall.t; if (f > 0) { n.fall.vy += 2600 * dt; n.fall.y += n.fall.vy * dt; x = n.fall.vx * f; rot = n.fall.r * f; a *= clamp(1 - (n.fall.y - 60) / 200, 0, 1); } }
+  if (a <= 0) return;
+  if (rowNope.n === n) x += Math.sin((now - rowNope.t) * 48) * 6 * Math.exp(-(now - rowNope.t) * 7);
+  const r = rowRect(n), cy = r.y + (n.fall ? n.fall.y : 0) + ROWH / 2, cx = (L + R) / 2 + x;
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(cx, cy); ctx.rotate(rot); const sc = .9 + .1 * pop; ctx.scale(sc, sc); ctx.translate(-cx, -cy);
+  const y = cy - ROWH / 2;
+  if (love) {                                              // the pink one
+    const pulse = .5 + .5 * Math.sin(now * 4.2);
+    ctx.shadowColor = H(60, 90, .55 + .3 * pulse); ctx.shadowBlur = 18 + 10 * pulse;
+    rr(L + x, y, R - L, ROWH, 14); ctx.fillStyle = H(22, 45); ctx.fill(); ctx.shadowBlur = 0;
+    const g = ctx.createLinearGradient(L, 0, R, 0); g.addColorStop(0, H(60, 85, .26)); g.addColorStop(1, H(60, 85, .06));
+    ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = H(68, 90, .55 + .35 * pulse); ctx.lineWidth = 1.2; ctx.stroke();
+    if (e < .7) { const k = e / .7; rr(L + x - k * 10, y - k * 10, R - L + k * 20, ROWH + k * 20, 14 + k * 10); ctx.strokeStyle = H(70, 90, (1 - k) * .7); ctx.lineWidth = 2; ctx.stroke(); }
+  } else { rr(L + x, y, R - L, ROWH, 14); ctx.fillStyle = C.tile; ctx.fill(); ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.stroke(); }
+  // icon
+  let bars = n.bars; if (n.flicker) bars = Math.sin(now * 17) + Math.sin(now * 5.3) > .9 ? 0 : 1;
+  const ic = love ? H(72, 92) : C.text, off = love ? H(70, 60, .25) : "rgba(255,255,255,.13)";
+  if (!(conn && now - okT > K.fly)) wifi(L + x + 25, y + 22, 13, bars, ic, off);
+  else { heart(ctx, L + x + 25, y + 23, 22, H(66, 92)); }
+  // name + sub line
+  const name = n.name;
+  if (love) {
+    text(name, L + x + 50, y + 22, F.ui(600, 16), 16, H(86, 90));
+    const s = conn ? (now - okT > K.full ? "connected · signal: strong forever" : "connecting…") : "secured · strongest signal nearby";
+    text(s, L + x + 50, y + 37, F.mono(400, 10.5), 10.5, H(76, 60, .85));
+  } else text(name, L + x + 50, y + 29, F.ui(500, 15.5), 15.5, n.flicker ? C.mute : C.text);
+  // right side
+  if (conn && now - okT > K.full) {
+    ctx.strokeStyle = H(78, 90); ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(R + x - 30, y + 23); ctx.lineTo(R + x - 25, y + 28); ctx.lineTo(R + x - 16, y + 18); ctx.stroke();
+  } else if (n.lock) lock(R + x - 22, y + 19, 13, love ? H(78, 90) : C.mute);
+  else text("open", R + x - 14, y + 28, F.mono(400, 10.5), 10.5, C.dim, "right");
+  if (rowNope.n === n && now - rowNope.t < 1.3) {
+    const k = Math.min(1, (now - rowNope.t) * 8) * Math.min(1, (1.3 - (now - rowNope.t)) * 5);
+    ctx.globalAlpha = a * k; text("not that one.", R + x - (n.lock ? 40 : 54), y + 29, F.mono(500, 11), 11, H(74, 80), "right");
+  }
+  ctx.restore();
+}
+function drawSheet() {
+  const y0 = sheetY(); if (y0 > CH + 40) return;
+  const dy = y0 - SHEET_Y, o = sm((now - openT) / .3) * (closeT >= 0 ? 1 - sm((now - closeT) / .3) : 1);
+  ctx.fillStyle = `rgba(8,5,9,${.55 * o})`; ctx.fillRect(-OX / S - 2, -OY / S - 2, W / S + 4, Hh / S + 4);
+  ctx.save(); ctx.translate(0, dy);
+  const bot = (Hh - OY) / S + 4;
+  rr(-2, SHEET_Y, DW + 4, bot - SHEET_Y + 30, 24); ctx.fillStyle = C.tile2; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.lineWidth = 1; ctx.stroke();
+  rr(DW / 2 - 18, SHEET_Y + 9, 36, 4, 2); ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fill();
+  const Y = SHEET_Y;
+  text("PASSWORD FOR", L + 2, Y + 36, F.mono(500, 10.5), 10.5, C.mute);
+  text(LOVE.name, L + 2, Y + 62, F.ui(600, 21), 21, C.text, "left", H(66, 92));
+  // field
+  const ok = okT >= 0, we = wrongT >= 0 ? now - wrongT : 9;
+  const sx = Math.sin(we * 52) * 9 * Math.exp(-we * 6);
+  const f = FIELD(); f.x += sx;
+  rr(f.x, f.y, f.w, f.h, 12); ctx.fillStyle = "#150f17"; ctx.fill();
+  ctx.strokeStyle = ok ? H(66, 90) : we < .9 ? `rgba(255,107,107,${.9 - we})` : focus || typeQ ? H(66, 80, .6) : "rgba(255,255,255,.1)"; ctx.lineWidth = ok || we < .9 ? 1.6 : 1.2; ctx.stroke();
+  if (ok) { ctx.fillStyle = H(60, 85, .12 * (1 - sm((now - okT) / .6)) + .06); ctx.fill(); }
+  ctx.save(); rr(f.x, f.y, f.w, f.h, 12); ctx.clip();
+  const showErr = we < .55 && !typeQ;                   // wrong text stays a moment, then clears
+  let tw = 0;
+  if (typed) tw = text(typed, f.x + 16, f.y + 29, F.mono(500, 17), 17, ok ? H(80, 90) : showErr ? C.red : C.text, "left", H(66, 92));
+  else text("password", f.x + 16, f.y + 29, F.mono(400, 17), 17, C.dim);
+  if ((focus || typeQ) && !ok && Math.floor(now * 2.2) % 2 === 0) { ctx.fillStyle = H(70, 90); ctx.fillRect(f.x + 17 + tw, f.y + 13, 2, 20); }
+  if (ok) {                                               // check
+    const k = sm((now - okT) / .25); ctx.strokeStyle = H(74, 92); ctx.lineWidth = 2.6; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(f.x + f.w - 34, f.y + 23); ctx.lineTo(f.x + f.w - 34 + 6 * Math.min(1, k * 2), f.y + 23 + 6 * Math.min(1, k * 2));
+    if (k > .5) ctx.lineTo(f.x + f.w - 28 + 11 * (k - .5) * 2, f.y + 29 - 12 * (k - .5) * 2); ctx.stroke();
+  }
+  ctx.restore();
+  // status line
+  if (ok) text("accepted ♥", L + 2, Y + 146, F.mono(500, 12.5), 12.5, H(76, 90));
+  else if (wrongT >= 0) { const k = sm(we / .15); ctx.globalAlpha = k; text(CONFIG.wrong[(wrongN - 1) % CONFIG.wrong.length], L + 2 + (1 - k) * 6, Y + 146, F.mono(500, 12.5), 12.5, C.red); ctx.globalAlpha = 1; text("hint: " + CONFIG.pass, R, Y + 146, F.mono(400, 12), 12, C.mute, "right", H(66, 92)); }
+  else text("hint: " + CONFIG.pass, L + 2, Y + 146, F.mono(400, 12.5), 12.5, C.mute, "left", H(66, 92));
+  // suggestion chips
+  for (const c of chipRects()) {
+    const isPass = c.c === CONFIG.pass, used = !isPass && wrongN > 0 && CONFIG.guesses.indexOf(c.c) < wrongN;
+    rr(c.x, c.y, c.w, c.h, 17); ctx.fillStyle = isPass && wrongN ? H(60, 85, .2 + .1 * Math.sin(now * 6)) : "rgba(255,255,255,.06)"; ctx.fill();
+    ctx.strokeStyle = isPass && wrongN ? H(66, 90, .8) : "rgba(255,255,255,.1)"; ctx.lineWidth = 1; ctx.stroke();
+    text(c.c, c.x + 14, c.y + 22, F.mono(500, 14), 14, used ? C.dim : isPass ? H(84, 90) : C.text, "left", H(66, 92));
+    if (used) { ctx.strokeStyle = C.dim; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(c.x + 12, c.y + 17.5); ctx.lineTo(c.x + c.w - 12, c.y + 17.5); ctx.stroke(); }
+  }
+  // buttons
+  text("Cancel", L + 4, Y + 236, F.ui(500, 16), 16, C.mute);
+  const j = JOIN(); rr(j.x, j.y, j.w, j.h, 20); ctx.fillStyle = H(60, 85); ctx.fill();
+  text("Join", j.x + j.w / 2, j.y + 26, F.ui(600, 16), 16, "#fff", "center");
+  ctx.restore();
+}
+// the flying Wi-Fi icon that becomes a heart and fills up
+function drawHero() {
+  if (okT < 0) return; const e = now - okT; if (e < K.fly) return;
+  const row = rowRect(LOVE), from = { x: L + 25, y: row.y + 22 }, to = HEART_C();
+  const fk = inOut((e - K.fly) / .48), cx = from.x + (to.x - from.x) * fk, cy = from.y + (to.y - from.y) * fk - Math.sin(fk * Math.PI) * 30;
+  const sc = 13 + (112 - 13) * fk;
+  const mk = inOut((e - K.morph) / .42), ck = inOut((e - K.morph - .3) / .3);   // morph, then the 3 hearts merge
+  const beat = 1 + .06 * Math.exp(-((now - beatT) * 6)) * Math.sin((now - beatT) * 20) + (e > K.full ? .035 * Math.max(0, Math.sin((now - okT - K.full) * 7.5)) ** 8 : 0);
+  const fullK = sm((e - K.full) / .4);
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(beat, beat); ctx.translate(-cx, -cy);
+  if (e > K.full - .2) { ctx.shadowColor = H(60, 90, .7); ctx.shadowBlur = 40 * fullK; }
+  // fill
+  const lv = inOut((e - K.fill) / (K.full - K.fill));
+  if (e > K.fill) {
+    heartPath(ctx, cx, cy, sc); ctx.save(); ctx.clip();
+    const top = cy + sc * .62 - lv * sc * 1.3, g = ctx.createLinearGradient(0, cy - sc * .6, 0, cy + sc * .6);
+    g.addColorStop(0, H(72, 92)); g.addColorStop(1, H(52, 82));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(cx - sc, cy + sc);
+    for (let x = -1; x <= 1.001; x += .05) ctx.lineTo(cx + x * sc, top + Math.sin(x * 7 + now * 9) * 4 * (1 - fullK) + Math.sin(x * 3 - now * 5) * 3 * (1 - fullK));
+    ctx.lineTo(cx + sc, cy + sc); ctx.closePath(); ctx.fill();
+    ctx.restore(); ctx.shadowBlur = 0;
+  }
+  // outline: three wifi arcs bending into hearts
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  [.36, .68, 1].forEach((k, i) => {
+    const hk = .52 + .24 * i, hs = hk + (1 - hk) * ck;     // concentric hearts, then merged
+    ctx.beginPath();
+    for (let j = 0; j <= 40; j++) {
+      const u = j / 40, a = -Math.PI * .75 + u * Math.PI * .5;
+      const ax = cx + Math.cos(a) * sc * k, ay = cy + sc * .45 + Math.sin(a) * sc * k;
+      const [hx, hy] = heartPt(Math.PI + u * Math.PI * 2);
+      const x = ax + (cx + hx * sc * hs - ax) * mk, y = ay + (cy + hy * sc * hs - ay) * mk;
+      j ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.strokeStyle = H(74, 92, i === 2 || ck < 1 ? 1 : 0); ctx.lineWidth = sc * (.18 - .11 * mk) * (i < 2 ? 1 - ck * .6 : 1); ctx.stroke();
+  });
+  if (mk < 1) { ctx.fillStyle = H(74, 92, 1 - mk); ctx.beginPath(); ctx.arc(cx, cy + sc * .45, sc * .11 * (1 - mk), 0, 7); ctx.fill(); }
+  ctx.shadowBlur = 0;
+  // signal %
+  if (e > K.fill - .1) {
+    const pct = Math.round(lv * 100), a = sm((e - K.fill + .1) / .2) * (1 - sm((e - K.card - .25) / .3));
+    if (a > 0) { ctx.globalAlpha = a; text(pct + "%", cx, cy + 4, F.mono(500, 24), 24, lv > .45 ? "#fff" : H(84, 90), "center"); text("signal", cx, cy + 22, F.mono(400, 10.5), 10.5, lv > .6 ? "rgba(255,255,255,.8)" : C.mute, "center"); ctx.globalAlpha = 1; }
+  }
+  ctx.restore();
+}
+function drawCard() {
+  const e = now - okT - K.card; if (okT < 0 || e < 0) return;
+  const k = outBack(e / .45), a = sm(e / .25), y = 340 + (1 - k) * 30;
+  ctx.globalAlpha = a; const x = L + 8, w = R - L - 16;
+  rr(x, y, w, 136, 20); ctx.fillStyle = C.tile; ctx.fill(); ctx.strokeStyle = H(66, 80, .35); ctx.lineWidth = 1; ctx.stroke();
+  text("CONNECTED TO", DW / 2, y + 30, F.mono(500, 10.5), 10.5, C.mute, "center");
+  text(CONFIG.name + " ♥", DW / 2, y + 72, F.serif(46), 46, C.text, "center", H(64, 92));
+  text("signal: 100% · strong forever", DW / 2, y + 98, F.mono(500, 12.5), 12.5, H(76, 88), "center");
+  text(CONFIG.msg, DW / 2, y + 120, F.ui(400, 13.5), 13.5, C.mute, "center");
+  ctx.globalAlpha = 1;
+}
+
+// ---------- loop ----------
+function frame(tms) {
+  now = (performance.now() - T0) / 1000; const dt = Math.min(.05, Math.max(0, now - last)); last = now;
+  // networks show up while scanning
+  for (const n of NETS) if (!n.vis && now >= n.at && okT < 0) { n.vis = true; n.shown = n.at ? now : now - 5; if (n.at) ev(n === LOVE ? "love" : "net"); }
+  let k = 0;
+  for (const n of NETS) if (n.vis) { const ty = ROW0 + k * PITCH; n.y = n.y ? n.y + (ty - n.y) * (1 - Math.exp(-dt * 16)) : ty; k++; }
+  if (clearAt >= 0 && now >= clearAt) { clearAt = -1; typed = ""; pw.value = ""; }
+  // typing
+  if (typeQ) { const n = Math.min(typeQ.str.length, Math.floor((now - typeQ.t) / .042) + 1); const arr = [...typeQ.str]; while (typeQ.n < Math.min(n, arr.length)) { typeQ.n++; sfx.tick(); ev("tick"); } typed = arr.slice(0, typeQ.n).join(""); if (typeQ.n >= arr.length) typeQ = null; }
+  // connect timeline
+  if (okT >= 0) {
+    const e = now - okT, once = (k, f) => { if (e >= K[k] && !fired[k]) { fired[k] = 1; f && f(); ev(k); } };
+    once("close", () => { closeT = now; });
+    once("fall", () => NETS.filter(n => n !== LOVE).forEach((n, i) => { n.fall = { t: now + .035 * i, vy: -160 - Math.random() * 90, vx: (Math.random() - .5) * 90, r: (Math.random() - .5) * 1.4, y: 0 }; }));
+    once("fly"); once("morph");
+    once("fill", () => sfx.fill());
+    once("full", () => { burst(40); sfx.full(); phase = "done"; });
+    once("card");
+  }
+  // input overlay follows the field
+  if (sheetOpen() && okT < 0) { const f = FIELD(); Object.assign(pw.style, { left: OX + f.x * S + "px", top: OY + f.y * S + "px", width: f.w * S + "px", height: f.h * S + "px" }); }
+  else if (pw.style.left !== "-999px") pw.style.left = "-999px";
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, Hh);
+  const glow = ctx.createRadialGradient(W / 2, OY + 120 * S, 10, W / 2, OY + 120 * S, Math.max(W, Hh) * .7);
+  glow.addColorStop(0, H(40, 60, okT >= 0 ? .16 + .08 * sm((now - okT - K.full) / .5) : .1)); glow.addColorStop(1, "rgba(20,16,21,0)");
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, Hh);
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, OX * DPR, OY * DPR);
+  drawFloaters(dt, phase === "done");
+  drawHeader();
+  for (const n of [...NETS].reverse()) if (n.vis && n !== LOVE) drawRow(n, dt);
+  if (LOVE.shown >= 0) drawRow(LOVE, dt);
+  drawSheet(); drawHero(); drawCard(); drawParts(dt);
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
