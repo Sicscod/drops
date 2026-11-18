@@ -1,0 +1,663 @@
+<!doctype html>
+<!--
+  Semicolon Hunt · drop 47 · free code by @sicscod.drops (MIT)
+  The build fails with "Expected ';'" because the semicolon ran away. It's alive, it has legs,
+  and it's knocking your code over. Tap / click to swat it. Three swats. It dodges the first two.
+  One HTML file, no libraries, everything drawn on a canvas from one requestAnimationFrame loop.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>semicolon hunt</title>
+<meta name="description" content="The missing semicolon is alive and running around your code. Swat it and snap it back into place. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@500;700&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#16161e;color:#c0caf5}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:none}
+.credit{position:fixed;left:0;right:0;bottom:0;height:26px;display:flex;align-items:center;justify-content:center;z-index:3;background:#0c0c11;border-top:1px solid #1d1e2a;font:400 10.5px "JetBrains Mono",ui-monospace,monospace;color:#5d6280}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:400 20px 'JetBrains Mono'">a</span><span class="pre" style="font:700 20px 'JetBrains Mono'">a</span><span class="pre" style="font:500 20px 'Space Grotesk'">a</span><span class="pre" style="font:700 20px 'Space Grotesk'">a</span>
+<script>
+// ===== Semicolon Hunt · free code by @sicscod.drops =====
+// Try: yoursite/?speed=1.5&hue=46   (?auto=1 plays the whole thing by itself)
+const P = new URLSearchParams(location.search);
+const num = (k, d) => P.get(k) !== null && P.get(k) !== "" && isFinite(+P.get(k)) ? +P.get(k) : d;
+const CONFIG = {
+  hue: num("hue", 46),                                   // the bug's colour, 0-360 (46 gold, 0 red, 200 blue)
+  speed: Math.max(.3, Math.min(3, num("speed", 1))),     // how fast it runs, 0.3-3
+  auto: P.get("auto") === "1",                           // a swatter plays it by itself
+  file: "app.js",
+  // the snippet. write it WITH all its semicolons: the one on line `missing` runs away
+  code: [
+    "// TODO: find the missing ;",
+    "const motto = \"works on my machine\";",
+    "function ship(feature) {",
+    "  const coffee = brew();",
+    "  if (feature.works) {",
+    "    deploy(feature, { env: \"prod\" });",
+    "  }",
+    "  let status = \"shipped\";",
+    "  return status;",
+    "}",
+  ],
+  missing: 8,                                            // line number (1-based) that loses its ';'
+  // where it hides. find = text in the code. paren: squeezes between ( and ), brace: perches on { or },
+  // string: dives into the string and peeks out
+  hide: [
+    { find: "brew()",   kind: "paren"  },
+    { find: "works) {", kind: "brace"  },
+    { find: "{ env",    kind: "brace"  },
+    { find: "\" }",     kind: "brace"  },
+    { find: "on my",    kind: "string" },
+  ],
+  dodges: 2,                                             // it always dodges the first N swats
+  quips: { miss: ["nope!", "too slow", "missed me", "lol", "again?"], hide: ["shh", "not here", "..."], caught: "eek!" },
+  error: "Expected ';'",
+  build: "npm run build",
+  success: "Build succeeded",
+  hint: "tap the bug to swat it",
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const F = { mono: '"JetBrains Mono", ui-monospace, monospace', ui: '"Space Grotesk", system-ui, sans-serif' };
+const C = { bg: "#16161e", bar: "#101017", line: "#1f2030", gut: "#3b3e56", text: "#c0caf5", kw: "#bb9af7", str: "#9ece6a", fn: "#7aa2f7",
+  com: "#565f89", punc: "#89ddff", prop: "#73daca", num: "#ff9e64", err: "#f7768e", ok: "#9ece6a", dim: "#5d6280" };
+const HUE = ((CONFIG.hue % 360) + 360) % 360;
+const BUG = `hsl(${HUE},96%,60%)`, BUGD = `hsl(${HUE},80%,38%)`, SWAT = `hsl(${(HUE + 140) % 360},62%,48%)`, SWATD = `hsl(${(HUE + 140) % 360},70%,28%)`;
+const N = CONFIG.code.length, ML = clamp(CONFIG.missing | 0, 1, N) - 1;
+const LINES = CONFIG.code.map((l, i) => i === ML ? l.replace(/;\s*$/, "") : l);
+const SLOT = LINES[ML].length;                        // the column where ';' belongs
+const MAXLEN = Math.max(...LINES.map(l => l.length), SLOT + 3 + CONFIG.error.length);
+let W = 0, H = 0, DPR = 1, S = 1, FOOT = 26, TABH = 36, PANH = 110, STH = 22, FS = 16, LH = 26, CW = 10, GUT = 40, CX0 = 0, CY0 = 0, U = 30, CODEB = 0;
+let SPOTS = [];
+const cx = c => CX0 + c * CW, lineTop = l => CY0 + l * LH, base = l => CY0 + l * LH + LH * .68;
+
+function colorize(s) {
+  const out = Array(s.length).fill(C.text); let i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (s.startsWith("//", i)) { for (; i < s.length; i++) out[i] = C.com; break; }
+    if (ch === '"' || ch === "'" || ch === "`") { let j = i + 1; while (j < s.length && s[j] !== ch) j++; for (let k = i; k <= j && k < s.length; k++) out[k] = C.str; i = j + 1; continue; }
+    if (/[A-Za-z_$]/.test(ch)) { let j = i; while (j < s.length && /[\w$]/.test(s[j])) j++; const w = s.slice(i, j);
+      const col = /^(const|let|var|function|return|if|else|for|while|new|await|async|true|false|null|import|export|from|class)$/.test(w) ? C.kw
+        : s[j] === "(" ? C.fn : s[i - 1] === "." || s[j] === ":" ? C.prop : C.text;
+      for (let k = i; k < j; k++) out[k] = col; i = j; continue; }
+    if (/\d/.test(ch)) out[i] = C.num; else if (/[{}()\[\];,.:=]/.test(ch)) out[i] = C.punc;
+    i++;
+  }
+  return out;
+}
+// every character is a little spring so the bug can knock it over
+const G = LINES.map(l => { const cols = colorize(l); return [...l].map((ch, k) => ({ ch, col: cols[k], x: 0, y: 0, r: 0, vx: 0, vy: 0, vr: 0, tx: 0, ty: 0, tr: 0, kn: false, back: -1 })); });
+
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  S = clamp(Math.min(W / 500, H / 560), .7, 1.4);
+  TABH = 36 * S; STH = 22 * S; PANH = clamp(H * .2, 100 * S, 150 * S);
+  CODEB = H - FOOT - PANH;
+  ctx.font = `400 100px ${F.mono}`; const ratio = ctx.measureText("M").width / 100;
+  const padX = 10 * S;
+  const fsW = (W - padX * 2) / ((MAXLEN + 1) * ratio + 2.4);
+  const fsH = (CODEB - TABH - 14 * S) / (N * 1.6);
+  FS = clamp(Math.min(fsW, fsH), 9, 24); LH = FS * 1.6; CW = FS * ratio; GUT = FS * 2.4;
+  CX0 = Math.max(padX, (W - GUT - (MAXLEN + 1) * CW) / 2) + GUT;
+  CY0 = TABH + Math.max(7 * S, (CODEB - TABH - N * LH) / 2);
+  U = LH * 2.0;
+  SPOTS = [];
+  for (const h of CONFIG.hide) {
+    for (let l = 0; l < N; l++) {
+      const i = LINES[l].indexOf(h.find); if (i < 0) continue;
+      if (h.kind === "paren") { const k = LINES[l].indexOf("(", i); if (k >= 0) SPOTS.push({ kind: "paren", l, k, c: k + 1, fo: .9, s: .56 }); }
+      else if (h.kind === "brace") { let k = i; while (k < i + h.find.length && !"{}".includes(LINES[l][k])) k++; if ("{}".includes(LINES[l][k])) SPOTS.push({ kind: "brace", l, k, c: k + .5, fo: .14, s: .84 }); }
+      else SPOTS.push({ kind: "string", l, k: i, c: i + h.find.length / 2, fo: 1.04, s: .8, k0: i - 3, k1: i + h.find.length + 3 });
+      break;
+    }
+  }
+}
+
+// ---------- state ----------
+let now = 0, last = 0, mode = "hunt", swats = 0, caughtT = -9, snapT = -99, carry = null, snapA = null, shakeT = -9, errors = 1, quip = null;
+const bug = { c: 0, l: 0, fo: .86, s: 1, air: 0, face: 1, phase: 0, mode: "idle", seg: null, spot: null, hs: null, h: 0, wait: 0, hideUntil: 0, hideT0: 0, look: { x: 0, y: 0 }, blink: 2 };
+const sw = { x: 0, y: 0, seen: false, active: false, windT: -9, impT: -9, pend: null };
+const dents = [], parts = [];
+let flags = {};
+const events = window.__events = [];
+const ev = name => events.push([name, +now.toFixed(3)]);
+
+// ---------- sound (Web Audio, starts on the first tap) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } }
+function tone(type, f0, f1, len, vol, delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len * .8);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .006); g.gain.exponentialRampToValueAtTime(.0006, t + len);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + len + .02);
+}
+function noise(len, vol, fc, q = 1, type = "bandpass") {
+  if (!AC) return; const n = AC.sampleRate * len | 0, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  f.type = type; f.frequency.value = fc; f.Q.value = q; g.gain.value = vol; s.buffer = b; s.connect(f).connect(g).connect(AC.destination); s.start();
+}
+let lastTick = 0;
+const sfx = {
+  tick() { if (now - lastTick < .03) return; lastTick = now; tone("square", rnd(2600, 3400), 2200, .018, .018); },
+  hop() { tone("triangle", 380, 900, .12, .07); },
+  whoosh() { noise(.14, .5, 1100, .8); },
+  thwack() { noise(.12, 1.1, 700, .6, "lowpass"); tone("sine", 170, 55, .16, .35); },
+  squeak() { tone("sine", 1500, 2700, .09, .12); tone("sine", 2600, 1700, .12, .1, .09); },
+  click() { tone("square", 1900, 1200, .025, .07); noise(.03, .4, 4000, 1, "highpass"); },
+  ding() { [1568, 1976, 2349, 3136].forEach((f, i) => tone("sine", f, f, 1.1, .1, i * .05)); },
+  wink() { tone("sine", 2400, 3600, .09, .05); },
+};
+
+// ---------- the bug: moving, hiding, knocking things over ----------
+const ground = (l, k) => ({ c: k + .5, l, fo: .86, s: 1 });
+const atSpot = sp => ({ c: sp.c, l: sp.l, fo: sp.fo, s: sp.s, spot: sp });
+const bugXY = () => ({ x: cx(bug.c), y: CY0 + (bug.l + bug.fo) * LH - bug.air });
+const bugCenter = () => { const p = bugXY(); return { x: p.x, y: p.y - U * bug.s * .48 }; };
+function go(to, style, dur) {
+  const b = bug, d = Math.hypot(to.c - b.c, (to.l - b.l) * 1.6);
+  b.seg = { t0: now, dur, c0: b.c, l0: b.l, fo0: b.fo, s0: b.s, c1: to.c, l1: to.l, fo1: to.fo, s1: to.s, style, h: LH * (.8 + .07 * d), spot: to.spot || null };
+  b.mode = "move"; b.spot = null;
+  if (style === "hop") { sfx.hop(); ev("hop"); } else ev("run");
+}
+function knock(l, k, dir, power) {
+  const c = G[l] && G[l][k]; if (!c || c.ch === " ") return;
+  if (c.kn && power < 1.2) return;
+  c.kn = true; c.back = -1;
+  c.tx = clamp(c.tx + (Math.random() - .5) * CW * .4 + dir * CW * .22 * power, -CW * 1.4, CW * 1.4);
+  c.ty = clamp(c.ty + (Math.random() < .55 ? -1 : .7) * rnd(.12, .32) * LH * power, -LH * .9, LH * .7);
+  c.tr = clamp(c.tr + (Math.random() - .5) * 1.1 * power, -1.4, 1.4);
+  c.vy -= 160 * S * power; c.vr += (Math.random() - .5) * 18 * power; c.vx += dir * 60 * S * power;
+  sfx.tick();
+}
+function knockRadius(x, y, r, power) {
+  for (let l = 0; l < N; l++) for (let k = 0; k < G[l].length; k++) {
+    const dx = cx(k + .5) - x, dy = lineTop(l) + LH * .45 - y, d = Math.hypot(dx, dy);
+    if (d < r) knock(l, k, Math.sign(dx) || 1, power * (1.3 - d / r * .6));
+  }
+}
+function land(s) {
+  const b = bug; b.air = 0;
+  if (s.spot) { b.mode = "hide"; b.spot = b.hs = s.spot; b.hideT0 = now; b.hideUntil = now + rnd(1.1, 2.3) / CONFIG.speed; ev("hide:" + s.spot.kind);
+    const hq = CONFIG.quips.hide; if (CONFIG.auto ? s.spot.kind === "string" : Math.random() < .35) say(hq[Math.random() * hq.length | 0], .8, .15); }
+  else { b.mode = "idle"; b.wait = now + rnd(.05, .35) / CONFIG.speed; }
+  if (s.style === "hop") { const li = Math.round(b.l), k = Math.floor(b.c);
+    if (!s.spot || s.spot.kind !== "string") for (const d of [-1, 0, 1]) knock(li, k + d, d || b.face, .8); }
+}
+function updateBug(dt) {
+  const b = bug;
+  if (b.mode === "move") {
+    const s = b.seg, u = clamp((now - s.t0) / s.dur, 0, 1), e = s.style === "hop" ? sm(u) : u;
+    b.c = lerp(s.c0, s.c1, e); b.l = lerp(s.l0, s.l1, e); b.fo = lerp(s.fo0, s.fo1, e); b.s = lerp(s.s0, s.s1, e);
+    b.air = s.style === "hop" ? Math.sin(Math.PI * u) * s.h : 0;
+    if (Math.abs(s.c1 - s.c0) > .01) b.face = Math.sign(s.c1 - s.c0);
+    b.phase += dt * (s.style === "run" ? 30 : 6);
+    if (s.style === "run") { const li = Math.round(b.l + b.fo - .86); for (let k = Math.floor(b.c - .6); k <= Math.floor(b.c + .6); k++) knock(li, k, b.face, .7); }
+    if (u >= 1) land(s);
+  } else if (b.mode === "idle" || b.mode === "hide") b.phase += dt * 2;
+  b.h = b.mode === "hide" ? Math.min(1, b.h + dt * 9) : Math.max(0, b.h - dt * 9);
+  if (b.h === 0 && b.mode !== "hide") b.hs = null;
+  b.blink -= dt; if (b.blink < -.12) b.blink = rnd(1.4, 3.2);
+  const c = bugCenter(), tx = sw.seen ? sw.x - c.x : b.face * 30, ty = sw.seen ? sw.y - c.y : 0, d = Math.hypot(tx, ty) || 1;
+  b.look.x += (tx / d - b.look.x) * Math.min(1, dt * 10); b.look.y += (ty / d - b.look.y) * Math.min(1, dt * 10);
+}
+// interactive brain: wander, flee the swatter, hide
+function think() {
+  if (CONFIG.auto || mode !== "hunt") return;
+  const b = bug, c = bugCenter(), near = sw.active && Math.hypot(sw.x - c.x, sw.y - c.y) < U * 2.8;
+  if ((b.mode === "idle" && now > b.wait) || (b.mode === "hide" && (now > b.hideUntil || (near && now > b.hideT0 + .45)))) pick(near);
+}
+function pick(near) {
+  const b = bug, sp = SPOTS.filter(s => s !== b.spot);
+  let to;
+  if (sp.length && Math.random() < (near ? .2 : .32)) to = atSpot(sp[Math.random() * sp.length | 0]);
+  else {
+    let best = null, bd = -1;
+    for (let i = 0; i < (near ? 9 : 1); i++) {
+      const l = clamp(Math.round(b.l + rnd(-3, 3)), 0, N - 1), len = Math.max(1, LINES[l].length), k = Math.floor(rnd(0, len));
+      const t = ground(l, k), d = near ? Math.hypot(cx(t.c) - sw.x, base(l) - sw.y) : 0;
+      if (d > bd) { bd = d; best = t; }
+    }
+    to = best;
+  }
+  const d = Math.hypot(to.c - b.c, (to.l - b.l) * 1.6);
+  if (d < .5) { b.wait = now + .2; return; }
+  const hop = Math.abs(to.l - b.l) > .5 && d < 9 || to.spot && d < 7;
+  go(to, hop ? "hop" : "run", hop ? .3 / Math.sqrt(CONFIG.speed) : Math.max(.18, d / (12 * CONFIG.speed)));
+}
+function dodge(x, y) {
+  let best = null, bd = -1;
+  for (let i = 0; i < 8; i++) {
+    const l = clamp(Math.round(bug.l + rnd(-2, 2)), 0, N - 1), k = clamp(Math.round(bug.c + rnd(-8, 8)), 0, Math.max(0, LINES[l].length - 1)), t = ground(l, k);
+    const d = Math.hypot(cx(t.c) - x, base(l) - y); if (d > bd) { bd = d; best = t; }
+  }
+  go(best, "hop", .26);
+}
+
+// ---------- swatting ----------
+function swat(x, y) {
+  audio();
+  if (mode === "done") { if (!CONFIG.auto && now - snapT > 1.4) reset(); return; }
+  if (mode !== "hunt" || sw.pend) return;
+  sw.x = x; sw.y = y; sw.seen = true; sw.windT = now; sw.pend = { x, y, t: now + .08 }; sfx.whoosh(); ev("swat");
+  const c = bugCenter();
+  if (!CONFIG.auto && swats < CONFIG.dodges && !(bug.mode === "move" && bug.seg.style === "hop") && Math.hypot(c.x - x, c.y - y) < U * 2.6) dodge(x, y);
+}
+function impact(x, y) {
+  swats++; sw.impT = now; shakeT = now;
+  const c = bugCenter(), airborne = bug.mode === "move" && bug.seg.style === "hop";
+  const lucky = !CONFIG.auto && swats <= CONFIG.dodges;   // it always dodges the first N
+  if (!airborne && !lucky && Math.hypot(c.x - x, c.y - y) < Math.max(U * .95, 30 * S)) {
+    mode = "caught"; caughtT = now; bug.mode = "caught"; bug.spot = null; bug.h = 0; bug.hs = null;
+    knockRadius(x, y, CW * 3.2, 1.5); sfx.thwack(); sfx.squeak(); say(CONFIG.quips.caught, .9, .12); ev("hit");
+    for (let i = 0; i < 14; i++) { const a = rnd(0, 6.3), v = rnd(80, 240) * S; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60 * S, t0: now, life: rnd(.3, .6), c: i % 2 ? "#fff" : BUG, s: rnd(1.5, 3) * S }); }
+  } else {
+    const seed = Math.random() * 100;
+    dents.push({ x, y, t0: now, seed, r: 24 * S });
+    knockRadius(x, y, CW * 2.6, 1.6); sfx.thwack(); ev("miss" + swats);
+    for (let i = 0; i < 10; i++) { const a = rnd(0, 6.3), v = rnd(60, 200) * S; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40 * S, t0: now, life: rnd(.25, .5), c: "#c0caf5", s: rnd(1.2, 2.4) * S }); }
+    const q = CONFIG.quips.miss; say(q[(swats - 1) % q.length], .85, .1);
+  }
+}
+function say(text, life = .9, delay = 0) { quip = { text, t0: now + delay, life }; }
+function slotXY() { return { x: cx(SLOT + .5), y: base(ML) + FS * .24 }; }
+function startCarry() {
+  mode = "carry"; const s = slotXY();
+  carry = { t0: now, dur: .63, x0: sw.x, y0: sw.y, x1: s.x, y1: s.y - U * .62 }; ev("carry");
+}
+function snapDone() {
+  mode = "done"; snapT = now; bug.mode = "placed"; sfx.click(); ev("snap"); flags = {};
+  const s = slotXY(); let rank = 0;
+  const kn = []; G.forEach((row, l) => row.forEach((c, k) => { if (c.kn) kn.push({ c, d: Math.hypot(cx(k) - s.x, lineTop(l) - s.y) }); }));
+  kn.sort((a, b) => a.d - b.d).forEach(o => { o.c.back = now + .08 + Math.min(.55, rank++ * .022); });
+  for (let i = 0; i < 18; i++) { const a = i / 18 * 6.283, v = 150 * S; parts.push({ x: s.x, y: s.y - FS * .3, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t0: now, life: .45, c: BUG, s: 2.2 * S }); }
+}
+function reset() {
+  mode = "hunt"; swats = 0; snapT = -99; caughtT = -9; carry = null; snapA = null; errors = 1; quip = null; flags = {};
+  dents.length = 0; parts.length = 0;
+  for (const row of G) for (const c of row) Object.assign(c, { x: 0, y: 0, r: 0, vx: 0, vy: 0, vr: 0, tx: 0, ty: 0, tr: 0, kn: false, back: -1 });
+  Object.assign(bug, { c: 4.5, l: Math.min(5, N - 1), fo: .86, s: 1, air: 0, mode: "idle", seg: null, spot: null, hs: null, h: 0, wait: 0 });
+  ev("reset");
+}
+
+// ---------- input ----------
+cv.addEventListener("pointerdown", e => { if (CONFIG.auto) return; sw.active = true; swat(e.clientX, e.clientY); });
+addEventListener("pointermove", e => { if (CONFIG.auto || mode === "carry" || mode === "caught" || sw.pend) return; if (e.pointerType === "mouse" || e.buttons) { sw.x = e.clientX; sw.y = e.clientY; sw.seen = sw.active = true; } });
+addEventListener("resize", resize);
+
+// ---------- ?auto=1: a scripted swatter plays the story (used for the video) ----------
+const spotC = (i, dy = 0, dx = 0) => () => { const s = SPOTS[i % SPOTS.length]; return { x: cx(s.c) + 4 * S + dx, y: CY0 + (s.l + s.fo) * LH - U * s.s * .48 + dy }; };
+const cellC = (l, c, dy = 0) => () => ({ x: cx(c), y: CY0 + (l + .86) * LH - U * .48 + dy });
+const BUG_AUTO = [   // [time, style, target, duration]
+  [0.00, "run", () => ground(5, 14), .47],
+  [0.47, "hop", () => atSpot(SPOTS[0]), .34],
+  [1.40, "hop", () => atSpot(SPOTS[1]), .26],
+  [1.72, "hop", () => atSpot(SPOTS[2]), .24],
+  [2.02, "hop", () => atSpot(SPOTS[3]), .24],
+  [2.29, "hop", () => ground(6, 5), .28],
+  [2.60, "hop", () => ground(3, 10), .30],
+  [2.94, "hop", () => atSpot(SPOTS[4]), .36],
+];
+const CUR_AUTO = [   // [time, "move", duration, target, from?] / [time, "click"]
+  [0.00, "move", .44, cellC(5, 14.5, -4), () => ({ x: W * .9, y: CODEB - 10 * S })],
+  [0.47, "click"],
+  [0.64, "move", .66, spotC(0, -U * .8, U * .9)],
+  [1.44, "move", .30, spotC(1, -U * .8, U * .8)],
+  [1.76, "move", .26, spotC(2, -U * .8, U * .8)],
+  [2.04, "move", .22, spotC(3, 0)],
+  [2.29, "click"],
+  [2.46, "move", .46, cellC(3, 13.5, -U * .9)],
+  [2.96, "move", .52, spotC(4, -U * 1.3, U * 1.5)],
+  [3.52, "move", .26, () => { const p = spotC(4, -U * 1.2)(); return { x: p.x - U * 1.4, y: p.y }; }],
+  [3.80, "move", .24, spotC(4, -2)],
+  [4.10, "click"],
+  [5.55, "move", .8, () => ({ x: W * .88, y: CY0 + LH * 7.6 })],
+];
+let autoT0 = 0, bi = 0, ci = 0, cseg = null;
+function runAuto() {
+  const t = now - autoT0;
+  while (bi < BUG_AUTO.length && t >= BUG_AUTO[bi][0] && mode === "hunt") { const a = BUG_AUTO[bi++]; go(a[2](), a[1], a[3]); }
+  while (ci < CUR_AUTO.length && t >= CUR_AUTO[ci][0]) {
+    const a = CUR_AUTO[ci++];
+    if (a[1] === "move") { const from = a[4] ? a[4]() : { x: sw.x, y: sw.y }; cseg = { t0: autoT0 + a[0], len: a[2], from, to: a[3](), first: !!a[4] }; sw.seen = true; }
+    else swat(sw.x, sw.y);
+  }
+  if (cseg && mode !== "carry" && !sw.pend) { const u = clamp((now - cseg.t0) / cseg.len, 0, 1), e = cseg.first ? 1 - (1 - u) * (1 - u) : sm(u), arc = Math.sin(u * Math.PI) * 12 * S;
+    sw.x = lerp(cseg.from.x, cseg.to.x, e); sw.y = lerp(cseg.from.y, cseg.to.y, e) - arc; }
+  if (mode === "done" && now - snapT > 3.9) { reset(); autoT0 = now; bi = ci = 0; cseg = null; }
+}
+
+// ---------- drawing ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+// the creature. (x,y) = feet, u = size. o: legs, eyes ("open", "squeeze", "dizzy", "wink"), squash, mouth
+function drawSemi(x, y, u, o = {}) {
+  const lw = Math.max(1.4, u * .05), sq = o.squash || 0, face = o.face || 1;
+  ctx.save(); ctx.translate(x, y); ctx.scale(1 + sq * .7, 1 - sq * .55);
+  ctx.lineJoin = ctx.lineCap = "round";
+  if (o.shadow) { ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(0, u * .04 + (o.air || 0), u * .3 * o.shadow, u * .06 * o.shadow, 0, 0, 7); ctx.fill(); }
+  // legs: two per side, scurrying
+  if (o.legs !== false) {
+    ctx.strokeStyle = BUGD; ctx.lineWidth = lw * 1.5;
+    for (let i = 0; i < 4; i++) {
+      const sd = i < 2 ? -1 : 1, j = i % 2, ph = (o.phase || 0) + i * Math.PI * .5 + j * Math.PI;
+      const run = o.run ? 1 : 0, lift = run * Math.max(0, Math.sin(ph)) * u * .09, swing = run * Math.cos(ph) * u * .06;
+      const dangle = o.dangle ? Math.sin((o.phase || 0) * 1.4 + i) * u * .05 : 0;
+      const hx = sd * u * (.1 + j * .05), hy = -u * (.24 - j * .05);
+      const fx = sd * u * (.3 + j * .08) + swing * face, fy = (o.dangle ? u * .1 + dangle : 0) - lift;
+      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo(sd * u * (.28 + j * .06), hy - u * .1, fx, fy); ctx.stroke();
+      ctx.fillStyle = BUG; ctx.beginPath(); ctx.ellipse(fx + sd * u * .025, fy, u * .045, u * .03, 0, 0, 7); ctx.fill();
+    }
+  }
+  // body = the comma
+  const by = -u * .3, r = u * .2;
+  ctx.beginPath(); ctx.arc(0, by, r, 0, Math.PI, true);
+  ctx.arc(0, by, r, Math.PI, Math.PI * 1.55, true);
+  ctx.quadraticCurveTo(-u * .02, by + r * 1.25, -u * .17, by + r * 2.05);
+  ctx.quadraticCurveTo(u * .2, by + r * 1.5, r, by);
+  ctx.closePath();
+  ctx.fillStyle = BUG; ctx.fill(); ctx.strokeStyle = "#0d0d12"; ctx.lineWidth = lw; ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = lw * .9; ctx.beginPath(); ctx.arc(-r * .15, by - r * .1, r * .62, Math.PI * 1.1, Math.PI * 1.5); ctx.stroke();
+  if (o.mouth) {
+    ctx.strokeStyle = "#0d0d12"; ctx.lineWidth = lw * .9; ctx.beginPath();
+    if (o.mouth === "o") { ctx.fillStyle = "#3a0d14"; ctx.ellipse(face * u * .04, by + r * .25, u * .045, u * .06, 0, 0, 7); ctx.fill(); ctx.stroke(); }
+    else { ctx.arc(face * u * .04, by + r * .05, u * .065, .25, Math.PI - .25); ctx.stroke(); }
+  }
+  // head = the dot, with eyes on it
+  const hy = -u * (.78 + (o.bob || 0)), hr = u * .165;
+  ctx.beginPath(); ctx.arc(0, hy, hr, 0, 7); ctx.fillStyle = BUG; ctx.fill(); ctx.strokeStyle = "#0d0d12"; ctx.lineWidth = lw; ctx.stroke();
+  const er = u * (o.bigEyes ? .1 : .085), lk = o.look || { x: 0, y: 0 }, eyes = o.eyes || "open";
+  for (const sd of [-1, 1]) {
+    const ex = sd * u * .085 + face * u * .025, ey = hy - u * .015;
+    if (eyes === "squeeze" || (eyes === "dizzy" && false)) {
+      ctx.strokeStyle = "#0d0d12"; ctx.lineWidth = lw * 1.1; ctx.beginPath(); ctx.moveTo(ex - sd * er * .8, ey - er * .7); ctx.lineTo(ex + sd * er * .4, ey); ctx.lineTo(ex - sd * er * .8, ey + er * .7); ctx.stroke(); continue;
+    }
+    if ((eyes === "wink" && sd === 1) || o.blink) {
+      ctx.strokeStyle = "#0d0d12"; ctx.lineWidth = lw * 1.1; ctx.beginPath(); ctx.arc(ex, ey - er * .1, er * .75, Math.PI * .15, Math.PI * .85); ctx.stroke(); continue;
+    }
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex, ey, er, 0, 7); ctx.fill(); ctx.strokeStyle = "#0d0d12"; ctx.lineWidth = lw * .9; ctx.stroke();
+    if (eyes === "dizzy") { ctx.strokeStyle = "#0d0d12"; ctx.lineWidth = lw * .7; ctx.beginPath();
+      for (let a = 0; a < 9; a += .3) { const rr2 = er * .75 * a / 9, aa = a + (o.phase || 0) * 2 * sd; ctx.lineTo(ex + Math.cos(aa) * rr2, ey + Math.sin(aa) * rr2); } ctx.stroke(); continue; }
+    ctx.fillStyle = "#0d0d12"; ctx.beginPath(); ctx.arc(ex + lk.x * er * .42, ey + lk.y * er * .42, er * .52, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex + lk.x * er * .42 - er * .18, ey + lk.y * er * .42 - er * .2, er * .16, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawSwatter() {
+  if (!sw.seen) return;
+  const k = now - sw.windT, ki = now - sw.impT;
+  let sc = 1, lift = 0;
+  if (k < .08) { sc = 1 + .22 * sm(k / .08); lift = 10 * S * sm(k / .08); }
+  else if (ki < .2) { sc = ki < .05 ? lerp(1.22, .9, ki / .05) : lerp(.9, 1, sm((ki - .05) / .15)); }
+  if (mode === "carry") sc = 1.04;
+  const x = sw.x, y = sw.y - lift, hw = 27 * S * sc, hh = 25 * S * sc, rot = -.42 + (k < .08 ? -.1 * sm(k / .08) : 0);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+  // handle
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#0d0d12"; ctx.lineWidth = 9 * S; ctx.beginPath(); ctx.moveTo(0, hh * .8); ctx.lineTo(0, hh + 150 * S); ctx.stroke();
+  ctx.strokeStyle = SWATD; ctx.lineWidth = 6 * S; ctx.beginPath(); ctx.moveTo(0, hh * .8); ctx.lineTo(0, hh + 150 * S); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.lineWidth = 1.6 * S; ctx.beginPath(); ctx.moveTo(-1.4 * S, hh + 4 * S); ctx.lineTo(-1.4 * S, hh + 150 * S); ctx.stroke();
+  // head with mesh
+  ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 14 * S * sc; ctx.shadowOffsetY = (6 + lift * .6) * S;
+  rr(-hw, -hh, hw * 2, hh * 2, 11 * S * sc); ctx.fillStyle = SWAT; ctx.globalAlpha = .3; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.shadowColor = "transparent";
+  ctx.save(); rr(-hw + 4 * S, -hh + 4 * S, hw * 2 - 8 * S, hh * 2 - 8 * S, 8 * S); ctx.clip();
+  ctx.strokeStyle = SWAT; ctx.lineWidth = 1.5 * S; ctx.beginPath();
+  for (let gx = -hw; gx < hw; gx += 6.5 * S * sc) { ctx.moveTo(gx, -hh); ctx.lineTo(gx, hh); }
+  for (let gy = -hh; gy < hh; gy += 6.5 * S * sc) { ctx.moveTo(-hw, gy); ctx.lineTo(hw, gy); }
+  ctx.stroke(); ctx.restore();
+  rr(-hw, -hh, hw * 2, hh * 2, 11 * S * sc); ctx.strokeStyle = "#0d0d12"; ctx.lineWidth = 5.5 * S; ctx.stroke(); ctx.strokeStyle = SWAT; ctx.lineWidth = 3.4 * S; ctx.stroke();
+  rr(-hw + 2.5 * S, -hh + 2.5 * S, hw * 2 - 5 * S, hh * 2 - 5 * S, 9 * S); ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = 1.4 * S; ctx.stroke();
+  ctx.restore();
+  // wind-up speed lines
+  if (k < .14) { ctx.strokeStyle = `rgba(255,255,255,${.5 * (1 - k / .14)})`; ctx.lineWidth = 2 * S; ctx.lineCap = "round";
+    for (const d of [-1, 0, 1]) { ctx.beginPath(); ctx.moveTo(x + d * 22 * S, y - 46 * S); ctx.lineTo(x + d * 26 * S, y - 64 * S); ctx.stroke(); } }
+}
+function drawDent(d) {
+  const age = now - d.t0, pop = snapT > d.t0 ? clamp((now - snapT - .05) / .25, 0, 1) : 0;
+  if (pop >= 1) return;
+  const r = d.r * (1 - outBack(pop) * (pop > 0 ? 1 : 0)) * (age < .06 ? age / .06 : 1);
+  if (r <= 0) return;
+  ctx.save(); ctx.translate(d.x, d.y);
+  // cartoon dent: shallow crater with a lit lower rim and a few cracks
+  ctx.fillStyle = "rgba(0,0,0,.32)"; ctx.beginPath(); ctx.ellipse(0, 0, r, r * .78, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(-r * .08, -r * .1, r * .62, r * .46, 0, 0, 7); ctx.fill();
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(205,214,255,.55)"; ctx.lineWidth = 2 * S; ctx.beginPath(); ctx.ellipse(0, 0, r, r * .78, 0, .15, 2.6); ctx.stroke();
+  ctx.strokeStyle = "rgba(0,0,0,.7)"; ctx.lineWidth = 2 * S; ctx.beginPath(); ctx.ellipse(0, 0, r, r * .78, 0, 3.3, 5.6); ctx.stroke();
+  ctx.strokeStyle = "rgba(205,214,255,.45)"; ctx.lineWidth = 1.2 * S;
+  for (let i = 0; i < 5; i++) {
+    const a = d.seed + i * 1.26; let px = Math.cos(a) * r * .95, py = Math.sin(a) * r * .75;
+    ctx.beginPath(); ctx.moveTo(px, py);
+    for (let j = 1; j <= 2; j++) { const rr2 = r * (.95 + j * .28), aa = a + Math.sin(d.seed * 7 + i * 3 + j) * .3; px = Math.cos(aa) * rr2; py = Math.sin(aa) * rr2 * .8; ctx.lineTo(px, py); }
+    ctx.stroke();
+  }
+  if (age < .3) { ctx.strokeStyle = `rgba(255,255,255,${.8 * (1 - age / .3)})`; ctx.lineWidth = 2.2 * S; ctx.lineCap = "round";
+    for (let i = 0; i < 8; i++) { const a = i * .785 + .2, r0 = r * (1 + age * 3), r1 = r0 + 12 * S; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); ctx.stroke(); } }
+  ctx.restore();
+}
+function drawTabs() {
+  ctx.fillStyle = C.bar; ctx.fillRect(0, 0, W, TABH);
+  const tw = 112 * S; ctx.fillStyle = C.bg; ctx.fillRect(0, 0, tw, TABH);
+  ctx.fillStyle = mode === "done" ? C.ok : C.err; ctx.fillRect(0, 0, tw, 2 * S);
+  rr(12 * S, TABH / 2 - 7 * S, 14 * S, 14 * S, 2.5 * S); ctx.fillStyle = "#e0af68"; ctx.fill();
+  ctx.fillStyle = "#16161e"; ctx.font = `700 ${7.5 * S}px ${F.mono}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("JS", 19 * S, TABH / 2 + .5 * S);
+  ctx.textAlign = "left"; ctx.font = `500 ${13 * S}px ${F.ui}`; ctx.fillStyle = errors ? C.err : "#c0caf5"; ctx.fillText(CONFIG.file, 32 * S, TABH / 2 + .5 * S);
+  ctx.fillStyle = C.dim; ctx.font = `400 ${11 * S}px ${F.mono}`; ctx.fillText(errors ? "●" : "×", tw - 20 * S, TABH / 2 + .5 * S);
+  // error badge, flips 1 -> 0
+  const fx = flags.fixedT !== undefined ? now - flags.fixedT : -1, flip = fx >= 0 && fx < .3 ? Math.abs(Math.cos(fx / .3 * Math.PI)) : 1;
+  const ok = !errors, bw = 50 * S, bh = 22 * S, bx = W - 12 * S - bw, by = TABH / 2 - bh / 2;
+  ctx.save(); ctx.translate(bx + bw / 2, TABH / 2); ctx.scale(1, Math.max(.05, flip)); ctx.translate(-(bx + bw / 2), -TABH / 2);
+  rr(bx, by, bw, bh, bh / 2); ctx.fillStyle = ok ? "rgba(158,206,106,.16)" : "rgba(247,118,142,.16)"; ctx.fill();
+  ctx.strokeStyle = ok ? "rgba(158,206,106,.55)" : "rgba(247,118,142,.55)"; ctx.lineWidth = 1 * S; ctx.stroke();
+  ctx.fillStyle = ok ? C.ok : C.err; ctx.font = `700 ${12 * S}px ${F.mono}`; ctx.textAlign = "center"; ctx.fillText((ok ? "✓ " : "✕ ") + errors, bx + bw / 2, TABH / 2 + .5 * S);
+  ctx.restore();
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(tw, TABH - .5); ctx.lineTo(W, TABH - .5); ctx.stroke();
+}
+function drawCode() {
+  const fixed = errors === 0, fk = flags.fixedT !== undefined ? clamp((now - flags.fixedT) / .4, 0, 1) : 0;
+  // error line highlight
+  ctx.fillStyle = `rgba(247,118,142,${.08 * (1 - fk)})`; ctx.fillRect(0, lineTop(ML), W, LH);
+  if (fk > 0 && fk < 1) { ctx.fillStyle = `rgba(158,206,106,${.14 * (1 - fk)})`; ctx.fillRect(0, lineTop(ML), W, LH); }
+  ctx.textBaseline = "alphabetic"; ctx.textAlign = "right"; ctx.font = `400 ${FS * .82}px ${F.mono}`;
+  for (let l = 0; l < N; l++) {
+    ctx.fillStyle = l === ML && !fixed ? C.err : C.gut; ctx.fillText(String(l + 1), CX0 - GUT * .38, base(l));
+    if (l === ML && !fixed) { ctx.fillStyle = C.err; ctx.beginPath(); ctx.arc(CX0 - GUT * .2, lineTop(l) + LH * .48, 2.6 * S, 0, 7); ctx.fill(); }
+  }
+  // the bug hiding inside a string goes BEHIND the text
+  const hs = bug.hs, h = sm(bug.h);
+  if (hs && hs.kind === "string" && bug.mode !== "move") {
+    drawBug();
+    ctx.fillStyle = C.bg; ctx.fillRect(cx(hs.c) - U * .7, lineTop(hs.l) + LH * .14, U * 1.4, LH * 1.2);
+  }
+  ctx.font = `400 ${FS}px ${F.mono}`; ctx.textAlign = "center";
+  for (let l = 0; l < N; l++) {
+    const row = G[l], y0 = base(l);
+    for (let k = 0; k < row.length; k++) {
+      const c = row[k]; if (c.ch === " ") continue;
+      let ox = c.x, oy = c.y, r = c.r, sy = 1;
+      if (hs && hs.l === l && h > 0) {
+        if (hs.kind === "paren") { if (k === hs.k) ox -= CW * .48 * h; if (k === hs.k + 1) ox += CW * .48 * h; }
+        if (hs.kind === "brace" && k === hs.k) sy = 1 - .2 * h;
+        if (hs.kind === "string" && k >= hs.k0 && k < hs.k1) oy += Math.sin(now * 20 + k * 1.3) * 1.3 * S * h;
+      }
+      ctx.fillStyle = c.col;
+      const x = cx(k + .5);
+      if (Math.abs(ox) + Math.abs(oy) + Math.abs(r) < .05 && sy === 1) ctx.fillText(c.ch, x, y0);
+      else { ctx.save(); ctx.translate(x + ox, y0 + oy - FS * .3); ctx.rotate(r); ctx.scale(1, sy); ctx.fillText(c.ch, 0, FS * .3); ctx.restore(); }
+    }
+  }
+  // squiggle + inline error, until it's fixed
+  if (fk < 1) {
+    const a = 1 - fk, x0 = cx(LINES[ML].search(/\S[^\s]*$/) >= 0 ? LINES[ML].search(/\S[^\s]*$/) : 0), x1 = lerp(cx(SLOT + 1), x0, sm(fk)), y = base(ML) + FS * .22;
+    ctx.strokeStyle = `rgba(247,118,142,${a})`; ctx.lineWidth = 1.4 * S; ctx.beginPath();
+    for (let x = x0; x <= x1; x += 1) ctx.lineTo(x, y + Math.sin((x - x0) / (2.2 * S)) * 1.6 * S); ctx.stroke();
+    ctx.textAlign = "left"; ctx.font = `italic 400 ${FS * .78}px ${F.mono}`; ctx.fillStyle = `rgba(247,118,142,${.75 * a})`;
+    ctx.fillText(CONFIG.error, cx(SLOT + 2.2), base(ML));
+    if (bug.mode !== "placed" && bug.mode !== "snap") {   // the empty slot blinks
+      const bl = Math.sin(now * 7) > 0 ? .9 : .25; ctx.fillStyle = `rgba(247,118,142,${bl * a})`; ctx.fillRect(cx(SLOT) + CW * .25, lineTop(ML) + LH * .2, 1.6 * S, LH * .6);
+    }
+  }
+}
+function drawBug() {
+  const b = bug, p = bugXY();
+  if (b.mode === "placed") {
+    const s = slotXY(), ps = now - snapT, wk = flags.winkT !== undefined ? now - flags.winkT : -1;
+    let sc = 1.55 * (ps < .35 ? lerp(1.6, 1, outBack(ps / .35)) : 1);
+    if (wk >= 0) sc *= wk < .14 ? lerp(1, 1.6, sm(wk / .14)) : wk < .8 ? 1.6 : lerp(1.6, 1, sm((wk - .8) / .3));
+    const eyes = wk >= .1 && wk < .75 ? "wink" : "open";
+    drawSemi(s.x, s.y, FS * sc, { legs: false, eyes, look: b.look, blink: b.blink < 0 && eyes === "open", bigEyes: true });
+    if (wk >= .1 && wk < .6) { const a = 1 - (wk - .1) / .5; ctx.strokeStyle = `rgba(255,236,170,${a})`; ctx.lineWidth = 1.8 * S; ctx.lineCap = "round";
+      const sx = s.x + FS * sc * .42, sy = s.y - FS * sc * 1.0, r = (5 + (wk - .1) * 18) * S;
+      for (let i = 0; i < 4; i++) { const an = i * Math.PI / 2 + .4; ctx.beginPath(); ctx.moveTo(sx + Math.cos(an) * r * .4, sy + Math.sin(an) * r * .4); ctx.lineTo(sx + Math.cos(an) * r, sy + Math.sin(an) * r); ctx.stroke(); } }
+    return;
+  }
+  if (b.mode === "caught" || b.mode === "carried" || b.mode === "snap") {
+    let x = sw.x, y = sw.y + U * .35, u = U * .95, sq = 0;
+    const kc = now - caughtT; if (kc < .2) sq = .55 * (1 - kc / .2);
+    if (b.mode === "snap") { const s = slotXY(), k = sm((now - snapA.t0) / snapA.dur); x = lerp(snapA.x, s.x, k); y = lerp(snapA.y, s.y, k); u = lerp(U * .95, FS * 1.9, k); }
+    drawSemi(x, y, u, { legs: true, dangle: true, phase: now * 9, squash: sq, eyes: kc < .35 ? "squeeze" : "dizzy", mouth: "o", face: 1 });
+    if (b.mode !== "snap") for (let i = 0; i < 3; i++) { const a = now * 5 + i * 2.09, r = u * .38; star(x + Math.cos(a) * r, y - u * 1.02 + Math.sin(a) * r * .3, 4.5 * S); }
+    return;
+  }
+  const moving = b.mode === "move", run = moving && b.seg.style === "run";
+  const hid = b.hs && b.mode === "hide" ? b.hs.kind : null;
+  const peek = hid === "string" ? Math.max(0, Math.sin(now * 2.2)) * U * .1 : 0;
+  drawSemi(p.x, p.y - peek, U * b.s, { legs: hid !== "paren", run, phase: b.phase, face: b.face, look: b.look, shadow: moving || hid ? (moving ? clamp(1 - b.air / (LH * 2), .3, 1) : 0) : 1, air: b.air,
+    blink: b.blink < 0, bob: Math.sin(now * (run ? 24 : 4)) * .025, mouth: run ? "o" : "smile", squash: !moving && b.mode !== "hide" ? Math.max(0, .12 * Math.sin(now * 9)) : 0 });
+}
+function star(x, y, r) {
+  ctx.fillStyle = "#ffe08a"; ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 - Math.PI / 2, rr2 = i % 2 ? r * .45 : r; ctx.lineTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2); }
+  ctx.closePath(); ctx.fill();
+}
+function drawQuip() {
+  if (!quip || now < quip.t0 || now > quip.t0 + quip.life) return;
+  const k = now - quip.t0, a = k > quip.life - .15 ? (quip.life - k) / .15 : 1, pop = outBack(k / .16);
+  let x, y;
+  if (bug.mode === "caught" || bug.mode === "carried") { x = sw.x; y = sw.y - U * .95; }
+  else { const c = bugCenter(); x = c.x; y = c.y - U * bug.s * .62; }
+  ctx.font = `700 ${12.5 * S}px ${F.mono}`; const tw = ctx.measureText(quip.text).width + 16 * S, th = 24 * S;
+  x = clamp(x + 14 * S, tw / 2 + 6 * S, W - tw / 2 - 6 * S); y = Math.max(y - th, TABH + 4 * S);
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y + th); ctx.scale(pop, pop); ctx.translate(-x, -(y + th));
+  rr(x - tw / 2, y, tw, th, 8 * S); ctx.fillStyle = "#f4f1e8"; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - 10 * S, y + th - 1); ctx.lineTo(x - 16 * S, y + th + 7 * S); ctx.lineTo(x - 2 * S, y + th - 1); ctx.fill();
+  ctx.fillStyle = "#16161e"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(quip.text, x, y + th / 2 + .5 * S);
+  ctx.restore();
+}
+function drawPanel() {
+  const y0 = CODEB, ok = mode === "done", term = flags.termT !== undefined, succ = flags.succT !== undefined;
+  ctx.fillStyle = C.bar; ctx.fillRect(0, y0, W, PANH);
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, y0 + .5); ctx.lineTo(W, y0 + .5); ctx.stroke();
+  const px = 16 * S, hy = y0 + 17 * S;
+  ctx.textBaseline = "middle"; ctx.textAlign = "left"; ctx.font = `700 ${10.5 * S}px ${F.ui}`;
+  const tabs = [["PROBLEMS", !term], ["TERMINAL", term]]; let tx = px;
+  for (const [name, on] of tabs) {
+    ctx.fillStyle = on ? "#c0caf5" : C.dim; ctx.fillText(name, tx, hy); const w = ctx.measureText(name).width;
+    if (name === "PROBLEMS") { const c = String(errors); rr(tx + w + 6 * S, hy - 7 * S, 16 * S, 14 * S, 7 * S); ctx.fillStyle = errors ? C.err : "#2a2c40"; ctx.fill();
+      ctx.fillStyle = errors ? "#16161e" : C.dim; ctx.font = `700 ${9 * S}px ${F.mono}`; ctx.textAlign = "center"; ctx.fillText(c, tx + w + 14 * S, hy + .5 * S); ctx.textAlign = "left"; ctx.font = `700 ${10.5 * S}px ${F.ui}`; }
+    if (on) { ctx.fillStyle = "#c0caf5"; ctx.fillRect(tx, hy + 10 * S, w, 1.5 * S); }
+    tx += w + 38 * S;
+  }
+  const r1 = y0 + 44 * S, r2 = y0 + 70 * S;
+  if (!term) {
+    ctx.font = `700 ${15 * S}px ${F.ui}`; ctx.fillStyle = C.err; ctx.fillText("✕", px, r1);
+    ctx.fillStyle = "#e6e8f5"; ctx.font = `500 ${15 * S}px ${F.ui}`; ctx.fillText(CONFIG.error, px + 20 * S, r1);
+    ctx.textAlign = "right"; ctx.fillStyle = C.dim; ctx.font = `400 ${11 * S}px ${F.mono}`; ctx.fillText(`${CONFIG.file} ${ML + 1}:${SLOT + 1}`, W - px, r1 + 1 * S);
+    ctx.textAlign = "left"; ctx.fillStyle = C.dim; ctx.font = `400 ${11.5 * S}px ${F.mono}`;
+    ctx.fillText(CONFIG.auto || swats ? `build failed · ${swats} swat${swats === 1 ? "" : "s"}` : CONFIG.hint, px + 20 * S, r2);
+  } else {
+    const k = now - flags.termT, cmd = "$ " + CONFIG.build, n = Math.floor(clamp(k / .32, 0, 1) * cmd.length);
+    ctx.font = `400 ${12.5 * S}px ${F.mono}`; ctx.fillStyle = "#c0caf5"; ctx.fillText(cmd.slice(0, n), px, r1 - 4 * S);
+    if (!succ) { if (k > .35) { ctx.fillStyle = C.dim; ctx.fillText("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[Math.floor(now * 14) % 10] + " building...", px, r2 - 2 * S); } }
+    else {
+      const sk = now - flags.succT, pop = outBack(sk / .3);
+      if (sk < .5) { ctx.fillStyle = `rgba(158,206,106,${.18 * (1 - sk / .5)})`; ctx.fillRect(0, y0 + 30 * S, W, PANH - 30 * S - STH); }
+      ctx.save(); ctx.translate(px, r2); ctx.scale(pop, pop);
+      ctx.font = `700 ${21 * S}px ${F.ui}`; ctx.fillStyle = C.ok; ctx.fillText(CONFIG.success + " ✓", 0, 0); ctx.restore();
+      ctx.textAlign = "right"; ctx.fillStyle = C.dim; ctx.font = `400 ${11 * S}px ${F.mono}`; ctx.fillText("0 errors · 0.41s", W - px, r2 + 1 * S); ctx.textAlign = "left";
+    }
+  }
+  // status bar
+  const sy = y0 + PANH - STH; ctx.fillStyle = ok && errors === 0 ? "#1e3a2a" : "#3b1d27"; ctx.fillRect(0, sy, W, STH);
+  ctx.font = `500 ${11 * S}px ${F.mono}`; ctx.fillStyle = errors ? "#ffb3c0" : "#b9f28a"; ctx.textAlign = "left";
+  ctx.fillText(errors ? `✕ ${errors}  ⚠ 0` : "✓ 0  ⚠ 0", px, sy + STH / 2 + .5 * S);
+  ctx.textAlign = "right"; ctx.fillStyle = "rgba(230,232,245,.7)"; ctx.fillText(`Ln ${ML + 1}, Col ${SLOT + 1}  JavaScript`, W - px, sy + STH / 2 + .5 * S);
+}
+
+// ---------- one loop for everything ----------
+function frame(t) {
+  now = t / 1000; const dt = Math.min(.05, last ? now - last : 1 / 60); last = now;
+  if (CONFIG.auto) runAuto();
+  think();
+  if (sw.pend && now >= sw.pend.t) { const p = sw.pend; sw.pend = null; impact(p.x, p.y); }
+  if (mode === "caught" && now - caughtT > .25) startCarry();
+  if (mode === "carry") {
+    const u = clamp((now - carry.t0) / carry.dur, 0, 1), e = sm(u);
+    sw.x = lerp(carry.x0, carry.x1, e); sw.y = lerp(carry.y0, carry.y1, e) - Math.sin(u * Math.PI) * LH * 1.6;
+    bug.mode = "carried";
+    if (u >= 1) { mode = "snap"; bug.mode = "snap"; snapA = { t0: now, dur: .1, x: sw.x, y: sw.y + U * .35 }; }
+  }
+  if (mode === "snap" && now - snapA.t0 >= snapA.dur) snapDone();
+  if (mode === "done") {
+    const k = now - snapT;
+    if (flags.fixedT === undefined && k > .3) { flags.fixedT = now; errors = 0; ev("fixed"); }
+    if (flags.termT === undefined && k > .4) flags.termT = now;
+    if (flags.succT === undefined && k > 1.035) { flags.succT = now; sfx.ding(); ev("success"); }
+    if (flags.winkT === undefined && k > 2.07) { flags.winkT = now; sfx.wink(); ev("wink"); }
+  }
+  updateBug(dt);
+  // letters: springs
+  for (const row of G) for (const c of row) {
+    if (c.back > 0 && now >= c.back) { c.back = -1; c.kn = false; c.tx = c.ty = c.tr = 0; c.vy -= 120 * S; }
+    if (!c.kn && Math.abs(c.x) + Math.abs(c.y) + Math.abs(c.r) + Math.abs(c.vx) + Math.abs(c.vy) < .02) { c.x = c.y = c.r = 0; continue; }
+    const k = c.kn ? 260 : 170, d = c.kn ? 14 : 9;
+    c.vx += (k * (c.tx - c.x) - d * c.vx) * dt; c.vy += (k * (c.ty - c.y) - d * c.vy) * dt; c.vr += (k * (c.tr - c.r) - d * c.vr) * dt;
+    c.x += c.vx * dt; c.y += c.vy * dt; c.r += c.vr * dt;
+  }
+
+  // draw
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const sk = now - shakeT, shake = sk < .16 ? (1 - sk / .16) * 4 * S : 0;
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.translate(Math.sin(now * 90) * shake, Math.cos(now * 70) * shake);
+  drawCode();
+  for (const d of dents) drawDent(d);
+  if (!(bug.hs && bug.hs.kind === "string" && bug.mode !== "move") && bug.mode !== "caught" && bug.mode !== "carried" && bug.mode !== "snap") drawBug();
+  ctx.restore();
+  for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i], k = (now - p.t0) / p.life; if (k >= 1) { parts.splice(i, 1); continue; }
+    p.vy += 500 * S * dt; p.x += p.vx * dt; p.y += p.vy * dt; ctx.globalAlpha = 1 - k; ctx.fillStyle = p.c; ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s); }
+  ctx.globalAlpha = 1;
+  drawPanel(); drawTabs();
+  drawSwatter();
+  if (bug.mode === "caught" || bug.mode === "carried" || bug.mode === "snap") drawBug();
+  drawQuip();
+  requestAnimationFrame(frame);
+}
+resize(); reset();
+if (!CONFIG.auto) { sw.x = W * .84; sw.y = CODEB - 30 * S; sw.seen = true; }
+document.fonts && document.fonts.ready.then(resize);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

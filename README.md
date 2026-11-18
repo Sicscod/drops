@@ -53,6 +53,7 @@ Saw a drop in a video? Its number is the folder.
 | 44 | [💾 love.exe](44-love-installer) | A retro installer that installs love for your person: stuck at 99% on "missing file: you.png", you drag yourself in and the window becomes a beating pixel heart. |
 | 45 | [🔥 Friday Deploy](45-friday-deploy) | A deploy button that panics at 16:59 on a Friday: it dodges you, four confirm dialogs stack up, the server rack smokes, the logs catch fire... and then it works. |
 | 46 | [📶 Heart Wi-Fi](46-heart-wifi) | A Wi-Fi list for your person: funny networks, one glowing pink "Delly ♥", password123 gets rejected, ♥ gets in, and the bars turn into a heart filling to 100%. |
+| 47 | [🪲 Semicolon Hunt](47-semicolon-hunt) | The missing semicolon is alive and knocking your code over. Swat it with a flyswatter cursor, snap it back into line 8, and the build goes green. |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
