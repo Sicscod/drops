@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Love Captcha</title>
+<meta name="description" content="A verification check for your person: select all squares with the person you love. Then it asks you to select all of them. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#f3ece3}
+canvas{position:fixed;left:0;top:0;width:100%;height:calc(100% - 30px);display:block}
+.credit{position:fixed;left:0;right:0;bottom:0;height:30px;display:flex;align-items:center;justify-content:center;font:400 11.5px "DM Mono",ui-monospace,monospace;letter-spacing:.02em;color:#a2958a}
+.credit a{color:#6f6157;text-decoration:none}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:400 20px 'DM Sans'">a</span><span class="pre" style="font:500 20px 'DM Sans'">a</span><span class="pre" style="font:600 20px 'DM Sans'">a</span><span class="pre" style="font:700 20px 'DM Sans'">a</span><span class="pre" style="font:400 20px 'DM Mono'">a</span><span class="pre" style="font:500 20px 'DM Mono'">a</span><span class="pre" style="font:italic 400 20px 'Instrument Serif'">a</span>
+<script>
+// ===== Love Captcha · free code by @sicscod.drops =====
+// Try: yoursite/?name=Delly&msg=just%20in%20love%20with%20Delly%20%E2%99%A5&hue=345   (?auto=1 plays it by itself)
+const P = new URLSearchParams(location.search);
+const hueP = parseFloat(P.get("hue"));
+const CONFIG = {
+  name: (P.get("name") || "Delly").slice(0, 14),                       // the person in the squares
+  msg: (P.get("msg") || "just in love with {name} ♥").slice(0, 44),   // the last line after "verified"
+  hue: isFinite(hueP) ? ((hueP % 360) + 360) % 360 : 345,               // 345 pink, 0 red, 280 purple, 200 blue
+  auto: P.get("auto") === "1",                                          // a cursor plays the whole thing
+  // round 1: the 3x3 grid, left to right, top to bottom. one of them is { person: true }
+  tiles: [
+    { label: "cat", emoji: "🐈", bg: "#e9e1f6" },
+    { label: "pizza", emoji: "🍕", bg: "#fbe4c9" },
+    { label: "laptop", emoji: "💻", bg: "#dde7f0" },
+    { label: "my ex", ex: true, bg: "#e4e2df" },
+    { label: "{name}", person: true },
+    { label: "coffee", emoji: "☕", bg: "#eadbcc" },
+    { label: "bed", emoji: "🛏️", bg: "#dcebe4" },
+    { label: "phone", emoji: "📱", bg: "#e2e4ea" },
+    { label: "dog", emoji: "🐕", bg: "#f5e6c8" },
+  ],
+  // round 2: every square is them. poses: badge wink shades laugh oh bow kiss crown hearteyes
+  poses: ["wink", "shades", "laugh", "bow", "hearteyes", "oh", "kiss", "crown", "badge"],
+  lines: {
+    check: "I'm not a robot",
+    ask: ["Select all squares with", "the person you love", "if you have to think, you're a robot"],
+    again: ["Please also select", "all squares with {name}", "yes. all of them."],
+    nudge: "please also select…",
+    empty: "{name} is right there.",
+    wrongTile: "that's a {what}. try again.",
+    missed: "you missed {n}. look closer.",
+    done: "verified: definitely not a robot.",
+    score: "human 100% · robot 0% · in love: very",
+  },
+  beat: 1.0,                                                            // seconds per heartbeat (lub-dub)
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const T0 = performance.now();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.4 * Math.pow(x - 1, 3) + 1.4 * Math.pow(x - 1, 2));
+const outCub = x => (x = clamp(x, 0, 1), 1 - Math.pow(1 - x, 3));
+const inOut = x => (x = clamp(x, 0, 1), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const H = (l, s = 80, a = 1, dh = 0) => `hsla(${CONFIG.hue + dh},${s}%,${l}%,${a})`;
+const nm = s => s.replace(/\{name\}/g, CONFIG.name);
+const C = { bg: "#f3ece3", card: "#fffdfa", line: "#e3d9cd", ink: "#2a211d", mute: "#8a7c71", dim: "#b9ab9f", red: "#d9473f", skin: "#f7d5bd", hair: "#3d2721" };
+const F = { ui: (w, s) => `${w} ${s}px "DM Sans", system-ui, sans-serif`, mono: (w, s) => `${w} ${s}px "DM Mono", ui-monospace, monospace`, serif: s => `italic 400 ${s}px "Instrument Serif", Georgia, serif`, emo: s => `${s}px "Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif` };
+
+const CH = 540, CW = 338, T = 106, G = 4;
+let W = 0, Hh = 0, DPR = 1, S = 1, OX = 0, OY = 0, DW = 400, X0 = 31;
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; Hh = Math.max(240, innerHeight - 30);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(Hh * DPR);
+  S = Math.min(Hh / CH, W / 356, 1.45); DW = Math.min(W / S, 460); X0 = (DW - CW) / 2;
+  OX = (W - DW * S) / 2; OY = (Hh - CH * S) / 2;
+}
+addEventListener("resize", resize);
+const toU = (x, y) => ({ x: (x - OX) / S, y: (y - OY) / S });
+const inR = (p, r) => p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
+
+// ---------- drawing helpers ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function heartPt(t) { const x = 16 * Math.sin(t) ** 3, y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t); return [x / 16 * .66, -(y + 2.5) / 14.5 * .6]; }
+function heartPath(cx, cy, s) { ctx.beginPath(); for (let i = 0; i <= 48; i++) { const [x, y] = heartPt(i / 48 * Math.PI * 2); i ? ctx.lineTo(cx + x * s, cy + y * s) : ctx.moveTo(cx + x * s, cy + y * s); } ctx.closePath(); }
+function heart(cx, cy, s, col) { heartPath(cx, cy, s); ctx.fillStyle = col; ctx.fill(); }
+// text where every ♥ is drawn as a real heart (fonts draw ♥ very differently)
+function measure(str, font, fs) { ctx.font = font; return str.split("♥").reduce((w, p, i) => w + ctx.measureText(p).width + (i ? fs * .78 : 0), 0); }
+function text(str, x, y, font, fs, col, align = "left", hcol) {
+  const w = measure(str, font, fs); let cx = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
+  ctx.fillStyle = col; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  str.split("♥").forEach((p, i) => {
+    if (i) { heart(cx + fs * .39, y - fs * .33, fs * .56, hcol || col); cx += fs * .78; ctx.fillStyle = col; }
+    ctx.fillText(p, cx, y); cx += ctx.measureText(p).width;
+  });
+  return w;
+}
+function check(x, y, s, k, col, lw) {      // a check mark drawn in by k (0..1)
+  if (k <= 0) return; ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  const a = [x - s * .5, y], b = [x - s * .14, y + s * .36], c = [x + s * .55, y - s * .4];
+  ctx.beginPath(); ctx.moveTo(...a); const k1 = Math.min(1, k * 2.2);
+  ctx.lineTo(lerp(a[0], b[0], k1), lerp(a[1], b[1], k1));
+  if (k > .45) { const k2 = (k - .45) / .55; ctx.lineTo(lerp(b[0], c[0], k2), lerp(b[1], c[1], k2)); }
+  ctx.stroke();
+}
+
+// ---------- the person, drawn (9 poses) ----------
+function person(cx, cy, s, pose, t, seed) {
+  const r = s * .2, hx = cx, hy = cy - s * .03;
+  ctx.save(); ctx.translate(hx, hy + s * .2); ctx.rotate(Math.sin(t * 3.1 + seed) * .055); ctx.translate(-hx, -hy - s * .2);
+  // shoulders / top
+  ctx.fillStyle = H(62, 70, 1, 10); rr(hx - r * 1.55, hy + r * 1.08, r * 3.1, r * 2, r * .9); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.beginPath(); ctx.moveTo(hx - r * .38, hy + r * 1.08); ctx.lineTo(hx, hy + r * 1.42); ctx.lineTo(hx + r * .38, hy + r * 1.08); ctx.fill();
+  // hair (bob), neck, face
+  ctx.fillStyle = C.hair; ctx.beginPath(); ctx.arc(hx, hy - r * .05, r * 1.22, Math.PI, 0); ctx.lineTo(hx + r * 1.22, hy + r * .95); ctx.quadraticCurveTo(hx + r * 1.2, hy + r * 1.1, hx + r * .9, hy + r * 1.05); ctx.lineTo(hx - r * .9, hy + r * 1.05); ctx.quadraticCurveTo(hx - r * 1.2, hy + r * 1.1, hx - r * 1.22, hy + r * .95); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#ecc2a6"; ctx.fillRect(hx - r * .25, hy + r * .7, r * .5, r * .45);
+  ctx.fillStyle = C.skin; ctx.beginPath(); ctx.ellipse(hx, hy + r * .05, r * .92, r * .98, 0, 0, Math.PI * 2); ctx.fill();
+  // bangs
+  ctx.fillStyle = C.hair; ctx.beginPath(); ctx.moveTo(hx - r * 1.02, hy + r * .1); ctx.quadraticCurveTo(hx - r * 1.05, hy - r * 1.1, hx, hy - r * 1.06);
+  ctx.quadraticCurveTo(hx + r * 1.05, hy - r * 1.1, hx + r * 1.02, hy + r * .1); ctx.quadraticCurveTo(hx + r * .7, hy - r * .42, hx + r * .1, hy - r * .48);
+  ctx.quadraticCurveTo(hx - r * .25, hy - r * .2, hx - r * .45, hy - r * .5); ctx.quadraticCurveTo(hx - r * .8, hy - r * .3, hx - r * 1.02, hy + r * .1); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.beginPath(); ctx.ellipse(hx - r * .45, hy - r * .78, r * .28, r * .08, -.5, 0, 7); ctx.fill();
+  // blush
+  ctx.fillStyle = H(70, 90, pose === "oh" || pose === "kiss" ? .65 : .45, 0);
+  for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(hx + sx * r * .55, hy + r * .38, r * .19, r * .11, 0, 0, 7); ctx.fill(); }
+  // eyes
+  const ey = hy + r * .12, ex = r * .37, ink = C.ink;
+  const dot = (x, big) => { ctx.fillStyle = ink; ctx.beginPath(); ctx.ellipse(x, ey, r * (big ? .13 : .095), r * (big ? .15 : .12), 0, 0, 7); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x + r * .04, ey - r * .05, r * (big ? .05 : .035), 0, 7); ctx.fill(); };
+  const arcEye = (x, up) => { ctx.strokeStyle = ink; ctx.lineWidth = r * .1; ctx.lineCap = "round"; ctx.beginPath(); up ? ctx.arc(x, ey + r * .06, r * .15, Math.PI * 1.15, Math.PI * 1.85) : ctx.arc(x, ey - r * .06, r * .15, Math.PI * .15, Math.PI * .85); ctx.stroke(); };
+  if (pose === "wink") { dot(-ex + hx); arcEye(hx + ex, true); }
+  else if (pose === "laugh") { arcEye(hx - ex, true); arcEye(hx + ex, true); }
+  else if (pose === "kiss") { arcEye(hx - ex, false); arcEye(hx + ex, false); }
+  else if (pose === "hearteyes") { for (const sx of [-1, 1]) heart(hx + sx * ex, ey + r * .02, r * .42 * (1 + .12 * Math.max(0, Math.sin(t * 9))), H(55, 85)); }
+  else if (pose === "shades") {
+    for (const sx of [-1, 1]) { heart(hx + sx * ex * 1.05, ey + r * .02, r * .62, "#2a1f24"); heart(hx + sx * ex * 1.05 - r * .05, ey - r * .05, r * .22, H(70, 80, .55)); }
+    ctx.strokeStyle = "#2a1f24"; ctx.lineWidth = r * .08; ctx.beginPath(); ctx.moveTo(hx - r * .14, ey - r * .05); ctx.lineTo(hx + r * .14, ey - r * .05); ctx.stroke();
+  } else if (pose !== "shades") { dot(hx - ex, pose === "oh"); dot(hx + ex, pose === "oh"); }
+  // mouth
+  const my = hy + r * .48; ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = r * .09; ctx.lineCap = "round";
+  if (pose === "laugh" || pose === "wink") {
+    ctx.beginPath(); ctx.arc(hx, my - r * .06, r * .22, 0, Math.PI); ctx.closePath(); ctx.fillStyle = "#8e2f3a"; ctx.fill();
+    ctx.fillStyle = "#f28a9a"; ctx.beginPath(); ctx.arc(hx, my + r * .1, r * .1, Math.PI, 0); ctx.fill();
+  } else if (pose === "oh") { ctx.fillStyle = "#8e2f3a"; ctx.beginPath(); ctx.ellipse(hx, my + r * .02, r * .09, r * .12, 0, 0, 7); ctx.fill(); }
+  else if (pose === "kiss") { heart(hx, my + r * .02, r * .3, "#d9475d"); }
+  else if (pose === "shades") { ctx.beginPath(); ctx.arc(hx + r * .05, my - r * .1, r * .2, Math.PI * .25, Math.PI * .8); ctx.stroke(); }
+  else { ctx.beginPath(); ctx.arc(hx, my - r * .12, r * .2, Math.PI * .2, Math.PI * .8); ctx.stroke(); }
+  // accessories
+  if (pose === "bow") {
+    const bx = hx + r * .78, by = hy - r * .82; ctx.fillStyle = H(58, 85);
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - r * .5, by - r * .32); ctx.lineTo(bx - r * .42, by + r * .3); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + r * .5, by - r * .26); ctx.lineTo(bx + r * .38, by + r * .34); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = H(46, 80); ctx.beginPath(); ctx.arc(bx, by, r * .13, 0, 7); ctx.fill();
+  }
+  if (pose === "crown") {
+    const by = hy - r * 1.08; ctx.fillStyle = "#f2b630"; ctx.beginPath(); ctx.moveTo(hx - r * .5, by + r * .1); ctx.lineTo(hx - r * .55, by - r * .45); ctx.lineTo(hx - r * .25, by - r * .15);
+    ctx.lineTo(hx, by - r * .55); ctx.lineTo(hx + r * .25, by - r * .15); ctx.lineTo(hx + r * .55, by - r * .45); ctx.lineTo(hx + r * .5, by + r * .1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = H(60, 85); ctx.beginPath(); ctx.arc(hx, by - r * .08, r * .08, 0, 7); ctx.fill();
+  }
+  if (pose === "badge") { heart(hx + r * .85, hy + r * 1.5, r * .5, "#fff"); heart(hx + r * .85, hy + r * 1.5, r * .36, H(55, 85)); }
+  ctx.restore();
+  if (pose === "kiss") for (let i = 0; i < 2; i++) { const u = (t * .7 + i * .5) % 1; ctx.save(); ctx.globalAlpha *= Math.sin(u * Math.PI); heart(cx + r * (1.15 + i * .3) + Math.sin(u * 8) * 2, cy - r * (.2 + u * 1.3), r * (.3 - i * .06), H(60, 85)); ctx.restore(); }
+}
+// "my ex": a grey silhouette with a tiny skull
+function ex(cx, cy, s, t) {
+  const r = s * .2, hy = cy - s * .03;
+  ctx.fillStyle = "#b3ada7"; rr(cx - r * 1.5, hy + r * 1.08, r * 3, r * 2, r * .9); ctx.fill();
+  ctx.fillStyle = "#c4beb8"; ctx.beginPath(); ctx.arc(cx, hy, r * .95, 0, 7); ctx.fill();
+  ctx.strokeStyle = "#7d766f"; ctx.lineWidth = r * .09; ctx.lineCap = "round";
+  for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(cx + sx * r * .5, hy + r * .08); ctx.lineTo(cx + sx * r * .22, hy + r * .08); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(cx - r * .22, hy + r * .5); ctx.lineTo(cx + r * .22, hy + r * .5); ctx.stroke();
+  ctx.fillStyle = "#000"; ctx.font = F.emo(s * .19); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("💀", cx + r * 1.05, hy - r * 1.05 + Math.sin(t * 4) * 2);
+}
+
+// ---------- sound (tiny Web Audio blips, start after the first tap) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } }
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur + .02);
+}
+const sfx = {
+  tick() { tone("sine", 1200, 700, .07, .08); },
+  pop(i) { const f = 520 * Math.pow(2, i / 8); tone("sine", f, f * 1.6, .1, .08); },
+  nope() { tone("square", 150, 110, .22, .06); tone("square", 157, 116, .22, .045, .02); },
+  yes() { [784, 988, 1175, 1568].forEach((f, i) => tone("triangle", f, f, .4, .08, i * .07)); },
+  beat() { tone("sine", 110, 50, .18, .25); tone("sine", 95, 45, .16, .16, .22); },
+};
+const EV = window.__ev = [];                         // event log (the video renderer reads it to sync the music)
+const ev = k => EV.push([k, +now.toFixed(3)]);
+
+// ---------- state ----------
+const PERSON = Math.max(0, CONFIG.tiles.findIndex(t => t.person));
+let now = 0, last = 0, openT = -1, stage = 0, swapT = -1, doneT = -1, msgT = -9, msg = "", msgBad = true, shakeT = -9, hits = 0;
+let tiles = [], parts = [], floaters = [], floatAcc = 0, beatN = 0, burstDone = false, pressV = -9;
+function reset() {
+  openT = -1; stage = 0; swapT = -1; doneT = -1; msgT = -9; shakeT = -9; hits = 0; beatN = 0; burstDone = false; parts = []; floaters = [];
+  tiles = CONFIG.tiles.map((t, i) => ({ cur: t.person ? { pose: "badge" } : { tile: t }, prev: null, flipAt: -9, sel: false, selT: -9, i }));
+}
+reset();
+
+// ---------- layout ----------
+const barY = () => openT < 0 ? 206 : lerp(206, 8, inOut((now - openT) / .3));
+const BAR = () => ({ x: X0, y: barY(), w: CW, h: 56 });
+const BOX = () => { const b = BAR(); return { x: b.x + 16, y: b.y + 14, w: 28, h: 28 }; };
+const PAN = { y: 72, h: 456, head: 72 };
+const tileR = i => ({ x: X0 + 6 + (i % 3) * (T + G), y: PAN.y + PAN.head + 6 + Math.floor(i / 3) * (T + G), w: T, h: T });
+const FOOT_Y = PAN.y + PAN.head + 6 + 3 * T + 2 * G + 6;
+const VERIFY = () => ({ x: X0 + CW - 6 - 104, y: FOOT_Y, w: 104, h: 38 });
+const CARD = () => { const w = Math.min(DW - 28, 372); return { x: (DW - w) / 2, y: 120, w, h: 296 }; };
+const HEART_C = () => { const c = CARD(); return { x: DW / 2, y: c.y + 98 }; };
+const panelOpen = () => openT >= 0 && now - openT > .3 && doneT < 0;
+
+// ---------- actions ----------
+function say(s, bad = true) { msg = s; msgT = now; msgBad = bad; }
+function tick() { if (openT >= 0) return; openT = now; stage = 1; sfx.tick(); ev("check"); }
+function tapTile(i) {
+  const t = tiles[i]; if (stage === 2 && now < t.flipAt + .3) return;
+  t.sel = !t.sel; t.selT = now;
+  if (t.sel) { hits++; sfx.pop(hits - 1); ev("pop" + hits); burstAt(tileR(i), stage === 2 ? 10 : 7); } else { hits = Math.max(0, hits - 1); sfx.tick(); }
+}
+function verify() {
+  pressV = now;
+  if (stage === 1) {
+    const wrong = tiles.filter(t => t.sel && !t.cur.pose);
+    if (wrong.length) { wrong.forEach(t => { t.sel = false; t.selT = now; }); hits = tiles.filter(t => t.sel).length; say(nm(CONFIG.lines.wrongTile.replace("{what}", nm(wrong[0].cur.tile.label)))); shakeT = now; sfx.nope(); ev("nope"); return; }
+    if (!tiles[PERSON].sel) { say(nm(CONFIG.lines.empty)); shakeT = now; sfx.nope(); ev("nope"); return; }
+    // right answer... but it wants more
+    stage = 2; swapT = now; shakeT = now; hits = 0; say(CONFIG.lines.nudge); sfx.nope(); ev("again");
+    const order = [0, 1, 2, 5, 4, 3, 6, 7, 8];
+    tiles.forEach((t, i) => { t.sel = false; t.selT = now; t.prev = t.cur; t.cur = { pose: CONFIG.poses[i % CONFIG.poses.length] }; t.flipAt = now + .22 + order.indexOf(i) * .05; });
+    return;
+  }
+  const left = tiles.filter(t => !t.sel).length;
+  if (left) { say(CONFIG.lines.missed.replace("{n}", left)); shakeT = now; sfx.nope(); ev("nope"); return; }
+  doneT = now; sfx.yes(); ev("done");
+}
+
+// ---------- ?auto=1: a scripted cursor plays the story (used for the video) ----------
+const cur = { on: false, x: 0, y: 0, down: -9, seg: null };
+const ctr = r => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+const SNAKE = [0, 1, 2, 5, 4, 3, 6, 7, 8];
+const AUTO = [
+  [0.00, "move", .07, () => ({ x: X0 + 30, y: 222 }), () => ({ x: X0 + 74, y: 262 })],
+  [0.08, "tap", () => tick()],
+  [0.1, "move", .3, () => ({ x: X0 + 32, y: 40 })],
+  [0.62, "move", .32, () => ctr(tileR(PERSON))], [1.0, "tap", () => tapTile(PERSON)],
+  [1.18, "move", .26, () => ctr(VERIFY())], [1.5, "tap", () => verify()],
+  [1.85, "move", .5, () => ctr(tileR(0))],
+  ...SNAKE.flatMap((i, k) => [...(k ? [[2.5 + k * .25 - .19, "move", .15, () => ctr(tileR(i))]] : []), [2.5 + k * .25, "tap", () => tapTile(i)]]),
+  [4.62, "move", .3, () => ctr(VERIFY())], [5.0, "tap", () => verify()],
+  [5.3, "move", .7, () => ({ x: DW - 40, y: 500 })],
+];
+let autoT0 = 0, autoI = 0;
+function runAuto() {
+  const t = now - autoT0;
+  while (autoI < AUTO.length && t >= AUTO[autoI][0]) {
+    const a = AUTO[autoI++];
+    if (a[1] === "move") { const from = a[4] ? a[4]() : { x: cur.x, y: cur.y }; cur.seg = { t0: autoT0 + a[0], len: a[2], from, to: a[3]() }; cur.on = true; }
+    else { cur.down = now; a[2](); }
+  }
+  if (cur.seg) { const u = clamp((now - cur.seg.t0) / cur.seg.len, 0, 1), e = sm(u), arc = Math.sin(u * Math.PI) * 10;
+    cur.x = lerp(cur.seg.from.x, cur.seg.to.x, e); cur.y = lerp(cur.seg.from.y, cur.seg.to.y, e) - arc; }
+  if (doneT >= 0 && now - doneT > 7) { reset(); autoT0 = now; autoI = 0; }
+}
+
+// ---------- input ----------
+addEventListener("pointerdown", e => {
+  audio(); if (CONFIG.auto) return; const u = toU(e.clientX, e.clientY);
+  if (openT < 0) { if (inR(u, BAR())) tick(); return; }
+  if (doneT >= 0) { const h = HEART_C(); if (now - doneT > 1.2 && Math.hypot(u.x - h.x, u.y - h.y) < 70) { burst(36); sfx.beat(); ev("tapheart"); } return; }
+  if (!panelOpen()) return;
+  for (let i = 0; i < 9; i++) if (inR(u, tileR(i))) { tapTile(i); return; }
+  if (inR(u, VERIFY())) verify();
+});
+
+// ---------- particles ----------
+function burstAt(r, n) {
+  const c = ctr(r);
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + Math.random() * .4, v = 110 + Math.random() * 90; parts.push({ x: c.x, y: c.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, t: now, life: .55 + Math.random() * .25, s: 5 + Math.random() * 4, k: "h", dh: 0, g: 60 }); }
+}
+function burst(n) {
+  const h = HEART_C(), cols = [0, 20, -20, 35];
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 140 + Math.random() * 300;
+    parts.push({ x: h.x, y: h.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, t: now, life: 1.4 + Math.random() * 1, s: 4 + Math.random() * 7, k: Math.random() < .7 ? "h" : Math.random() < .5 ? "d" : "r", dh: cols[i % 4], g: 260, r: Math.random() * 6, vr: (Math.random() - .5) * 10 }); }
+}
+function drawParts(dt) {
+  parts = parts.filter(p => now - p.t < p.life);
+  for (const p of parts) {
+    p.vx *= Math.exp(-dt * 2); p.vy = p.vy * Math.exp(-dt * 2) + p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.vr) p.r += p.vr * dt;
+    const k = 1 - (now - p.t) / p.life; ctx.globalAlpha = Math.min(1, k * 2.2);
+    if (p.k === "h") heart(p.x, p.y, p.s * 1.5, H(60 + (p.dh > 0 ? 8 : 0), 85, 1, p.dh));
+    else if (p.k === "d") { ctx.fillStyle = "#f2b630"; ctx.beginPath(); ctx.arc(p.x, p.y, p.s * .35, 0, 7); ctx.fill(); }
+    else { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = H(80, 70, 1, p.dh); ctx.fillRect(-p.s * .5, -p.s * .2, p.s, p.s * .4); ctx.restore(); }
+  }
+  ctx.globalAlpha = 1;
+}
+function drawFloaters(dt, on) {
+  if (on) { floatAcc += dt * 6; while (floatAcc > 1) { floatAcc--; floaters.push({ x: 16 + Math.random() * (DW - 32), y: CH + 10, s: 6 + Math.random() * 8, v: 40 + Math.random() * 45, ph: Math.random() * 6, t: now }); } }
+  floaters = floaters.filter(f => f.y > -20);
+  for (const f of floaters) { f.y -= f.v * dt; ctx.globalAlpha = Math.min(1, (now - f.t) * 2) * clamp((f.y - 10) / 160, 0, 1) * .5; heart(f.x + Math.sin(now * 2 + f.ph) * 8, f.y, f.s, H(70, 85)); }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- scene ----------
+function drawLogo(x, y, a) {                        // our own mark: a heart in a speech-bubble shield
+  ctx.globalAlpha = a;
+  rr(x - 13, y - 14, 26, 22, 8); ctx.fillStyle = H(94, 70); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - 4, y + 7); ctx.lineTo(x, y + 12); ctx.lineTo(x + 4, y + 7); ctx.fill();
+  heart(x, y - 2, 15, H(56, 85)); check(x, y - 3, 6, 1, "#fff", 1.7);
+  text("love", x, y + 25, F.mono(500, 9), 9, C.ink, "right"); text("CHECK", x, y + 25, F.mono(500, 9), 9, H(50, 80), "left");
+  ctx.globalAlpha = 1;
+}
+function drawBar() {
+  const f = doneT >= 0 ? inOut((now - doneT - .38) / .6) : 0;
+  const b = BAR(), c = CARD(), x = lerp(b.x, c.x, f), y = lerp(b.y, c.y, f), w = lerp(b.w, c.w, f), h = lerp(b.h, c.h, f);
+  ctx.save(); ctx.shadowColor = "rgba(80,50,30,.12)"; ctx.shadowBlur = 18 + 10 * f; ctx.shadowOffsetY = 4;
+  rr(x, y, w, h, lerp(12, 24, f)); ctx.fillStyle = C.card; ctx.fill(); ctx.restore();
+  ctx.strokeStyle = f > 0 ? H(80, 60, .5 * f + .0) : C.line; ctx.lineWidth = 1; rr(x, y, w, h, lerp(12, 24, f)); ctx.stroke();
+  if (f > 0) { ctx.strokeStyle = C.line; ctx.globalAlpha = 1 - f; ctx.stroke(); ctx.globalAlpha = 1; }
+  const a = 1 - sm(f / .3);
+  if (a > 0) { text(CONFIG.lines.check, b.x + 58, b.y + 34, F.ui(500, 16.5), 16.5, C.ink); drawLogo(b.x + b.w - 40, b.y + 21, a); }
+  // hint under the bar before you start
+  if (openT < 0) { const k = .6 + .4 * Math.sin(now * 3); ctx.globalAlpha = k; text("tap the box to continue", DW / 2, b.y + 90, F.mono(400, 11.5), 11.5, C.mute, "center"); ctx.globalAlpha = 1; }
+  // the checkbox: empty → spinner → check → flies into the card and becomes a beating heart
+  const bx = BOX(), p0 = ctr(bx), p1 = HEART_C(), m = sm((f - .25) / .45);
+  const px = lerp(p0.x, p1.x, inOut(f)), py = lerp(p0.y, p1.y, inOut(f)) - Math.sin(f * Math.PI) * 24, sz = lerp(28, 30, f);
+  if (m < 1) {
+    ctx.globalAlpha = 1 - m;
+    const press = openT >= 0 ? 1 - .14 * Math.exp(-(now - openT) * 14) : 1;
+    ctx.save(); ctx.translate(px, py); ctx.scale(press * (1 + f * 1.4), press * (1 + f * 1.4));
+    if (openT < 0) { rr(-sz / 2, -sz / 2, sz, sz, 7); ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = "#bcaea2"; ctx.lineWidth = 2; ctx.stroke(); }
+    else if (doneT < 0) {                            // spinner while it "checks" you
+      const e = now - openT, ga = sm(e / .15);
+      ctx.strokeStyle = H(55, 80, .25 * ga); ctx.lineWidth = 3.2; ctx.beginPath(); ctx.arc(0, 0, 11, 0, 7); ctx.stroke();
+      ctx.strokeStyle = H(55, 85, ga); ctx.lineCap = "round"; ctx.beginPath(); const a0 = e * 7.5; ctx.arc(0, 0, 11, a0, a0 + 1.6 + Math.sin(e * 4) * .9); ctx.stroke();
+      if (e < .22) { rr(-sz / 2, -sz / 2, sz, sz, 7); ctx.strokeStyle = `rgba(188,174,162,${1 - e / .22})`; ctx.lineWidth = 2; ctx.stroke(); }
+    } else { rr(-sz / 2, -sz / 2, sz, sz, 8); ctx.fillStyle = H(56, 85, sm((now - doneT) / .12)); ctx.fill(); check(0, 0, 15, sm((now - doneT) / .25), "#fff", 3.2); }
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
+  if (m > 0) {
+    const e = now - doneT - .38 - .6, ph = e / CONFIG.beat - Math.floor(e / CONFIG.beat);
+    const lub = e > 0 ? Math.exp(-Math.pow(ph / .07, 2)) + .6 * Math.exp(-Math.pow((ph - .25) / .07, 2)) + Math.exp(-Math.pow((ph - 1) / .07, 2)) : 0;
+    const hs = lerp(sz * 1.4, 96, m) * (1 + .1 * lub) * (1 + .25 * Math.exp(-Math.max(0, e) * 6) * (e > 0 ? 1 : 0));
+    ctx.globalAlpha = m; ctx.save(); ctx.shadowColor = H(60, 90, .5); ctx.shadowBlur = 24 * m * (1 + lub);
+    heartPath(px, py, hs); const g = ctx.createLinearGradient(0, py - hs * .6, 0, py + hs * .6); g.addColorStop(0, H(66, 90)); g.addColorStop(1, H(50, 82)); ctx.fillStyle = g; ctx.fill(); ctx.restore();
+    ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.beginPath(); ctx.ellipse(px - hs * .28, py - hs * .26, hs * .1, hs * .06, -.6, 0, 7); ctx.fill();
+    check(px, py - hs * .04, hs * .3, 1, "#fff", hs * .07); ctx.globalAlpha = 1;
+  }
+  // card text
+  const ta = sm((f - .6) / .4);
+  if (ta > 0) {
+    const c = CARD(), ty = (1 - ta) * 10; ctx.globalAlpha = ta;
+    text("lovecheck · 1 human found", DW / 2, c.y + 26 + ty * .5, F.mono(500, 10), 10, C.dim, "center");
+    text(CONFIG.lines.done, DW / 2, c.y + 188 + ty, F.ui(600, 18.5), 18.5, C.ink, "center");
+    const line = nm(CONFIG.msg); let fs = 34; while (measure(line, F.serif(fs), fs) > c.w - 30 && fs > 18) fs--;
+    text(line, DW / 2, c.y + 232 + ty, F.serif(fs), fs, H(42, 70), "center", H(56, 85));
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(c.x + 40, c.y + 252); ctx.lineTo(c.x + c.w - 40, c.y + 252); ctx.stroke();
+    text(CONFIG.lines.score, DW / 2, c.y + 275 + ty, F.mono(500, 11), 11, C.mute, "center");
+    ctx.globalAlpha = 1;
+  }
+}
+function drawTileContent(cnt, r, t, seed) {
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+  if (cnt.pose) {
+    const dh = [0, 28, -24, 52, -48, 14, -12, 40, -36][seed % 9];
+    const g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h); g.addColorStop(0, `hsl(${CONFIG.hue + dh},85%,93%)`); g.addColorStop(1, `hsl(${CONFIG.hue + dh},70%,86%)`);
+    ctx.fillStyle = g; ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = "rgba(255,255,255,.5)"; for (let k = 0; k < 4; k++) heart(r.x + ((seed * 37 + k * 29) % 86) + 10, r.y + ((seed * 53 + k * 41) % 50) + 10, 7, "rgba(255,255,255,.55)");
+    person(cx, cy + 4, r.w, cnt.pose, t, seed);
+    label(nm("{name}"), r, true);
+  } else {
+    const tl = cnt.tile; ctx.fillStyle = tl.bg; ctx.fillRect(r.x, r.y, r.w, r.h);
+    const g = ctx.createRadialGradient(cx, cy - 10, 5, cx, cy, r.w * .8); g.addColorStop(0, "rgba(255,255,255,.45)"); g.addColorStop(1, "rgba(0,0,0,.05)"); ctx.fillStyle = g; ctx.fillRect(r.x, r.y, r.w, r.h);
+    if (tl.ex) ex(cx, cy + 4, r.w, t);
+    else {
+      ctx.fillStyle = "rgba(60,40,30,.1)"; ctx.beginPath(); ctx.ellipse(cx, cy + 26, 26, 6, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#000"; ctx.font = F.emo(46); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(tl.emoji, cx, cy - 2 + Math.sin(t * 2.4 + seed) * 1.5);
+    }
+    label(nm(tl.label), r, false);
+  }
+}
+function label(s, r, love) {
+  const w = measure(s, F.mono(500, 9.5), 9.5) + 12; rr(r.x + 5, r.y + r.h - 20, w, 15, 7.5);
+  ctx.fillStyle = love ? H(56, 85) : "rgba(255,255,255,.85)"; ctx.fill();
+  text(s, r.x + 11, r.y + r.h - 9.3, F.mono(500, 9.5), 9.5, love ? "#fff" : C.ink);
+}
+function drawPanel() {
+  if (openT < 0) return;
+  const o = outBack((now - openT - .2) / .4), a = sm((now - openT - .2) / .16);
+  const c = doneT >= 0 ? inOut((now - doneT - .18) / .32) : 0;
+  if (a <= 0 || c >= 1) return;
+  const x = X0, y = PAN.y, w = CW, h = PAN.h;
+  ctx.save(); ctx.globalAlpha = a * (1 - c);
+  ctx.translate(DW / 2, y); ctx.scale(.94 + .06 * o - .04 * c, .9 + .1 * o - .06 * c); ctx.translate(-DW / 2, -y + c * -16);
+  ctx.shadowColor = "rgba(80,50,30,.16)"; ctx.shadowBlur = 24; ctx.shadowOffsetY = 6;
+  rr(x, y, w, h, 14); ctx.fillStyle = C.card; ctx.fill(); ctx.shadowColor = "transparent";
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.stroke();
+  // little notch pointing at the checkbox
+  ctx.fillStyle = C.card; ctx.beginPath(); ctx.moveTo(x + 22, y + 1); ctx.lineTo(x + 30, y - 7); ctx.lineTo(x + 38, y + 1); ctx.fill();
+  ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(x + 22, y); ctx.lineTo(x + 30, y - 7); ctx.lineTo(x + 38, y); ctx.stroke();
+  // header band
+  const sh = Math.sin((now - shakeT) * 46) * 7 * Math.exp(-(now - shakeT) * 6);
+  const hd = stage === 2 && now - swapT > .12 ? CONFIG.lines.again : CONFIG.lines.ask;
+  ctx.save(); rr(x + 6, y + 6, w - 12, PAN.head - 6, 9); ctx.clip();
+  ctx.fillStyle = H(54, 78); ctx.fillRect(x, y, w, PAN.head + 6);
+  const fl = stage === 2 ? Math.exp(-(now - swapT) * 5) : 0; if (fl > .01) { ctx.fillStyle = `rgba(255,255,255,${fl * .5})`; ctx.fillRect(x, y, w, PAN.head + 6); }
+  for (let k = 0; k < 5; k++) heart(x + w - 26 - k * 22, y + 20 + (k % 2) * 30, 14 - k, "rgba(255,255,255,.1)");
+  text(hd[0], x + 20 + sh, y + 27, F.ui(500, 13), 13, "rgba(255,255,255,.88)");
+  text(nm(hd[1]), x + 20 + sh, y + 52, F.ui(700, 22), 22, "#fff");
+  text(hd[2], x + 20 + sh, y + 68, F.mono(400, 9.5), 9.5, "rgba(255,255,255,.75)");
+  ctx.restore();
+  // grid
+  for (let i = 0; i < 9; i++) {
+    const tl = tiles[i], r = tileR(i), pk = outBack((now - openT - .3 - i * .035) / .3);
+    if (pk <= 0) continue;
+    if (!tl.popped && now - openT > .3 + i * .035) { tl.popped = true; ev("tile"); }
+    let fk = 1, cnt = tl.cur;                       // flip during the reshuffle
+    if (tl.prev && now < tl.flipAt + .3) { const u = clamp((now - tl.flipAt) / .3, 0, 1); fk = Math.abs(Math.cos(u * Math.PI)); cnt = u < .5 ? tl.prev : tl.cur; if (u >= .5 && !tl.flipped) { tl.flipped = true; ev("flip"); } }
+    const se = now - tl.selT, selK = tl.sel ? outBack(se / .28) : 1 - sm(se / .15);
+    const inner = 1 - .14 * selK, ccx = r.x + r.w / 2, ccy = r.y + r.h / 2;
+    ctx.save(); ctx.translate(ccx, ccy); ctx.scale(pk * fk * inner, pk * inner); ctx.translate(-ccx, -ccy);
+    rr(r.x, r.y, r.w, r.h, 6); ctx.save(); ctx.clip(); drawTileContent(cnt, r, now, i + (cnt.pose ? 3 : 0)); ctx.restore();
+    ctx.restore();
+    if (tl.sel || se < .15) {                       // selected: frame + heart badge
+      ctx.strokeStyle = H(55, 85, selK); ctx.lineWidth = 2.5; rr(r.x + r.w * .07 - 1, r.y + r.h * .07 - 1, r.w * .86 + 2, r.h * .86 + 2, 7); ctx.stroke();
+      const bs = outBack(se / .3) * (tl.sel ? 1 : 1 - sm(se / .15));
+      if (bs > 0) { ctx.save(); ctx.translate(r.x + 13, r.y + 13); ctx.scale(bs, bs); ctx.fillStyle = H(55, 85); ctx.beginPath(); ctx.arc(0, 0, 12, 0, 7); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); heart(0, 1, 13, "#fff"); ctx.restore(); }
+      if (tl.sel && se < .45) { const k = se / .45; ctx.strokeStyle = H(60, 90, 1 - k); ctx.lineWidth = 3 * (1 - k); ctx.beginPath(); ctx.arc(ccx, ccy, 20 + k * 50, 0, 7); ctx.stroke(); }
+    }
+  }
+  // footer: icons, message, verify
+  const fy = FOOT_Y; ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(x + 6, fy - 3); ctx.lineTo(x + w - 6, fy - 3); ctx.stroke();
+  ctx.strokeStyle = C.mute; ctx.lineWidth = 2; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(x + 24, fy + 19, 7, .4, Math.PI * 1.8); ctx.stroke(); ctx.fillStyle = C.mute; ctx.beginPath(); ctx.moveTo(x + 31, fy + 12); ctx.lineTo(x + 32, fy + 19); ctx.lineTo(x + 26, fy + 16); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 50, fy + 19, 7.5, 0, 7); ctx.stroke(); text("?", x + 50, fy + 23, F.ui(700, 11), 11, C.mute, "center");
+  const me = now - msgT;
+  if (me < 2.2) { const k = sm(me / .12) * (1 - sm((me - 1.9) / .3)); ctx.save(); ctx.globalAlpha *= k; text(msg, x + 66 + (1 - k) * 4, fy + 23, F.mono(500, 10.5), 10.5, msgBad ? C.red : H(45, 70)); ctx.restore(); }
+  const v = VERIFY(), pv = 1 - .08 * Math.exp(-(now - pressV) * 14) * (now > pressV ? 1 : 0), vc = ctr(v);
+  ctx.save(); ctx.translate(vc.x, vc.y); ctx.scale(pv, pv); ctx.translate(-vc.x, -vc.y);
+  rr(v.x, v.y, v.w, v.h, 9); ctx.fillStyle = H(54, 78); ctx.fill();
+  text("VERIFY", vc.x, v.y + 24, F.ui(700, 14), 14, "#fff", "center"); ctx.restore();
+  ctx.restore();
+}
+function drawCursor() {
+  if (!cur.on) return;
+  const k = now - cur.down, s = 1.25 * (k < .12 ? .86 : 1);
+  if (k < .4) { ctx.strokeStyle = `rgba(42,33,29,${.5 * (1 - k / .4)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cur.x, cur.y, 6 + k * 60, 0, 7); ctx.stroke(); }
+  ctx.save(); ctx.translate(cur.x, cur.y); ctx.scale(s, s);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 17); ctx.lineTo(4.2, 13.2); ctx.lineTo(7, 19.6); ctx.lineTo(9.8, 18.4); ctx.lineTo(7.1, 12.2); ctx.lineTo(12.4, 12.2); ctx.closePath();
+  ctx.shadowColor = "rgba(0,0,0,.3)"; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1.5;
+  ctx.fillStyle = "#fff"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = "#111"; ctx.lineWidth = 1.1; ctx.lineJoin = "round"; ctx.stroke(); ctx.restore();
+}
+
+// ---------- one loop for everything ----------
+function frame() {
+  now = (performance.now() - T0) / 1000; const dt = Math.min(.05, Math.max(0, now - last)); last = now;
+  if (CONFIG.auto) runAuto();
+  if (doneT >= 0) {
+    const e = now - doneT - .98;
+    if (e >= 0 && !burstDone) { burstDone = true; burst(70); ev("heart"); }
+    if (e >= 0) { const n = Math.floor(e / CONFIG.beat); if (n > beatN) { beatN = n; if (n > 0) { sfx.beat(); ev("beat"); } } }
+  }
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, Hh);
+  const glow = ctx.createRadialGradient(W / 2, OY + 260 * S, 10, W / 2, OY + 260 * S, Math.max(W, Hh) * .75);
+  glow.addColorStop(0, H(90, 80, doneT >= 0 ? .55 * sm((now - doneT - .5) / .6) + .2 : .2)); glow.addColorStop(1, "rgba(243,236,227,0)");
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, Hh);
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, OX * DPR, OY * DPR);
+  drawFloaters(dt, doneT >= 0 && now - doneT > 1);
+  drawPanel(); drawBar(); drawParts(dt); drawCursor();
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
