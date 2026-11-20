@@ -1,0 +1,796 @@
+<!doctype html>
+<!--
+  Merge Conflict · drop 49 · free code by @sicscod.drops (MIT)
+  A git merge conflict, but the two versions are alive. HEAD and feature are two blobs wearing their
+  line of code as a sumo belt, shoving each other around a ring drawn by the ======= marker.
+  Tap a blob to make it shove. Pick a button: Accept Current, Accept Incoming, or Accept Both.
+  One HTML file, no libraries, everything drawn on a canvas from one requestAnimationFrame loop.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>merge conflict</title>
+<meta name="description" content="Two lines of code fight sumo-style inside a git merge conflict. Accept one, or accept both. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#15161c;color:#d4d6e4}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.credit{position:fixed;left:0;right:0;bottom:0;height:26px;display:flex;align-items:center;justify-content:center;z-index:3;background:#0d0e12;border-top:1px solid #1f2029;font:400 10.5px "JetBrains Mono",ui-monospace,monospace;color:#5f6378}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:400 20px 'JetBrains Mono'">a</span><span class="pre" style="font:700 20px 'JetBrains Mono'">a</span><span class="pre" style="font:600 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:800 20px 'Bricolage Grotesque'">a</span>
+<script>
+// ===== Merge Conflict · free code by @sicscod.drops =====
+// Try: yoursite/?a=212&b=26   (?auto=1 plays the whole fight by itself)
+const P = new URLSearchParams(location.search);
+const num = (k, d) => P.get(k) !== null && P.get(k) !== "" && isFinite(+P.get(k)) ? +P.get(k) : d;
+const CONFIG = {
+  a: num("a", 212),                    // HEAD blob hue, 0-360 (212 blue)
+  b: num("b", 26),                     // incoming blob hue (26 orange)
+  m: P.get("m") !== null ? num("m", 0) : null,   // merged blob hue (empty = halfway between a and b)
+  auto: P.get("auto") === "1",         // a cursor plays the whole thing by itself
+  file: "button.js",
+  before: ["// the checkout button", "export const buyButton = {", "  label: \"Buy now\","],
+  head: "  color: \"blue\",",            // HEAD wears this line as its belt
+  incoming: "  color: \"orange\",",      // feature wears this one
+  merged: "  color: \"purple\",",        // what "Accept Both" turns them into
+  after: ["  radius: 12,", "};"],
+  headName: "HEAD", incomingName: "feature",
+  round: "ROUND 1",
+  buttons: ["Accept Current", "Accept Incoming", "Accept Both"],
+  quips: {
+    a: ["mine!", "nope.", "hrrngh"],              // HEAD while shoving
+    b: ["move!", "my line!", "hyah"],             // feature while shoving
+    current: ["obviously.", "nooo"],              // hovering Accept Current: HEAD, then feature
+    incoming: ["told you.", "i was first"],       // hovering Accept Incoming: feature, then HEAD
+    both: "...both?", stop: "...oh.", done: "lgtm",
+  },
+  conflict: "Merge conflict in button.js",
+  success: "merged · tests passing",
+  hint: "tap a blob to shove · pick a side",
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const F = { mono: '"JetBrains Mono", ui-monospace, monospace', ui: '"Bricolage Grotesque", system-ui, sans-serif' };
+const C = { bg: "#15161c", bar: "#0e0f14", line: "#22232e", gut: "#3d4052", text: "#d4d6e4", kw: "#c792ea", str: "#c3e88d", fn: "#82aaff",
+  com: "#5c6178", punc: "#89ddff", prop: "#ffcb6b", num: "#f78c6c", ok: "#9ad86f", warn: "#ffb86b", dim: "#5f6378", ink: "#0d0d12" };
+const hue = h => ((h % 360) + 360) % 360;
+const HA = hue(CONFIG.a), HB = hue(CONFIG.b);
+const HM = CONFIG.m !== null ? hue(CONFIG.m) : hue(HA + (((HB - HA + 540) % 360) - 180) / 2 - 22);
+const body = (h, l = 62) => `hsl(${h},${h > 40 && h < 75 ? 80 : h > 250 && h < 320 ? 70 : 84}%,${l}%)`;
+const LINE = [CONFIG.head, CONFIG.incoming];
+const NB = CONFIG.before.length, NA = CONFIG.after.length;
+const MARK = [`<<<<<<< ${CONFIG.headName}`, `>>>>>>> ${CONFIG.incomingName}`], MARKX = [" (Current Change)", " (Incoming Change)"];
+const MAXCOL = Math.max(...CONFIG.before.map(l => l.length), ...CONFIG.after.map(l => l.length), CONFIG.merged.length, MARK[0].length + MARKX[0].length, MARK[1].length + MARKX[1].length);
+let W = 0, H = 0, DPR = 1, S = 1, FOOT = 26, TABH = 34, PANH = 90, STH = 22, FS = 14, LH = 22, CW = 8, GUT = 36, CX0 = 0, CY0 = 0, CODEB = 0, LENSH = 30, A = 200;
+let RX = 0, RW = 200, RH = 40, U = 80, EDGE = 100, RYOFF = 0;
+
+function colorize(s) {
+  const out = Array(s.length).fill(C.text); let i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (s.startsWith("//", i)) { for (; i < s.length; i++) out[i] = C.com; break; }
+    if (ch === '"' || ch === "'" || ch === "`") { let j = i + 1; while (j < s.length && s[j] !== ch) j++; for (let k = i; k <= j && k < s.length; k++) out[k] = C.str; i = j + 1; continue; }
+    if (/[A-Za-z_$]/.test(ch)) { let j = i; while (j < s.length && /[\w$]/.test(s[j])) j++; const w = s.slice(i, j);
+      const col = /^(const|let|var|function|return|if|else|for|while|new|await|async|true|false|null|import|export|from|class|default)$/.test(w) ? C.kw
+        : s[j] === "(" ? C.fn : s[i - 1] === "." || s[j] === ":" ? C.prop : C.text;
+      for (let k = i; k < j; k++) out[k] = col; i = j; continue; }
+    if (/\d/.test(ch)) out[i] = C.num; else if (/[{}()\[\];,.:=]/.test(ch)) out[i] = C.punc;
+    i++;
+  }
+  return out;
+}
+const COLS = { before: CONFIG.before.map(colorize), after: CONFIG.after.map(colorize), merged: colorize(CONFIG.merged), line: LINE.map(colorize) };
+
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  S = clamp(Math.min(W / 500, H / 560), .7, 1.4);
+  TABH = 34 * S; STH = 22 * S; PANH = clamp(H * .17, 80 * S, 120 * S);
+  CODEB = H - FOOT - PANH;
+  ctx.font = `400 100px ${F.mono}`; const ratio = ctx.measureText("M").width / 100;
+  FS = clamp(Math.min((W - 20 * S) / ((MAXCOL + 3.4) * ratio), 14 * S), 9, 16); LH = FS * 1.62; CW = FS * ratio; GUT = FS * 2.6;
+  CX0 = 8 * S + GUT; LENSH = LH * 1.4;
+  const avail = CODEB - TABH - 12 * S, fixed = (NB + NA + 2) * LH + LENSH;
+  A = Math.max(150 * S, avail - fixed); const cap = W * .82; let extra = 0;
+  if (A > cap) { extra = A - cap; A = cap; }
+  CY0 = TABH + 6 * S + extra * .35;
+  RX = W / 2; RW = Math.min(W * .46, A * 1.15); RH = RW * .19; U = clamp(Math.min(A * .5, RW * .44), 46, 150);
+  EDGE = RW - U * 1.24; RYOFF = Math.min(A * .66, U + A * .3);
+}
+
+// ---------- layout (c: 0 = conflict, 1 = resolved and collapsed) ----------
+function layout(c) {
+  const L = { rows: [] }; let y = CY0;
+  for (let i = 0; i < NB; i++) { L.rows.push(y); y += LH; }
+  L.lens = y; y += LENSH * (1 - c);
+  L.head = y; y += LH * (1 - c);
+  L.ar = y; const ah = lerp(A, LH, c); L.merged = y + (ah - LH) / 2; y += ah;
+  L.foot = y; y += LH * (1 - c);
+  L.after = []; for (let i = 0; i < NA; i++) { L.after.push(y); y += LH; }
+  L.end = y;
+  return L;
+}
+let G0 = null;                            // the conflict layout (arena geometry)
+const RY = () => G0.ar + RYOFF, FY = () => RY() + RH * .12;
+
+// ---------- state ----------
+let now = 0, last = 0, mode = "fight", modeT = 0, hv = -1, hvT = 0, shakeE = 0, crowdE = 0, roundT = -9, nextAI = 0, lastOoh = -9;
+let cx = 0, cxV = 0, cxT = 0, sep = 0, sepT = 0, coll = 0;
+let FB = null, R = null, fallen = false, winner = -1;
+const B = [0, 1].map(i => ({ i, hue: i ? HB : HA, face: i ? -1 : 1, sh: null, lean: 0, sq: 0, sqV: 0, exp: "strain", pose: "push", ph: 0, blink: 2, fly: null, x: 0, y: 0, teeter: false }));
+const parts = [], glyphs = [], bubbles = {}, oohs = [];
+const cur = { x: 0, y: 0, seen: false, pressT: -9, mouse: false };
+const events = window.__events = [];
+const ev = (name, extra) => events.push([name, +now.toFixed(3), extra]);
+
+// ---------- sound (Web Audio, starts on the first tap) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } }
+function tone(type, f0, f1, len, vol, delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len * .8);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .006); g.gain.exponentialRampToValueAtTime(.0006, t + len);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + len + .02);
+}
+function noise(len, vol, fc, q = 1, type = "bandpass", delay = 0) {
+  if (!AC) return; const n = AC.sampleRate * len | 0, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  f.type = type; f.frequency.value = fc; f.Q.value = q; g.gain.value = vol; s.buffer = b; s.connect(f).connect(g).connect(AC.destination); s.start(AC.currentTime + delay);
+}
+const sfx = {
+  thud(p = 1) { tone("sine", 150, 48, .3, .5 * Math.min(1.3, p)); noise(.1, .8, 500, .7, "lowpass"); },
+  ooh() { if (!AC) return; const t = AC.currentTime, f = AC.createBiquadFilter(), g = AC.createGain(); f.type = "bandpass"; f.frequency.setValueAtTime(420, t); f.frequency.linearRampToValueAtTime(700, t + .45); f.Q.value = 3;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.12, t + .15); g.gain.exponentialRampToValueAtTime(.001, t + .8); f.connect(g).connect(AC.destination);
+    [196, 198.5, 247, 249, 294].forEach(fr => { const o = AC.createOscillator(); o.type = "sawtooth"; o.frequency.setValueAtTime(fr * .92, t); o.frequency.linearRampToValueAtTime(fr * 1.06, t + .35); o.frequency.linearRampToValueAtTime(fr * .95, t + .8); o.connect(f); o.start(t); o.stop(t + .82); }); },
+  hover() { tone("sine", 900, 1150, .05, .05); },
+  click() { tone("square", 1800, 1100, .025, .06); noise(.03, .4, 4000, 1, "highpass"); },
+  smug() { tone("square", 523, 523, .1, .04); tone("square", 784, 784, .18, .045, .1); },
+  wah() { tone("triangle", 330, 300, .22, .09); tone("triangle", 300, 270, .22, .09, .22); tone("triangle", 270, 200, .5, .09, .44); },
+  squish() { tone("sine", 260, 90, .25, .25); tone("sine", 520, 1300, .18, .07, .05); noise(.18, .4, 900, 2); },
+  zip() { tone("sine", 600, 1800, .3, .06); },
+  clatter() { for (let i = 0; i < 7; i++) tone("square", 1800 + Math.random() * 1600, 1200, .02, .02, .05 + i * .06); },
+  ding() { [1047, 1319, 1568, 2093].forEach((f, i) => tone("sine", f, f, 1.1, .09, i * .05)); },
+  pop() { noise(.08, .6, 2500, 1); tone("sine", 1400, 500, .06, .08); },
+};
+
+// ---------- fight ----------
+function shove(i, target, power = 1) {
+  const b = B[i]; if (b.sh || b.fly) return false;
+  b.sh = { t0: now, imp: now + .14, target, power, hit: false };
+  return true;
+}
+function impact(i) {
+  const b = B[i], sh = b.sh, o = B[1 - i], dir = i ? -1 : 1; sh.hit = true;
+  const before = cxT;
+  if (sh.kill) { cxT = dir * (EDGE + U * .3); }
+  else cxT = sh.target !== undefined ? sh.target * EDGE : clamp(cxT + dir * sh.power * EDGE * rnd(.35, .6), -EDGE, EDGE);
+  const p = clamp(Math.abs(cxT - before) / EDGE, .3, 1.4);
+  cxV += dir * p * EDGE * 3;
+  b.sqV -= 4; o.sqV += 7 * p;
+  shakeE = Math.max(shakeE, .6 + p * .7); crowdE = Math.max(crowdE, .4 * p);
+  const fy = FY(), px = RX + cx;
+  for (let k = 0; k < 7 + p * 6; k++) parts.push({ kind: "dust", x: px + rnd(-U * .6, U * .6), y: fy - rnd(0, 4) * S, vx: rnd(-90, 90) * S + dir * 60 * S, vy: -rnd(10, 60) * S, r: rnd(5, 11) * S * (.7 + p * .4), t0: now, life: rnd(.35, .6) });
+  for (let k = 0; k < 5; k++) { const a = rnd(-2.6, -.5); parts.push({ kind: "spark", x: px, y: fy - U * .55, vx: Math.cos(a) * 260 * S, vy: Math.sin(a) * 260 * S, t0: now, life: .18 }); }
+  ev("shove", { who: i, p: +p.toFixed(2) }); sfx.thud(p);
+  const q = CONFIG.quips[i ? "b" : "a"];
+  if (CONFIG.auto ? sh.qi !== undefined : Math.random() < .35) say(i, q[CONFIG.auto ? sh.qi % q.length : Math.random() * q.length | 0], .7);
+  if (sh.kill) { o.fly = { x: o.x, y: o.y, vx: dir * 520 * S, vy: -620 * S, r: 0, vr: dir * 7, t0: now }; o.exp = "cry"; sfx.wah(); }
+}
+function say(owner, text, life = .9, delay = 0) { bubbles[owner] = { text, t0: now + delay, life }; }
+
+function onHover(h) {
+  if (h === hv) return; hv = h; hvT = now;
+  if (h < 0 || mode !== "fight") return;
+  sfx.hover(); ev("hover", h);
+  if (h === 0) { say(0, CONFIG.quips.current[0], 1, .12); say(1, CONFIG.quips.current[1], 1, .3); setTimeoutless(.3, () => sfx.wah()); sfx.smug(); }
+  if (h === 1) { say(1, CONFIG.quips.incoming[0], 1, .12); say(0, CONFIG.quips.incoming[1], 1, .3); setTimeoutless(.3, () => sfx.wah()); sfx.smug(); }
+  if (h === 2) { say(0, CONFIG.quips.both, .9, .1); }
+}
+// tiny scheduler driven by the rAF loop (no setTimeout, so recordings stay in sync)
+const later = [];
+function setTimeoutless(d, fn) { later.push({ t: now + d, fn }); }
+
+function act(i) {
+  if (mode !== "fight") return;
+  ev("click", i); sfx.click(); cur.pressT = now;
+  for (const b of B) b.sh = null;
+  if (i === 2) { mode = "merge"; modeT = now; hv = -1; ev("stop"); say(0, CONFIG.quips.stop, .8, .12); return; }
+  mode = "win"; modeT = now; winner = i; hv = -1;
+  shove(i, undefined, 2); B[i].sh.kill = true;
+}
+
+function aiShove() {
+  const k = cx / EDGE;                        // the one being pushed back fights harder
+  const i = Math.random() < .5 + k * .35 ? 1 : 0;
+  shove(i, undefined, rnd(.6, 1.2));
+  nextAI = now + rnd(.55, 1.05);
+}
+
+// ---------- resolution: the line flies into the code, markers fall away ----------
+function resolve(fb) {
+  FB = fb; R = { t0: now, lineFrom: null };
+  ev("line"); sfx.zip(); sfx.clatter();
+  // everything that was "conflict" becomes a falling glyph
+  const L = layout(0);
+  const addRow = (txt, y, col) => { for (let k = 0; k < txt.length; k++) if (txt[k] !== " ") glyphs.push({ ch: txt[k], col, x: CX0 + (k + .5) * CW, y: y + LH * .68, vx: rnd(-50, 50) * S, vy: rnd(-180, -40) * S, r: 0, vr: rnd(-6, 6), fs: FS, d: rnd(0, .18) }); };
+  addRow(MARK[0] + MARKX[0], L.head, C.dim); addRow(MARK[1] + MARKX[1], L.foot, C.dim);
+  for (const g of ringGlyphs()) glyphs.push({ ch: "=", col: C.punc, x: g.x, y: g.y, vx: rnd(-80, 80) * S, vy: rnd(-200, -20) * S, r: g.a, vr: rnd(-8, 8), fs: FS * .95, d: rnd(0, .25) });
+  for (const ch of chips(L)) glyphs.push({ chip: ch, x: ch.x + ch.w / 2, y: ch.y + ch.h / 2, vx: rnd(-40, 40) * S, vy: rnd(-160, -60) * S, r: 0, vr: rnd(-2, 2), d: rnd(0, .1) });
+  fallen = true;
+}
+
+function reset() {
+  mode = "fight"; modeT = now; hv = -1; FB = null; R = null; fallen = false; winner = -1; coll = 0;
+  cx = cxT = .15 * EDGE; cxV = 0; sep = sepT = 0; roundT = now - .25;
+  parts.length = glyphs.length = oohs.length = later.length = 0; for (const k in bubbles) delete bubbles[k];
+  for (const b of B) Object.assign(b, { hugged: false, sh: null, lean: 0, sq: 0, sqV: 0, exp: "strain", pose: "push", fly: null, teeter: false });
+  nextAI = now + .3;
+  ev("reset");
+}
+
+// ---------- input ----------
+function chips(L) {
+  ctx.font = `600 ${FS * .86}px ${F.ui}`;
+  const out = []; let x = CX0; const h = LENSH * .74, y = L.lens + (LENSH - h) / 2 - LENSH * .04, gap = 7 * S;
+  const pad = 10 * S, dot = 7 * S;
+  let tot = CONFIG.buttons.reduce((s, b) => s + ctx.measureText(b).width + pad * 2 + dot + 5 * S, 0) + gap * 2;
+  const sc = Math.min(1, (W - CX0 - 8 * S) / tot);
+  CONFIG.buttons.forEach((label, i) => { const w = (ctx.measureText(label).width + pad * 2 + dot + 5 * S) * sc; out.push({ i, label, x, y, w, h, sc }); x += w + gap * sc; });
+  return out;
+}
+function chipAt(x, y) { if (!G0) return -1; for (const c of chips(layout(coll))) if (x >= c.x - 3 && x <= c.x + c.w + 3 && y >= c.y - 4 && y <= c.y + c.h + 4) return c.i; return -1; }
+function blobAt(x, y) { for (const b of B) if (!b.fly && Math.abs(x - b.x) < U * .6 && y < b.y + 8 * S && y > b.y - U * 1.1) return b.i; return -1; }
+cv.addEventListener("pointerdown", e => {
+  if (CONFIG.auto) return; audio();
+  const x = e.clientX, y = e.clientY;
+  if (mode === "done") { if (now - modeT > 1) reset(); return; }
+  if (mode !== "fight") return;
+  const c = chipAt(x, y); if (c >= 0) { act(c); return; }
+  const bi = blobAt(x, y); if (bi >= 0) { shove(bi, undefined, 1.1); nextAI = Math.max(nextAI, now + .6); }
+});
+addEventListener("pointermove", e => { if (CONFIG.auto || e.pointerType !== "mouse") return; cur.x = e.clientX; cur.y = e.clientY; cur.mouse = true; });
+addEventListener("resize", () => { resize(); G0 = layout(0); });
+
+// ---------- ?auto=1: a scripted cursor plays the story (used for the video) ----------
+const AUTO_SHOVES = [   // [impact time, who (0 HEAD, 1 feature), where the contact point ends up (-1..1 of the ring), quip index or null]
+  [0.00, 1, -.32, null],
+  [0.50, 0, .40, 0],
+  [1.00, 1, -1.0, 0],
+  [1.50, 0, .86, 2],
+  [2.00, 1, .02, null],
+];
+const chipC = i => () => { const c = chips(layout(0))[i]; return { x: c.x + c.w * .55, y: c.y + c.h * .62 }; };
+const CUR_AUTO = [      // [time, "move", duration, target, from?] / [time, "click", button]
+  [2.04, "move", .42, chipC(0), () => ({ x: W * .92, y: CODEB - 20 * S })],
+  [3.22, "move", .26, chipC(1)],
+  [4.20, "move", .26, chipC(2)],
+  [5.00, "click", 2],
+  [5.70, "move", .7, () => ({ x: W * .9, y: CODEB - 24 * S })],
+];
+let autoT0 = 0, si = 0, ci = 0, cseg = null;
+function runAuto() {
+  const t = now - autoT0;
+  while (si < AUTO_SHOVES.length && t >= AUTO_SHOVES[si][0] - .14 && mode === "fight") {
+    const a = AUTO_SHOVES[si++], b = B[a[1]];
+    b.sh = { t0: autoT0 + a[0] - .14, imp: autoT0 + a[0], target: a[2], power: 1, hit: false, qi: a[3] === null ? undefined : a[3] };
+  }
+  while (ci < CUR_AUTO.length && t >= CUR_AUTO[ci][0]) {
+    const a = CUR_AUTO[ci++];
+    if (a[1] === "move") { const from = a[4] ? a[4]() : { x: cur.x, y: cur.y }; cseg = { t0: autoT0 + a[0], len: a[2], from, to: a[3](), first: !!a[4] }; cur.seen = true; }
+    else act(a[2]);
+  }
+  if (cseg) { const u = clamp((now - cseg.t0) / cseg.len, 0, 1), e = cseg.first ? 1 - Math.pow(1 - u, 3) : sm(u), arc = Math.sin(u * Math.PI) * 10 * S;
+    cur.x = lerp(cseg.from.x, cseg.to.x, e); cur.y = lerp(cseg.from.y, cseg.to.y, e) - arc; }
+  if (mode === "done" && now - modeT > 2.6) { reset(); autoT0 = now; si = ci = 0; cseg = null; cur.seen = false; }
+}
+
+// ---------- drawing helpers ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function bodyPath(w, h) {
+  ctx.beginPath(); ctx.moveTo(-w * .4, 0);
+  ctx.bezierCurveTo(-w * .57, 0, -w * .55, -h * .6, -w * .37, -h * .86);
+  ctx.bezierCurveTo(-w * .22, -h * 1.03, w * .22, -h * 1.03, w * .37, -h * .86);
+  ctx.bezierCurveTo(w * .55, -h * .6, w * .57, 0, w * .4, 0);
+  ctx.closePath();
+}
+function limb(pts, u, col) {
+  ctx.lineCap = ctx.lineJoin = "round";
+  const path = () => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); if (pts.length === 3) ctx.quadraticCurveTo(pts[1][0], pts[1][1], pts[2][0], pts[2][1]); else ctx.lineTo(pts[1][0], pts[1][1]); };
+  path(); ctx.strokeStyle = C.ink; ctx.lineWidth = u * .15; ctx.stroke();
+  path(); ctx.strokeStyle = col; ctx.lineWidth = u * .09; ctx.stroke();
+  const [hx, hy] = pts[pts.length - 1];
+  ctx.beginPath(); ctx.arc(hx, hy, u * .072, 0, 7); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = u * .03; ctx.stroke();
+}
+// a blob. o: {x, y (feet), u (height), hue, face, lean, sq, exp, pose, text, beltA, look, ph, reach, alpha}
+// pass: "back" (feet, headband tails, thick outline), "front" (body, belt, face), "arms"
+function drawBlob(o, pass) {
+  const u = o.u, w = u * 1.12, h = u, f = o.face || 1, col = body(o.hue), dark = body(o.hue, 40), lw = Math.max(1.6, u * .045);
+  ctx.save(); ctx.translate(o.x, o.y);
+  if (o.rot) ctx.rotate(o.rot);
+  if (o.alpha !== undefined) ctx.globalAlpha = o.alpha;
+  ctx.transform(1, 0, -f * (o.lean || 0), 1, 0, 0);
+  const sq = o.sq || 0; ctx.scale(1 + sq * .5, 1 - sq * .45);
+  if (pass === "back") {
+    // feet
+    for (const sd of [-1, 1]) { const st = Math.max(0, Math.sin((o.ph || 0) + (sd > 0 ? Math.PI : 0))) * u * .05;
+      ctx.beginPath(); ctx.ellipse(sd * w * .24, -st, u * .13, u * .07, 0, 0, 7); ctx.fillStyle = dark; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = lw; ctx.stroke(); }
+    // headband tails flapping behind
+    if (o.band !== false) {
+      const bx = -f * w * .36, by = -h * .79;
+      for (let i = 0; i < 2; i++) { const fl = Math.sin(now * 17 + i * 1.9 + o.hue) * u * .06, len = u * (.34 - i * .06);
+        const pts = [[bx, by], [bx - f * len * .55, by + fl - u * .02 + i * u * .05], [bx - f * len, by + fl * 1.6 + u * .06 + i * u * .07]];
+        ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(...pts[0]); ctx.quadraticCurveTo(...pts[1], ...pts[2]);
+        ctx.strokeStyle = C.ink; ctx.lineWidth = u * .085; ctx.stroke(); ctx.strokeStyle = "#f3eee2"; ctx.lineWidth = u * .045; ctx.stroke(); }
+    }
+    bodyPath(w, h); ctx.strokeStyle = C.ink; ctx.lineWidth = lw * 2; ctx.lineJoin = "round"; ctx.stroke();
+  }
+  if (pass === "front") {
+    bodyPath(w, h); ctx.fillStyle = col; ctx.fill();
+    ctx.save(); bodyPath(w, h); ctx.clip();
+    ctx.fillStyle = body(o.hue, 52); ctx.beginPath(); ctx.ellipse(f * w * .1, h * .05, w * .62, h * .3, 0, 0, 7); ctx.fill();    // belly shade
+    if (o.band !== false) { ctx.fillStyle = "#f3eee2"; ctx.fillRect(-w, -h * .83, w * 2, h * .075); ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(-w, -h * .763, w * 2, h * .012); }
+    if (o.text && (o.beltA === undefined || o.beltA > 0)) { ctx.fillStyle = body(o.hue, 26); ctx.fillRect(-w, -h * .34, w * 2, h * .15); }
+    ctx.restore();
+    ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = lw * .9; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(-w * .12, -h * .62, w * .3, Math.PI * 1.12, Math.PI * 1.42); ctx.stroke();
+    // belt plate with the line of code
+    if (o.text && (o.beltA === undefined || o.beltA > 0)) {
+      const t = o.text.trim().replace(/[,;]$/, ""), fs = u * .104; ctx.font = `700 ${fs}px ${F.mono}`;
+      const tw = ctx.measureText(t).width, pw = tw + u * .11, ph = u * .17, px = -pw / 2, py = -h * .355;
+      ctx.globalAlpha *= o.beltA === undefined ? 1 : o.beltA;
+      rr(px, py, pw, ph, ph * .3); ctx.fillStyle = "#121319"; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = lw * .9; ctx.stroke();
+      rr(px + lw * .6, py + lw * .6, pw - lw * 1.2, ph - lw * 1.2, ph * .25); ctx.strokeStyle = body(o.hue, 70); ctx.globalAlpha *= .55; ctx.lineWidth = lw * .5; ctx.stroke(); ctx.globalAlpha /= .55;
+      const cols = colorize(t); let x = -tw / 2; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+      for (let k = 0; k < t.length; k++) { ctx.fillStyle = cols[k]; ctx.fillText(t[k], x, py + ph / 2 + fs * .04); x += tw / t.length; }
+      ctx.globalAlpha = o.alpha !== undefined ? o.alpha : 1;
+    }
+    drawFace(o, w, h, f, lw);
+  }
+  if (pass === "arms") drawArms(o, w, h, f, col);
+  ctx.restore();
+}
+function drawFace(o, w, h, f, lw) {
+  const u = o.u, exp = o.exp || "strain", ff = o.face === 0 ? 0 : f, ey = -h * .56, er = u * .085, lk = o.look || { x: f, y: 0 };
+  ctx.lineCap = ctx.lineJoin = "round"; ctx.strokeStyle = C.ink;
+  for (const sd of [-1, 1]) {
+    const ex = sd * w * .17 + ff * w * .06;
+    if (exp === "cry" || exp === "happy") {                  // squeezed shut (cry) or ^ ^ (happy)
+      ctx.lineWidth = lw * 1.15; ctx.beginPath();
+      if (exp === "cry") { ctx.moveTo(ex - er, ey - er * .1); ctx.quadraticCurveTo(ex, ey + er * .9, ex + er, ey - er * .1); }
+      else { ctx.moveTo(ex - er * .9, ey + er * .35); ctx.quadraticCurveTo(ex, ey - er * 1.1, ex + er * .9, ey + er * .35); }
+      ctx.stroke(); continue;
+    }
+    if (exp === "blank") { ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(ex + lk.x * er * .3, ey, er * .38, 0, 7); ctx.fill(); continue; }
+    const big = exp === "panic" ? 1.25 : 1;
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex, ey, er * big, 0, 7); ctx.fill(); ctx.lineWidth = lw * .8; ctx.stroke();
+    const pr = exp === "panic" ? er * .3 : er * .5;
+    ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(ex + lk.x * er * .4, ey + lk.y * er * .4, pr, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex + lk.x * er * .4 - pr * .35, ey + lk.y * er * .4 - pr * .4, pr * .3, 0, 7); ctx.fill();
+    if (exp === "smug") {                                     // heavy lids
+      ctx.save(); ctx.beginPath(); ctx.arc(ex, ey, er * 1.02, 0, 7); ctx.clip();
+      ctx.fillStyle = body(o.hue, 56); ctx.fillRect(ex - er * 1.2, ey - er * 1.2, er * 2.4, er * 1.15); ctx.restore();
+      ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(ex - er, ey - er * .05); ctx.lineTo(ex + er, ey - er * .05); ctx.stroke();
+      ctx.lineWidth = lw * 1.1; ctx.beginPath(); const raise = sd === ff ? -er * .5 : 0;     // one brow up
+      ctx.moveTo(ex - er * .8, ey - er * 1.55 + raise); ctx.quadraticCurveTo(ex, ey - er * 1.9 + raise, ex + er * .8, ey - er * 1.5 + raise); ctx.stroke();
+    }
+    if (exp === "strain") {                                   // angry brows toward the opponent
+      ctx.lineWidth = lw * 1.3; ctx.beginPath(); const inner = sd === f ? 1 : 0;
+      ctx.moveTo(ex - er * .95, ey - er * (1.35 - inner * .0) + (sd === -1 ? (f > 0 ? 0 : er * .45) : (f > 0 ? er * .45 : 0)));
+      ctx.lineTo(ex + er * .95, ey - er * 1.35 + (sd === -1 ? (f > 0 ? er * .45 : 0) : (f > 0 ? 0 : er * .45))); ctx.stroke();
+    }
+  }
+  // mouth
+  const mx = ff * w * .06, my = -h * .38;
+  ctx.lineWidth = lw;
+  if (exp === "strain") {                                    // gritted teeth
+    const mw = u * .2, mh = u * .085; rr(mx - mw / 2, my - mh / 2, mw, mh, mh * .35); ctx.fillStyle = "#fff"; ctx.fill(); ctx.stroke();
+    ctx.lineWidth = lw * .6; ctx.beginPath(); ctx.moveTo(mx - mw / 2, my); ctx.lineTo(mx + mw / 2, my);
+    for (let k = 1; k < 4; k++) { ctx.moveTo(mx - mw / 2 + mw * k / 4, my - mh / 2); ctx.lineTo(mx - mw / 2 + mw * k / 4, my + mh / 2); } ctx.stroke();
+  } else if (exp === "smug") {
+    ctx.beginPath(); ctx.moveTo(mx - u * .1, my + u * .005); ctx.quadraticCurveTo(mx + ff * u * .02, my + u * .04, mx + u * .1 * (ff || 1), my - u * .045 * (ff || 1) - u * .0); ctx.stroke();
+  } else if (exp === "cry" || exp === "panic") {
+    const mw = u * (exp === "cry" ? .2 : .11), mh = u * (exp === "cry" ? .12 : .1);
+    ctx.fillStyle = "#3a0d18"; ctx.beginPath(); ctx.moveTo(mx - mw / 2, my);
+    for (let k = 0; k <= 6; k++) ctx.lineTo(mx - mw / 2 + mw * k / 6, my - mh * .35 + (k % 2 ? -1 : 1) * u * .012 * (1 + Math.sin(now * 30)));
+    ctx.quadraticCurveTo(mx, my + mh * 1.1, mx - mw / 2, my); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (exp === "happy") {
+    const mw = u * .2; ctx.fillStyle = "#3a0d18"; ctx.beginPath(); ctx.moveTo(mx - mw / 2, my - u * .02); ctx.quadraticCurveTo(mx, my + u * .16, mx + mw / 2, my - u * .02); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.save(); ctx.clip(); ctx.fillStyle = "#ff7a8a"; ctx.beginPath(); ctx.ellipse(mx, my + u * .085, mw * .3, u * .05, 0, 0, 7); ctx.fill(); ctx.restore();
+  } else if (exp === "blank") {
+    ctx.beginPath(); ctx.moveTo(mx - u * .05, my); ctx.lineTo(mx + u * .05, my); ctx.stroke();
+  } else if (exp === "soft") {
+    ctx.beginPath(); ctx.arc(mx, my - u * .03, u * .07, .35, Math.PI - .35); ctx.stroke();
+  } else {
+    ctx.fillStyle = "#3a0d18"; ctx.beginPath(); ctx.ellipse(mx, my, u * .035, u * .045, 0, 0, 7); ctx.fill(); ctx.stroke();
+  }
+  if (exp === "strain" && Math.sin(now * 3 + o.hue) > .55) {   // sweat drop
+    const sx = -f * w * .36, sy = -h * .8 + ((now * 1.4 + o.hue) % 1) * u * .2;
+    ctx.fillStyle = "#bfe6ff"; ctx.beginPath(); ctx.moveTo(sx, sy - u * .07); ctx.quadraticCurveTo(sx + u * .05, sy + u * .01, sx, sy + u * .03); ctx.quadraticCurveTo(sx - u * .05, sy + u * .01, sx, sy - u * .07); ctx.fill(); ctx.lineWidth = lw * .6; ctx.stroke();
+  }
+}
+function drawArms(o, w, h, f, col) {
+  const u = o.u, pose = o.pose || "down";
+  for (const sd of [-1, 1]) {
+    const front = sd === f, s0 = [sd * w * .42, -h * .47];
+    let pts;
+    if (pose === "push") pts = front ? [s0, [sd * (w * .5 + (o.reach || u * .2)), -h * .52 + Math.sin(now * 40 + o.hue) * u * .012]]
+                                    : [s0, [sd * w * .6, -h * .3 + Math.sin(now * 9) * u * .02]];
+    else if (pose === "windup") pts = front ? [s0, [sd * w * .44, -h * .3]] : [s0, [sd * w * .62, -h * .55]];
+    else if (pose === "flail") { const a = now * 15 + (sd > 0 ? 0 : Math.PI) + o.hue; pts = [s0, [s0[0] + sd * u * .12 + Math.cos(a) * u * .2, s0[1] - u * .12 + Math.sin(a) * u * .2]]; }
+    else if (pose === "hips") pts = [s0, [sd * w * .66, -h * .4], [sd * w * .5, -h * .25]];
+    else if (pose === "tantrum") pts = [s0, [sd * w * .64, -h * .22 + Math.sin(now * 22 + sd) * u * .07]];
+    else if (pose === "hug") pts = front ? [s0, [sd * (w * .5 + o.reach * .55), -h * .9], [sd * (w * .5 + o.reach), -h * .5]] : [s0, [sd * w * .6, -h * .25]];
+    else if (pose === "thumb") {
+      if (sd === 1) { const k = o.thumbK || 0; pts = [s0, [w * lerp(.6, .68, k), lerp(-h * .3, -h * .86, k)]]; }
+      else pts = [s0, [-w * .6, -h * .22]];
+    }
+    else pts = [s0, [sd * w * .6, -h * .16]];
+    limb(pts, u, col);
+    if (pose === "thumb" && sd === 1 && (o.thumbK || 0) > .5) {
+      const [hx, hy] = pts[pts.length - 1]; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(hx - u * .02, hy - u * .05); ctx.lineTo(hx - u * .02, hy - u * .17);
+      ctx.strokeStyle = C.ink; ctx.lineWidth = u * .1; ctx.stroke(); ctx.strokeStyle = col; ctx.lineWidth = u * .058; ctx.stroke();
+      ctx.beginPath(); ctx.arc(hx, hy, u * .085, 0, 7); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = u * .03; ctx.stroke();
+    }
+  }
+}
+
+// ---------- ring made of "=" ----------
+function ringGlyphs() {
+  const out = [], ry = RY(), n = Math.max(24, Math.round(Math.PI * (RW + RH) * 1.2 / (CW * 1.5)));
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; out.push({ x: RX + Math.cos(a) * RW, y: ry + Math.sin(a) * RH, a: Math.atan2(Math.cos(a) * RH, -Math.sin(a) * RW), back: Math.sin(a) < 0, i }); }
+  return out;
+}
+function drawRing(back) {
+  if (fallen) return;
+  ctx.font = `700 ${FS * .95}px ${F.mono}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const ry = RY();
+  if (back) { ctx.fillStyle = "rgba(255,255,255,.028)"; ctx.beginPath(); ctx.ellipse(RX, ry, RW, RH, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = "rgba(137,221,255,.1)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(RX, ry, RW * .2, RH * .2, 0, 0, 7); ctx.stroke(); }
+  for (const g of ringGlyphs()) {
+    if (g.back !== back) continue;
+    const j = jitter(9, g.i);
+    ctx.save(); ctx.translate(g.x + j[0], g.y + j[1]); ctx.rotate(g.a); ctx.fillStyle = C.punc; ctx.globalAlpha = back ? .55 : .95; ctx.fillText("=", 0, 0); ctx.restore();
+  }
+  if (!back) {   // the marker itself, as the ring's name plate
+    const t = "=======", y = ry + RH + FS * .2; ctx.font = `700 ${FS}px ${F.mono}`; const tw = ctx.measureText(t).width;
+    rr(RX - tw / 2 - 7 * S, y - FS * .78, tw + 14 * S, FS * 1.56, 5 * S); ctx.fillStyle = "#1d1f2a"; ctx.fill(); ctx.strokeStyle = "rgba(137,221,255,.35)"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = C.punc; ctx.fillText(t, RX, y + .5);
+  }
+}
+
+// ---------- code ----------
+function jitter(l, k) {
+  const a = shakeE * 1.5 * S, c = crowdE;
+  return [Math.sin(now * 53 + l * 7.1 + k * 3.3) * a, Math.cos(now * 61 + l * 4.3 + k * 5.7) * a * 1.2 - c * Math.max(0, Math.sin(now * 19 + k * .55 + l * 1.3)) * 4 * S];
+}
+function drawRow(txt, cols, y, l, alpha = 1) {
+  ctx.font = `400 ${FS}px ${F.mono}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.globalAlpha = alpha;
+  for (let k = 0; k < txt.length; k++) { if (txt[k] === " ") continue; const j = jitter(l, k); ctx.fillStyle = cols[k]; ctx.fillText(txt[k], CX0 + (k + .5) * CW + j[0], y + LH * .68 + j[1]); }
+  ctx.globalAlpha = 1;
+}
+function gutter(n, y, col = C.gut) { ctx.font = `400 ${FS * .82}px ${F.mono}`; ctx.textAlign = "right"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = col; ctx.fillText(String(n), CX0 - GUT * .4, y + LH * .68); }
+
+function drawCode(L) {
+  const done = !!R, c = coll;
+  for (let i = 0; i < NB; i++) { gutter(i + 1, L.rows[i]); drawRow(CONFIG.before[i], COLS.before[i], L.rows[i], i); }
+  if (!fallen) {
+    // code lens buttons
+    for (const ch of chips(L)) drawChip(ch, 1);
+    // marker rows
+    for (const [k, y] of [[0, L.head], [1, L.foot]]) {
+      ctx.fillStyle = `hsla(${k ? HB : HA},70%,55%,.16)`; ctx.fillRect(0, y, W, LH);
+      gutter(k ? NB + 5 : NB + 1, y, `hsla(${k ? HB : HA},60%,70%,.6)`);
+      const t = MARK[k], cols = [...t].map(() => C.dim).concat([...MARKX[k]].map(() => "#4a4e63"));
+      drawRow(t + MARKX[k], cols, y, 20 + k);
+      ctx.fillStyle = body(k ? HB : HA); ctx.fillRect(0, y, 3 * S, LH);
+    }
+  }
+  // arena tint: territory split at the contact point
+  const ar = L.ar, ah = lerp(A, LH, c), ta = (1 - sm(c * 1.5)) * (fallen ? .6 : 1);
+  if (ta > 0) {
+    const px = RX + cx, gw = U * .5;
+    let g = ctx.createLinearGradient(px - gw, 0, px + gw, 0);
+    const ca = `hsla(${mode === "merge" || FB ? HM : HA},70%,55%,${.075 * ta})`, cb = `hsla(${mode === "merge" || FB ? HM : HB},80%,55%,${.075 * ta})`;
+    g.addColorStop(0, ca); g.addColorStop(1, cb); ctx.fillStyle = g; ctx.fillRect(0, ar, W, ah);
+    if (!fallen) { gutter(NB + 2, ar + 2 * S, `hsla(${HA},60%,70%,.45)`); gutter(NB + 3, RY() - LH * .68 + FS * .3, C.gut); gutter(NB + 4, ar + ah - LH - 2 * S, `hsla(${HB},60%,70%,.45)`); }
+  }
+  // the resolved line
+  if (R) {
+    const k = clamp((now - R.t0 - .38) / .5, 0, 1);
+    if (now - R.t0 > .38) {
+      ctx.fillStyle = `rgba(154,216,111,${.18 * (1 - k)})`; ctx.fillRect(0, L.merged, W, LH);
+      gutter(NB + 1, L.merged); drawRow(FB.line, FB.cols, L.merged, 30);
+    }
+  }
+  for (let i = 0; i < NA; i++) { gutter(NB + 6 + i + (c > .5 ? -4 : 0), L.after[i]); drawRow(CONFIG.after[i], COLS.after[i], L.after[i], 40 + i); }
+}
+function drawChip(ch, a) {
+  const on = hv === ch.i && mode === "fight", hk = on ? sm((now - hvT) / .12) : 0, dotC = ch.i === 0 ? body(HA) : ch.i === 1 ? body(HB) : body(HM);
+  ctx.save(); ctx.globalAlpha = a;
+  rr(ch.x, ch.y, ch.w, ch.h, ch.h / 2);
+  ctx.fillStyle = on ? `rgba(255,255,255,${.06 + .1 * hk})` : "rgba(255,255,255,.035)"; ctx.fill();
+  ctx.strokeStyle = on ? dotC : "rgba(255,255,255,.12)"; ctx.lineWidth = on ? 1.6 * S : 1; ctx.stroke();
+  const pressed = now - cur.pressT < .15 && on;
+  ctx.fillStyle = dotC; ctx.beginPath(); ctx.arc(ch.x + 10 * S * ch.sc + 3.5 * S, ch.y + ch.h / 2, 3.5 * S * (1 + hk * .25), 0, 7); ctx.fill();
+  ctx.font = `600 ${FS * .86 * ch.sc}px ${F.ui}`; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = on ? "#fff" : "#aeb2c8";
+  ctx.fillText(ch.label, ch.x + (10 * S + 12 * S) * ch.sc, ch.y + ch.h / 2 + .5 * S + (pressed ? 1 : 0));
+  ctx.restore();
+}
+function drawTabs() {
+  ctx.fillStyle = C.bar; ctx.fillRect(0, 0, W, TABH);
+  const tw = 124 * S; ctx.fillStyle = C.bg; ctx.fillRect(0, 0, tw, TABH);
+  const ok = mode === "done"; ctx.fillStyle = ok ? C.ok : C.warn; ctx.fillRect(0, 0, tw, 2 * S);
+  rr(12 * S, TABH / 2 - 7 * S, 14 * S, 14 * S, 2.5 * S); ctx.fillStyle = "#e5c07b"; ctx.fill();
+  ctx.fillStyle = "#15161c"; ctx.font = `700 ${7.5 * S}px ${F.mono}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("JS", 19 * S, TABH / 2 + .5 * S);
+  ctx.textAlign = "left"; ctx.font = `600 ${13 * S}px ${F.ui}`; ctx.fillStyle = ok ? "#d4d6e4" : C.warn; ctx.fillText(CONFIG.file, 32 * S, TABH / 2 + .5 * S);
+  ctx.fillStyle = ok ? C.dim : C.warn; ctx.font = `700 ${11 * S}px ${F.mono}`; ctx.fillText(ok ? "" : "!", tw - 18 * S, TABH / 2 + .5 * S);
+  const t = ok ? "✓ resolved" : "1 conflict"; ctx.font = `700 ${11 * S}px ${F.mono}`; const bw = ctx.measureText(t).width + 18 * S, bh = 21 * S, bx = W - 10 * S - bw, by = TABH / 2 - bh / 2;
+  rr(bx, by, bw, bh, bh / 2); ctx.fillStyle = ok ? "rgba(154,216,111,.15)" : "rgba(255,184,107,.14)"; ctx.fill(); ctx.strokeStyle = ok ? "rgba(154,216,111,.5)" : "rgba(255,184,107,.5)"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = ok ? C.ok : C.warn; ctx.textAlign = "center"; ctx.fillText(t, bx + bw / 2, TABH / 2 + .5 * S);
+  ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(tw, TABH - .5); ctx.lineTo(W, TABH - .5); ctx.stroke();
+}
+function drawPanel() {
+  const y0 = CODEB, ok = mode === "done", dk = ok ? now - modeT : -1;
+  ctx.fillStyle = C.bar; ctx.fillRect(0, y0, W, PANH);
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, y0 + .5); ctx.lineTo(W, y0 + .5); ctx.stroke();
+  const px = 16 * S, hy = y0 + 16 * S;
+  ctx.textBaseline = "middle"; ctx.textAlign = "left"; ctx.font = `600 ${10.5 * S}px ${F.ui}`;
+  let tx = px; for (const [name, on] of [["SOURCE CONTROL", !ok], ["TERMINAL", ok]]) { ctx.fillStyle = on ? "#d4d6e4" : C.dim; ctx.fillText(name, tx, hy); const w = ctx.measureText(name).width; if (on) { ctx.fillStyle = "#d4d6e4"; ctx.fillRect(tx, hy + 9 * S, w, 1.5 * S); } tx += w + 26 * S; }
+  const r1 = y0 + 40 * S, r2 = y0 + (PANH - STH) * .5 + 24 * S;
+  if (!ok) {
+    ctx.font = `800 ${15 * S}px ${F.ui}`; ctx.fillStyle = C.warn; ctx.fillText("!", px + 3 * S, r1);
+    ctx.fillStyle = "#e8e9f3"; ctx.font = `600 ${14.5 * S}px ${F.ui}`; ctx.fillText(CONFIG.conflict, px + 18 * S, r1);
+    ctx.textAlign = "right"; ctx.fillStyle = C.dim; ctx.font = `400 ${11 * S}px ${F.mono}`; ctx.fillText(`${CONFIG.headName} vs ${CONFIG.incomingName}`, W - px, r1 + 1 * S);
+    ctx.textAlign = "left"; ctx.font = `400 ${11.5 * S}px ${F.mono}`; ctx.fillStyle = C.dim;
+    ctx.fillText(CONFIG.auto ? `$ git merge ${CONFIG.incomingName}` : CONFIG.hint, px + 18 * S, r1 + 20 * S);
+  } else {
+    const cmd = "$ npm test", n = Math.floor(clamp(dk / .25, 0, 1) * cmd.length);
+    ctx.font = `400 ${12 * S}px ${F.mono}`; ctx.fillStyle = "#d4d6e4"; ctx.fillText(cmd.slice(0, n), px, r1 - 3 * S);
+    const pop = outBack(dk / .3);
+    if (dk < .5) { ctx.fillStyle = `rgba(154,216,111,${.16 * (1 - dk / .5)})`; ctx.fillRect(0, y0 + 26 * S, W, PANH - 26 * S - STH); }
+    ctx.save(); ctx.translate(px, r1 + 21 * S); ctx.scale(pop, pop);
+    ctx.font = `800 ${19 * S}px ${F.ui}`; ctx.fillStyle = C.ok; ctx.fillText("✓ " + CONFIG.success, 0, 0); ctx.restore();
+    if (!CONFIG.auto && dk > 1.2) { ctx.textAlign = "right"; ctx.fillStyle = C.dim; ctx.font = `400 ${11 * S}px ${F.mono}`; ctx.fillText("tap to fight again", W - px, r1 - 3 * S); ctx.textAlign = "left"; }
+  }
+  const sy = y0 + PANH - STH; ctx.fillStyle = ok ? "#1f3626" : "#3a2a1c"; ctx.fillRect(0, sy, W, STH);
+  ctx.font = `500 ${11 * S}px ${F.mono}`; ctx.fillStyle = ok ? "#b9f28a" : "#ffd3a1"; ctx.textAlign = "left";
+  ctx.fillText(ok ? "⎇ main  ✓ merged" : `⎇ main ← ${CONFIG.incomingName}  MERGING`, px, sy + STH / 2 + .5 * S);
+  ctx.textAlign = "right"; ctx.fillStyle = "rgba(230,232,245,.7)"; ctx.fillText(ok ? "0 conflicts" : "1 conflict", W - px, sy + STH / 2 + .5 * S);
+}
+function drawRound() {
+  if (mode !== "fight" && now - modeT > .3) return;
+  const k = now - roundT, pop = k < .35 ? outBack(k / .35) * (1 + .15 * Math.sin(k * 30) * (1 - k / .35)) : 1 + .04 * Math.sin(now * 6);
+  const a = mode === "fight" ? 1 : 1 - (now - modeT) / .3; if (a <= 0 || k < 0) return;
+  ctx.font = `800 ${15 * S}px ${F.ui}`; const tw = ctx.measureText(CONFIG.round).width + 24 * S, th = 26 * S, x = W - 12 * S - tw / 2, y = G0.head + LH / 2;
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y); ctx.scale(pop, pop); ctx.rotate(-.04);
+  rr(-tw / 2, -th / 2 + 3 * S, tw, th, 6 * S); ctx.fillStyle = C.ink; ctx.fill();
+  rr(-tw / 2, -th / 2, tw, th, 6 * S); ctx.fillStyle = "#ffd25e"; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2 * S; ctx.stroke();
+  ctx.fillStyle = C.ink; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(CONFIG.round, 0, 1 * S);
+  ctx.restore();
+}
+function drawBubble(owner, x, y) {
+  const q = bubbles[owner]; if (!q || now < q.t0 || now > q.t0 + q.life) return;
+  const k = now - q.t0, a = k > q.life - .15 ? (q.life - k) / .15 : 1, pop = outBack(k / .16);
+  ctx.font = `700 ${12.5 * S}px ${F.mono}`; const tw = ctx.measureText(q.text).width + 16 * S, th = 24 * S;
+  const side = owner === 1 ? 1 : owner === 0 ? -1 : 1;
+  let bx = clamp(x + side * U * .3, tw / 2 + 6 * S, W - tw / 2 - 6 * S), by = Math.max(y - th, TABH + 4 * S);
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(bx, by + th); ctx.scale(pop, pop); ctx.translate(-bx, -(by + th));
+  rr(bx - tw / 2, by, tw, th, 8 * S); ctx.fillStyle = "#f4f1e8"; ctx.fill();
+  const tx = clamp(x, bx - tw / 2 + 8 * S, bx + tw / 2 - 8 * S);
+  ctx.beginPath(); ctx.moveTo(tx - 6 * S, by + th - 1); ctx.lineTo(tx - side * 2 * S, by + th + 7 * S); ctx.lineTo(tx + 6 * S, by + th - 1); ctx.fill();
+  ctx.fillStyle = "#15161c"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(q.text, bx, by + th / 2 + .5 * S);
+  ctx.restore();
+}
+function drawCursor() {
+  if (!CONFIG.auto || !cur.seen) return;
+  const pk = now - cur.pressT, sc = pk < .15 ? lerp(.82, 1, pk / .15) : 1;
+  ctx.save(); ctx.translate(cur.x, cur.y); ctx.scale(sc * 1.25 * S, sc * 1.25 * S);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 17); ctx.lineTo(4.2, 13); ctx.lineTo(7, 19.5); ctx.lineTo(9.6, 18.4); ctx.lineTo(6.9, 12.2); ctx.lineTo(12.2, 12.2); ctx.closePath();
+  ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+  ctx.fillStyle = "#fff"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = "#000"; ctx.lineWidth = 1.2; ctx.lineJoin = "round"; ctx.stroke();
+  ctx.restore();
+  if (pk < .45) { const k = pk / .45; ctx.strokeStyle = `rgba(255,255,255,${.7 * (1 - k)})`; ctx.lineWidth = 2 * S; ctx.beginPath(); ctx.arc(cur.x, cur.y, (6 + k * 22) * S, 0, 7); ctx.stroke(); }
+}
+
+// ---------- one loop for everything ----------
+function frame(t) {
+  now = t / 1000; const dt = Math.min(.05, last ? now - last : 1 / 60); last = now;
+  if (!G0) G0 = layout(0);
+  if (CONFIG.auto) runAuto();
+  for (let i = later.length - 1; i >= 0; i--) if (now >= later[i].t) { const f = later[i].fn; later.splice(i, 1); f(); }
+  // hover
+  const hx = CONFIG.auto ? (cur.seen ? chipAt(cur.x, cur.y) : -1) : (cur.mouse ? chipAt(cur.x, cur.y) : -1);
+  if (mode === "fight") onHover(hx);
+  const paused = mode === "fight" && hv >= 0;
+
+  // ----- fight physics -----
+  if (mode === "fight" || mode === "win") {
+    if (mode === "fight" && !CONFIG.auto && !paused && now > nextAI) aiShove();
+    for (const b of B) if (b.sh) { if (!b.sh.hit && now >= b.sh.imp) impact(b.i); if (now > b.sh.imp + .26) b.sh = null; }
+    if (!paused) { cxV += (95 * (cxT - cx) - 12 * cxV) * dt; cx += cxV * dt; }
+    if (mode === "fight") cx = clamp(cx, -EDGE * 1.06, EDGE * 1.06);
+  }
+  if (mode === "win") {   // the winner walks back to the middle
+    const k = clamp((now - modeT - .45) / .45, 0, 1); if (k > 0) { cxT = 0; }
+  }
+  sepT = mode === "fight" ? (paused ? U * .16 : 0) : sepT;
+  // ----- merge choreography -----
+  let mk = 0;
+  if (mode === "merge") {
+    const m = now - modeT;
+    if (m < .55) sepT = U * .45; else sepT = lerp(U * .45, -U * .5, sm((m - .55) / .3));
+    cxT = 0; cxV += (95 * (cxT - cx) - 14 * cxV) * dt; cx += cxV * dt;
+    if (m >= .55 && !R && !B[0].hugged) { B[0].hugged = true; ev("hug"); }
+    mk = clamp((m - .85) / .15, 0, 1);
+    if (m >= 1 && !FB) {
+      FB = { hue: HM, text: CONFIG.merged, line: CONFIG.merged, cols: COLS.merged, x: RX, y: FY(), u: U * 1.12, sq: -.1, sqV: -9, exp: "happy", pose: "down", beltA: 1 };
+      ev("squish"); sfx.squish(); shakeE = 1; crowdE = .6;
+      for (let k = 0; k < 14; k++) { const a = rnd(0, Math.PI * 2); parts.push({ kind: "dust", x: RX + Math.cos(a) * U * .5, y: FY() - U * .4 + Math.sin(a) * U * .3, vx: Math.cos(a) * 160 * S, vy: Math.sin(a) * 120 * S, r: rnd(5, 10) * S, t0: now, life: .5, col: body(HM, 80) }); }
+    }
+    if (m >= 1.5 && !R) resolve(FB);
+  }
+  if (mode === "win") {
+    const m = now - modeT;
+    if (m >= .9 && !FB) {
+      const w = B[winner];
+      FB = { hue: w.hue, text: LINE[winner], line: LINE[winner], cols: COLS.line[winner], x: w.x, y: w.y, u: U, sq: 0, sqV: -5, exp: "smug", pose: "hips", beltA: 1, face: w.face, solo: true };
+      resolve(FB);
+    }
+  }
+  sep += (sepT - sep) * Math.min(1, dt * 12);
+  // ----- resolution: line flies, layout collapses, blob perches, done -----
+  if (R) {
+    const r = now - R.t0;
+    coll = sm((r - .1) / .45);
+    if (r >= .5 && mode !== "done") {
+      mode = "done"; modeT = now; ev("done"); sfx.ding(); sfx.pop();
+      const L = layout(1), y = L.merged + LH * .5;
+      for (let k = 0; k < 70; k++) { const a = rnd(-Math.PI * .95, -Math.PI * .05), v = rnd(220, 560) * S;
+        parts.push({ kind: "conf", x: CX0 + rnd(0, FB.line.length) * CW, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: rnd(0, 6), vr: rnd(-12, 12), s: rnd(4, 7.5) * S, t0: now, life: rnd(1.2, 2),
+          col: [body(HA), body(HB), body(HM), "#ffd25e", "#f4f1e8"][k % 5] }); }
+    }
+    if (mode === "done" && now - modeT >= .5 && !R.thumb) { R.thumb = now; ev("thumb"); say(2, CONFIG.quips.done, 1.4, .05); sfx.smug(); }
+  }
+  // ----- per-blob animation -----
+  for (const b of B) {
+    const o = B[1 - b.i]; let lt = paused ? 0 : .1;
+    b.teeter = mode === "fight" && !paused && (b.i === 0 ? cx < -EDGE * .82 : cx > EDGE * .82);
+    if (b.teeter && !b.wasT && now - lastOoh > .4) { lastOoh = now; ev("ooh", b.i); sfx.ooh(); crowdE = 1; oohs.push({ t0: now, side: b.i ? 0 : 1 }); }
+    b.wasT = b.teeter;
+    b.pose = "push"; b.exp = "strain"; b.look = { x: b.face, y: 0 };
+    if (b.sh && now < b.sh.imp) { lt = -.3; b.pose = "windup"; }
+    else if (b.sh) lt = .4 * (1 - (now - b.sh.imp) / .26);
+    if (b.teeter && !(b.sh)) { lt = -.32 + Math.sin(now * 13) * .14; b.pose = "flail"; b.exp = "panic"; }
+    if (paused) {
+      const winA = hv === 0 ? 0 : hv === 1 ? 1 : -1, d = now - hvT;
+      if (winA < 0) { b.exp = "look"; b.pose = "down"; b.look = { x: d < .3 ? 0 : b.face, y: d < .3 ? -1 : 0 }; }
+      else if (b.i === winA) { b.exp = d < .1 ? "look" : "smug"; b.pose = "hips"; b.look = { x: -b.face, y: 0 }; lt = -.08; }
+      else { b.exp = d < .25 ? "panic" : "cry"; b.pose = d < .25 ? "down" : "tantrum"; lt = .05; }
+    }
+    if (mode === "merge") {
+      const m = now - modeT; lt = 0;
+      b.exp = m < .45 ? "blank" : m < .85 ? "soft" : "happy"; b.pose = m < .55 ? "down" : "hug"; b.look = { x: b.face, y: 0 };
+    }
+    if (mode === "win" || (mode === "done" && FB && FB.solo)) {
+      if (b.i === winner) { b.exp = b.sh && now < b.sh.imp + .1 ? "strain" : "smug"; b.pose = b.sh ? (now < b.sh.imp ? "windup" : "push") : "hips"; }
+      else { b.exp = "cry"; b.pose = "flail"; }
+    }
+    b.lean += (lt - b.lean) * Math.min(1, dt * 18);
+    b.sqV += (-220 * b.sq - 13 * b.sqV) * dt; b.sq += b.sqV * dt;
+    b.ph += dt * (mode === "fight" && !paused ? 11 + Math.abs(cxV) / (U * .1) : 3);
+    if (b.fly) { b.fly.vy += 1500 * S * dt; b.fly.x += b.fly.vx * dt; b.fly.y += b.fly.vy * dt; b.fly.r += b.fly.vr * dt; }
+  }
+  if (FB) { FB.sqV += (-200 * FB.sq - 9 * FB.sqV) * dt; FB.sq += FB.sqV * dt; }
+  // positions
+  const w = U * 1.12, px = RX + cx, fy = FY();
+  B[0].x = px - sep / 2 - w * .5 - U * .03; B[1].x = px + sep / 2 + w * .5 + U * .03;
+  if (mk > 0) { B[0].x = lerp(B[0].x, RX - U * .1, mk); B[1].x = lerp(B[1].x, RX + U * .1, mk); }
+  B[0].y = B[1].y = fy;
+  if (mode === "fight" && !paused) { const st = Math.sin(now * 33) * .8 * S; B[0].x += st; B[1].x += st; }
+
+  // tears for whoever is crying
+  for (const b of B) if (b.exp === "cry" && Math.random() < .7) {
+    const bx = b.fly ? b.fly.x : b.x, by = (b.fly ? b.fly.y : b.y) - U * .56;
+    for (const sd of [-1, 1]) parts.push({ kind: "tear", x: bx + sd * U * .17 + b.face * U * .06, y: by, vx: sd * rnd(70, 140) * S, vy: -rnd(60, 130) * S, r: rnd(2.2, 3.4) * S, t0: now, life: .55 });
+  }
+  shakeE = Math.max(0, shakeE - dt * 3.2); crowdE = Math.max(0, crowdE - dt * 1.6);
+
+  // ================= draw =================
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const L = layout(coll);
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TABH, W, CODEB - TABH); ctx.clip();
+  drawCode(L);
+  drawRing(true);
+  // blobs
+  const fightBlobs = !FB ? B.filter(b => true) : B.filter(b => b.fly);
+  const opts = b => ({ x: b.fly ? b.fly.x : b.x, y: b.fly ? b.fly.y : b.y, rot: b.fly ? b.fly.r : 0, u: U * (1 + mk * .08), hue: mk > 0 ? b.hue + (((HM - b.hue + 540) % 360) - 180) * mk : b.hue, face: b.face,
+    lean: b.lean, sq: b.sq, exp: b.exp, pose: b.pose, text: LINE[b.i], look: b.look, ph: b.ph, reach: b.pose === "hug" ? Math.max(U * .3, Math.abs(B[1].x - B[0].x) * .9) : Math.max(U * .12, U * .2 + sep * .3) });
+  if (fightBlobs.length) {
+    const os = fightBlobs.map(opts);
+    for (const o of os) drawBlob(o, "back");
+    for (const o of os) drawBlob(o, "front");
+    if (mk < .5) for (const o of os) drawBlob(o, "arms");
+  }
+  if (FB && !(mode === "merge" && now - modeT < 1)) {
+    const r = R ? now - R.t0 : -1;
+    const L1 = layout(1), pc = Math.max(CONFIG.merged.length, FB.line.length, CONFIG.before[NB - 1].length, NB > 1 ? CONFIG.before[NB - 2].length : 0) + 3.2;
+    const tu = U * .95, tx = W * .5, ty = Math.min(CODEB - 14 * S, L1.end + (CODEB - L1.end) * .5 + tu * .55);
+    const hk = R ? sm((r - .05) / .5) : 0;
+    const bx = lerp(FB.x, tx, hk), by = lerp(FB.y, ty, hk) - Math.sin(hk * Math.PI) * U * .7, bu = lerp(FB.u, tu, hk);
+    const thumbK = R && R.thumb ? outBack((now - R.thumb) / .3) : 0;
+    const bob = mode === "done" ? Math.sin(now * 5) * .03 : 0;
+    const o = { x: bx, y: by, u: bu, hue: FB.hue, face: FB.face || 1, lean: 0, sq: FB.sq + bob, exp: R && R.thumb ? "happy" : FB.exp, pose: R && R.thumb ? "thumb" : FB.pose, thumbK,
+      text: FB.text, beltA: R ? clamp(1 - r / .06, 0, 1) : 1, look: { x: 0, y: 0 }, ph: now * 3, band: true };
+    if (mode === "merge" || (R && !FB.solo && !R.thumb)) o.face = 0;
+    drawBlob(o, "back"); drawBlob(o, "front"); drawBlob(o, "arms");
+    FB.hx = bx; FB.hy = by - bu * 1.05;
+    if (R && R.thumb && now - R.thumb < .6) { const k = (now - R.thumb) / .6; ctx.strokeStyle = `rgba(255,236,170,${1 - k})`; ctx.lineWidth = 2 * S; ctx.lineCap = "round";
+      const sx = bx + bu * .75, sy = by - bu * 1.0, rr2 = (6 + k * 16) * S; for (let i = 0; i < 6; i++) { const an = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(sx + Math.cos(an) * rr2 * .45, sy + Math.sin(an) * rr2 * .45); ctx.lineTo(sx + Math.cos(an) * rr2, sy + Math.sin(an) * rr2); ctx.stroke(); } }
+    // the belt flying into the code
+    if (R && r < .42) {
+      const k = sm(r / .4), t = FB.line.trim(), ind = FB.line.length - FB.line.trimStart().length;
+      const fs = lerp(FB.u * .104, FS, k), fx = lerp(FB.x, CX0 + (ind + t.length / 2) * CW, k), fyy = lerp(FB.y - FB.u * .27, L.merged + LH * .5, k) - Math.sin(k * Math.PI) * LH * 2;
+      ctx.font = `700 ${fs}px ${F.mono}`; const tw = ctx.measureText(t).width; const cols = colorize(t);
+      rr(fx - tw / 2 - 6 * S, fyy - fs * .8, tw + 12 * S, fs * 1.6, 5 * S); ctx.fillStyle = `rgba(18,19,25,${1 - k})`; ctx.fill();
+      ctx.textAlign = "left"; ctx.textBaseline = "middle"; let x = fx - tw / 2; for (let i = 0; i < t.length; i++) { ctx.fillStyle = cols[i]; ctx.fillText(t[i], x, fyy); x += tw / t.length; }
+    }
+  }
+  drawRing(false);
+  // falling conflict pieces
+  for (let i = glyphs.length - 1; i >= 0; i--) {
+    const g = glyphs[i]; if (g.d > 0) { g.d -= dt; } else { g.vy += 1500 * S * dt; g.x += g.vx * dt; g.y += g.vy * dt; g.r += g.vr * dt; }
+    if (g.y > CODEB + 60) { glyphs.splice(i, 1); continue; }
+    ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(g.r);
+    if (g.chip) { ctx.translate(-g.x, -g.y); drawChip(g.chip, .8); }
+    else { ctx.font = `700 ${g.fs}px ${F.mono}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = g.col; ctx.fillText(g.ch, 0, 0); }
+    ctx.restore();
+  }
+  // crowd "ooh"
+  for (let i = oohs.length - 1; i >= 0; i--) { const o = oohs[i], k = (now - o.t0) / .9; if (k >= 1) { oohs.splice(i, 1); continue; }
+    ctx.font = `italic 700 ${13 * S}px ${F.mono}`; ctx.textAlign = "center"; ctx.fillStyle = `rgba(174,178,200,${.85 * (1 - k)})`;
+    for (let j = 0; j < 3; j++) ctx.fillText("ooh", W * (o.side ? [.62, .9, .78][j] : [.1, .38, .22][j]) + Math.sin(k * 9 + j) * 3 * S, G0.ar + [.16, .1, .9][j] * A - k * 22 * S); }
+  ctx.restore();
+  // particles
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i], k = (now - p.t0) / p.life; if (k >= 1) { parts.splice(i, 1); continue; }
+    if (p.kind === "dust") { p.vx *= 1 - dt * 3; p.vy *= 1 - dt * 3; p.x += p.vx * dt; p.y += p.vy * dt;
+      ctx.fillStyle = p.col || `rgba(200,204,222,${.4 * (1 - k)})`; ctx.globalAlpha = p.col ? .7 * (1 - k) : 1; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (.6 + k * .9), 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+    else if (p.kind === "spark") { p.x += p.vx * dt; p.y += p.vy * dt; ctx.strokeStyle = `rgba(255,236,170,${1 - k})`; ctx.lineWidth = 2.2 * S; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * .04, p.y - p.vy * .04); ctx.stroke(); }
+    else if (p.kind === "tear") { p.vy += 700 * S * dt; p.x += p.vx * dt; p.y += p.vy * dt; ctx.fillStyle = `rgba(150,214,255,${1 - k * .6})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); }
+    else if (p.kind === "conf") { p.vy += 900 * S * dt; p.vx *= 1 - dt * 1.4; p.vy *= 1 - dt * 1.4; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.scale(1, Math.abs(Math.cos(now * 9 + p.vr))); ctx.globalAlpha = k > .7 ? (1 - k) / .3 : 1; ctx.fillStyle = p.col; ctx.fillRect(-p.s / 2, -p.s * .3, p.s, p.s * .6); ctx.restore(); }
+  }
+  drawTabs(); drawPanel();
+  drawRound();
+  for (const b of B) if (!FB || b.fly) drawBubble(b.i, b.fly ? b.fly.x : b.x, (b.fly ? b.fly.y : b.y) - U * 1.08);
+  if (FB && FB.hx !== undefined) drawBubble(2, FB.hx, FB.hy);
+  drawCursor();
+  requestAnimationFrame(frame);
+}
+resize(); G0 = layout(0); reset();
+document.fonts && document.fonts.ready.then(() => { resize(); G0 = layout(0); });
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

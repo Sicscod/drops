@@ -55,6 +55,7 @@ Saw a drop in a video? Its number is the folder.
 | 46 | [📶 Heart Wi-Fi](46-heart-wifi) | A Wi-Fi list for your person: funny networks, one glowing pink "Delly ♥", password123 gets rejected, ♥ gets in, and the bars turn into a heart filling to 100%. |
 | 47 | [🪲 Semicolon Hunt](47-semicolon-hunt) | The missing semicolon is alive and knocking your code over. Swat it with a flyswatter cursor, snap it back into line 8, and the build goes green. |
 | 48 | [🤖 Love Captcha](48-love-captcha) | A verification check for your person: pick the person you love, it asks for more, every square turns into Delly, and the checkbox becomes a beating heart. |
+| 49 | [🥊 Merge Conflict](49-merge-conflict) | Two versions of one line sumo-wrestle inside a git merge conflict; Accept Both and they hug, squish into one purple blob and become a single clean line. |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
