@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Love Charger</title>
+<meta name="description" content="A tired little battery at 1%. Plug in the heart with their name and watch it charge to 100%. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=DM+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#f5eee5}
+canvas{position:fixed;left:0;top:0;width:100%;height:calc(100% - 30px);display:block}
+.credit{position:fixed;left:0;right:0;bottom:0;height:30px;display:flex;align-items:center;justify-content:center;font:400 11.5px "DM Mono",ui-monospace,monospace;letter-spacing:.02em;color:#a69888}
+.credit a{color:#6d5f53;text-decoration:none}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:500 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:700 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:800 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:400 20px 'DM Mono'">a</span><span class="pre" style="font:500 20px 'DM Mono'">a</span>
+<script>
+// ===== Love Charger · free code by @sicscod.drops =====
+// Try: yoursite/?name=Delly&msg=fully%20charged%20by%20Delly%20%E2%99%A5&hue=340   (?auto=1 plays it by itself)
+const P = new URLSearchParams(location.search);
+const hueP = parseFloat(P.get("hue"));
+const CONFIG = {
+  name: (P.get("name") || "Delly").slice(0, 12),                       // the name on the heart plug
+  msg: (P.get("msg") || "100% · fully charged by {name} ♥").slice(0, 44), // the line at 100%
+  hue: isFinite(hueP) ? ((hueP % 360) + 360) % 360 : 340,               // 340 pink, 0 red, 280 purple, 200 blue
+  auto: P.get("auto") === "1",                                          // a cursor plays the whole thing
+  // the things that drained the battery (they pop up one after another)
+  drains: [
+    { text: "monday", cost: "−20%", at: 0.45 },
+    { text: "3 meetings", cost: "−30%", at: 0.95 },
+    { text: "group chat · 247 unread", cost: "−48%", at: 1.45 },
+  ],
+  lines: {
+    lowTitle: "Low battery",
+    lowSub: "1% left · plug in someone you love",
+    lowTag: "low power mode",
+    chargeTitle: "Charging ♥",
+    chargeSub: "connected to {name}",
+    charging: "charging…",
+    fullSub: "battery health: very in love",
+    fullTag: "fully charged",
+    hint: "drag the heart into the battery (or tap it)",
+  },
+  fill: 2.0,                                                            // seconds from 1% to 100%
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const T0 = performance.now();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.4 * Math.pow(x - 1, 3) + 1.4 * Math.pow(x - 1, 2));
+const inOut = x => (x = clamp(x, 0, 1), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const H = (l, s = 82, a = 1, dh = 0) => `hsla(${CONFIG.hue + dh},${s}%,${l}%,${a})`;
+const nm = s => s.replace(/\{name\}/g, CONFIG.name);
+const C = { bg: "#f5eee5", shell: "#fffaf3", well: "#ece3d8", ink: "#2b211c", mute: "#8b7d70", dim: "#bcae9f", red: "#e5484d", metal: "#c9c2ba", gold: "#ffcf4d" };
+const F = { ui: (w, s) => `${w} ${s}px "Bricolage Grotesque", system-ui, sans-serif`, mono: (w, s) => `${w} ${s}px "DM Mono", ui-monospace, monospace` };
+
+const CH = 512;                                       // logical scene height; width adapts
+let W = 0, Hh = 0, DPR = 1, S = 1, OX = 0, OY = 0, DW = 400, BC = 200;
+const BT = 104, BB = 384, BW = 188, BR = 42;          // battery body top / bottom / width / corner
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; Hh = Math.max(240, innerHeight - 30);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(Hh * DPR);
+  S = Math.min(Hh / CH, W / 350, 1.45); DW = Math.min(W / S, 460); BC = DW / 2;
+  OX = (W - DW * S) / 2; OY = (Hh - CH * S) / 2;
+  REST.x = BC + Math.min(128, DW / 2 - 52);
+}
+addEventListener("resize", resize);
+const toU = (x, y) => ({ x: (x - OX) / S, y: (y - OY) / S });
+
+// ---------- drawing helpers ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function heartPt(t) { const x = 16 * Math.sin(t) ** 3, y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t); return [x / 16 * .66, -(y + 2.5) / 14.5 * .6]; }
+function heartPath(cx, cy, s) { ctx.beginPath(); for (let i = 0; i <= 48; i++) { const [x, y] = heartPt(i / 48 * Math.PI * 2); i ? ctx.lineTo(cx + x * s, cy + y * s) : ctx.moveTo(cx + x * s, cy + y * s); } ctx.closePath(); }
+function heart(cx, cy, s, col) { heartPath(cx, cy, s); ctx.fillStyle = col; ctx.fill(); }
+function measure(str, font, fs) { ctx.font = font; return str.split("♥").reduce((w, p, i) => w + ctx.measureText(p).width + (i ? fs * .8 : 0), 0); }
+function text(str, x, y, font, fs, col, align = "left", hcol) {   // every ♥ is drawn as a real heart
+  const w = measure(str, font, fs); let cx = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
+  ctx.fillStyle = col; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  str.split("♥").forEach((p, i) => {
+    if (i) { heart(cx + fs * .4, y - fs * .33, fs * .58, hcol || col); cx += fs * .8; ctx.fillStyle = col; }
+    ctx.fillText(p, cx, y); cx += ctx.measureText(p).width;
+  });
+  return w;
+}
+function bolt(cx, cy, s, col) {
+  ctx.beginPath(); const p = [[.12, -.5], [-.3, .08], [-.02, .08], [-.14, .5], [.3, -.1], [.02, -.1]];
+  p.forEach(([x, y], i) => i ? ctx.lineTo(cx + x * s, cy + y * s) : ctx.moveTo(cx + x * s, cy + y * s)); ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+}
+function star(cx, cy, r, col, rot = 0) {
+  ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = rot + i * Math.PI / 4, q = i % 2 ? r * .34 : r; ctx.lineTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q); } ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+}
+
+// ---------- sound (tiny Web Audio blips, start after the first tap) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } }
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur + .02);
+}
+const sfx = {
+  beep() { tone("square", 880, 860, .09, .035); tone("square", 660, 650, .12, .035, .13); },
+  pop() { tone("sine", 500, 900, .09, .07); },
+  click() { tone("square", 1800, 600, .04, .05); tone("sine", 160, 60, .12, .2); },
+  full() { [784, 988, 1175, 1568].forEach((f, i) => tone("triangle", f, f, .45, .07, i * .07)); },
+  boing() { tone("sine", 180, 520, .28, .16); },
+};
+const EV = window.__ev = [];                          // event log (the video renderer reads it to sync the music)
+const ev = k => EV.push([k, +now.toFixed(3)]);
+
+// ---------- state ----------
+const REST = { x: 330, y: 404, r: .55 };              // where the heart plug lies at the start (its top)
+let now = 0, last = 0, t0 = 0, plugT = -1, fullT = -1, hopBase = 0, pct = 1, hopN = 0, faceKey = "", faceT = -9;
+let plug, drag = null, drained = [], parts = [], bubbles = [], floaters = [], zs = [], beeped = false, cycleN = -1, yawnN = -1;
+function reset() {
+  t0 = now; plugT = -1; fullT = -1; pct = 1; hopN = 0; drag = null; drained = []; parts = []; bubbles = []; zs = []; beeped = false; cycleN = -1; yawnN = -1;
+  plug = { x: REST.x, y: REST.y, r: REST.r, anim: null };
+}
+const sceneT = () => now - t0;
+
+// ---------- the battery's body language ----------
+const CYC = 1.4, CYC0 = .25;                          // nodding-off cycle: eyes close, it tilts, then jolts awake
+function sleepy() {
+  const e = sceneT() - CYC0; if (e < 0) return { lid: .45, tilt: 0, yawn: 0, jolt: 9 };
+  const n = Math.floor(e / CYC), u = e / CYC - n, side = n % 2 ? 1 : -1, fall = .84;
+  const k = sm(u / fall), j = u > fall ? (u - fall) * CYC : 9;
+  const wob = j < 9 ? .1 * Math.exp(-j * 7) * Math.cos(j * 24) : 0;
+  return { lid: u < fall ? .42 + .53 * k : .2 + .25 * sm(j / .35), tilt: (u < fall ? .12 * k * k : wob) * side, yawn: Math.sin(clamp((u - .1) / .38, 0, 1) * Math.PI), jolt: j, n };
+}
+function body() {                                     // battery transform: tilt, hop, squash
+  let tilt = 0, hop = 0, sx = 1, sy = 1, jx = 0;
+  if (plugT < 0) {
+    const s = sleepy(); tilt = s.tilt;
+    for (const d of drained) { const e = now - d.t; if (e > 0 && e < .5) jx += Math.sin(e * 60) * 3.5 * Math.exp(-e * 9); }
+  } else {
+    const e = now - plugT;                            // jolt awake on plug-in
+    hop += 10 * Math.max(0, Math.sin(clamp(e / .28, 0, 1) * Math.PI));
+    const q = e > .28 ? .1 * Math.exp(-(e - .28) * 10) * Math.cos((e - .28) * 30) : -.06 * Math.sin(clamp(e / .28, 0, 1) * Math.PI);
+    sy -= q; sx += q * .7;
+    if (pct < 100) tilt = Math.sin(now * 9) * .012 * sm(e / .4);
+  }
+  if (fullT >= 0) {
+    const k = Math.floor((now - hopBase) / HOP_EVERY);
+    if (k >= 0) {
+      const e = now - hopBase - k * HOP_EVERY, Hgt = k ? 18 : 28;
+      if (e < .1) { const c = sm(e / .1); sy -= .13 * c; sx += .09 * c; }
+      else if (e < .5) { const a = (e - .1) / .4; hop += Hgt * 4 * a * (1 - a); const st = .08 * (1 - 2 * a); sy += st; sx -= st * .7; tilt += Math.sin(a * Math.PI * 2) * .05; }
+      else { const d = e - .5, q = .15 * Math.exp(-d * 9) * Math.cos(d * 22); sy -= q; sx += q * .75; }
+    }
+    tilt += Math.sin(now * 3.2) * .018 * sm((now - fullT) / .5);
+  }
+  return { tilt, hop, sx, sy, jx };
+}
+const HOP_EVERY = 2.12;                               // seconds between happy hops (= one bar of the music)
+function toWorld(b, x, y) {
+  const dx = (x - BC) * b.sx, dy = (y - BB) * b.sy, c = Math.cos(b.tilt), s = Math.sin(b.tilt);
+  return { x: BC + b.jx + dx * c - dy * s, y: BB - b.hop + dx * s + dy * c };
+}
+
+// ---------- actions ----------
+function plugIn() {
+  if (plugT >= 0) return; plugT = now; plug.anim = null; drag = null; sfx.click(); ev("plug");
+  for (let i = 0; i < 14; i++) { const a = -Math.PI / 2 + (Math.random() - .5) * 2.6, v = 90 + Math.random() * 120; parts.push({ k: "spark", x: BC, y: BB + 2, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: now, life: .4 + Math.random() * .2, s: 3 + Math.random() * 3, g: 200 }); }
+}
+function unplug() { reset(); plug.y = REST.y - 30; plug.r = .2; plug.anim = { t0: now, len: .45, from: { x: BC, y: BB + 30, r: 0 }, to: { ...REST } }; ev("unplug"); }
+function glideIn(len) { plug.anim = { t0: now, len, from: { x: plug.x, y: plug.y, r: plug.r }, to: { x: BC, y: BB + 1, r: 0 }, then: plugIn }; ev("swoosh"); }
+
+// ---------- ?auto=1: a scripted cursor plays the story (used for the video) ----------
+const cur = { on: false, x: 0, y: 0, down: -9, held: false, seg: null };
+const grip = () => plugPt(plug, 0, 46);
+const AUTO = [
+  [1.45, "move", .6, () => grip(), () => ({ x: DW - 26, y: CH + 10 })],
+  [2.12, "down", () => { cur.held = true; drag = { dx: 0, dy: 0, auto: true }; ev("grab"); }],
+  [2.2, "drag", .72, () => ({ x: BC + 4, y: BB + 82 })],
+  [2.96, "drag", .24, () => ({ x: BC, y: BB + 47 })],
+  [3.2, "tap", () => { plug.x = BC; plug.y = BB + 1; plug.r = 0; plugIn(); }],
+  [3.34, "up", () => { cur.held = false; }],
+  [3.4, "move", .8, () => ({ x: DW - 34, y: BB + 40 })],
+];
+let autoI = 0;
+function runAuto() {
+  const t = sceneT();
+  while (autoI < AUTO.length && t >= AUTO[autoI][0]) {
+    const a = AUTO[autoI++];
+    if (a[1] === "move" || a[1] === "drag") { const from = a[4] ? a[4]() : { x: cur.x, y: cur.y }; cur.seg = { t0: t0 + a[0], len: a[2], from, to: a[3](), drag: a[1] === "drag" }; cur.on = true; }
+    else { if (a[1] !== "up") cur.down = now; a[2](); }
+  }
+  if (cur.seg) { const u = clamp((now - cur.seg.t0) / cur.seg.len, 0, 1), e = cur.seg.drag ? inOut(u) : sm(u), arc = Math.sin(u * Math.PI) * (cur.seg.drag ? -26 : 12);
+    cur.x = lerp(cur.seg.from.x, cur.seg.to.x, e) + (cur.seg.drag ? arc * .6 : 0); cur.y = lerp(cur.seg.from.y, cur.seg.to.y, e) - (cur.seg.drag ? arc * .6 : arc); }
+  if (drag && drag.auto && plugT < 0) { plug.x = cur.x; plug.y = cur.y - 46; plug.r = lerp(plug.r, 0, .16); }
+  if (fullT >= 0 && now - fullT > 6.4) { reset(); autoI = 0; cur.on = false; }
+}
+
+// ---------- input: drag the heart in, or tap it ----------
+let downAt = null;
+addEventListener("pointerdown", e => {
+  audio(); if (CONFIG.auto) return; const u = toU(e.clientX, e.clientY);
+  const g = plugPt(plug, 0, 46);
+  if (Math.hypot(u.x - g.x, u.y - g.y) < 58) {
+    if (plugT >= 0) { if (fullT >= 0) unplug(); return; }
+    plug.anim = null; drag = { dx: plug.x - u.x, dy: plug.y - u.y }; downAt = { x: u.x, y: u.y, t: now }; ev("grab"); return;
+  }
+  if (fullT >= 0 && Math.abs(u.x - BC) < BW / 2 && u.y > BT - 20 && u.y < BB) { hopBase = now; hopN = 0; sparkles(18); }
+});
+addEventListener("pointermove", e => {
+  if (!drag || drag.auto || plugT >= 0) return; const u = toU(e.clientX, e.clientY);
+  plug.x = u.x + drag.dx; plug.y = u.y + drag.dy;
+  const d = Math.hypot(plug.x - BC, plug.y - BB);
+  plug.r = lerp(plug.r, clamp((plug.x - BC) / 400, -.3, .3) * sm(d / 120), .25);
+  if (d < 34) glideIn(.12);
+});
+addEventListener("pointerup", e => {
+  if (!drag || drag.auto) return; const u = toU(e.clientX, e.clientY); drag = null;
+  if (plugT >= 0 || plug.anim) return;
+  const tap = downAt && Math.hypot(u.x - downAt.x, u.y - downAt.y) < 10 && now - downAt.t < .4;
+  if (tap || Math.hypot(plug.x - BC, plug.y - BB) < 90) glideIn(tap ? .5 : .18);
+  else plug.anim = { t0: now, len: .45, from: { x: plug.x, y: plug.y, r: plug.r }, to: { ...REST } };
+});
+
+// ---------- particles ----------
+function sparkles(n) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 120 + Math.random() * 200;
+    parts.push({ k: Math.random() < .55 ? "heart" : "star", x: BC, y: BT + 90, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, t: now, life: 1.1 + Math.random() * .7, s: 5 + Math.random() * 6, g: 240, r: Math.random() * 6, dh: [0, 18, -18][i % 3] }); }
+}
+function drawParts(dt) {
+  parts = parts.filter(p => now - p.t < p.life);
+  for (const p of parts) {
+    p.vx *= Math.exp(-dt * 2.2); p.vy = p.vy * Math.exp(-dt * 2.2) + p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r = (p.r || 0) + dt * 3;
+    const k = 1 - (now - p.t) / p.life; ctx.globalAlpha = Math.min(1, k * 2.2);
+    if (p.k === "heart") heart(p.x, p.y, p.s * 1.6, H(62, 88, 1, p.dh));
+    else if (p.k === "star") star(p.x, p.y, p.s, p.dh > 0 ? C.gold : "#fff", p.r);
+    else if (p.k === "fizz") heart(p.x + Math.sin(now * 6 + p.ph) * 5, p.y, p.s, H(66, 88, 1, p.dh));
+    else { ctx.strokeStyle = C.gold; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * .04, p.y - p.vy * .04); ctx.stroke(); }
+  }
+  ctx.globalAlpha = 1;
+}
+function drawFloaters(dt) {
+  if (fullT >= 0 && now - fullT > .3) { floaters.acc = (floaters.acc || 0) + dt * 5; while (floaters.acc > 1) { floaters.acc--; floaters.push({ x: 14 + Math.random() * (DW - 28), y: CH + 10, s: 6 + Math.random() * 9, v: 40 + Math.random() * 40, ph: Math.random() * 6, t: now }); } }
+  for (let i = floaters.length - 1; i >= 0; i--) { const f = floaters[i]; f.y -= f.v * dt; if (f.y < -20) floaters.splice(i, 1); }
+  for (const f of floaters) { ctx.globalAlpha = Math.min(1, (now - f.t) * 2) * clamp((f.y - 10) / 160, 0, 1) * .45; heart(f.x + Math.sin(now * 2 + f.ph) * 8, f.y, f.s, H(72, 85)); }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- the heart plug ----------
+function plugPt(p, x, y) { const c = Math.cos(p.r), s = Math.sin(p.r); return { x: p.x + x * c - y * s, y: p.y + x * s + y * c }; }
+function drawCable(p) {
+  const a = plugPt(p, 0, 82), c1 = plugPt(p, 0, 150), end = { x: BC + Math.min(170, DW / 2 + 10), y: CH + 40 };
+  ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.bezierCurveTo(c1.x, c1.y, end.x - 60, end.y - 70, end.x, end.y);
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 10; ctx.stroke(); ctx.strokeStyle = H(86, 70); ctx.lineWidth = 5; ctx.stroke();
+}
+function drawPlug(p) {
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+  ctx.fillStyle = C.metal; ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+  for (const sx of [-8, 8]) { rr(sx - 3, -15, 6, 17, 2); ctx.fill(); ctx.stroke(); }
+  rr(-19, 0, 38, 20, 6); ctx.fillStyle = C.shell; ctx.fill(); ctx.lineWidth = 2.5; ctx.stroke();
+  heartPath(0, 47, 62); ctx.fillStyle = H(60, 84); ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = C.ink; ctx.lineJoin = "round"; ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.beginPath(); ctx.ellipse(-18, 31, 7, 4, -.6, 0, 7); ctx.fill();
+  let fs = 15; while (measure(CONFIG.name, F.ui(800, fs), fs) > 54 && fs > 9) fs--;
+  text(CONFIG.name, 0, 49, F.ui(800, fs), fs, "#fff", "center");
+  ctx.restore();
+}
+
+// ---------- the battery ----------
+function drawBattery(b) {
+  const L = BC - BW / 2, R = BC + BW / 2, inset = 11, iL = L + inset, iT = BT + inset, iW = BW - inset * 2, iH = BB - BT - inset * 2;
+  ctx.save(); ctx.translate(BC + b.jx, BB - b.hop); ctx.rotate(b.tilt); ctx.scale(b.sx, b.sy); ctx.translate(-BC, -BB);
+  // cap
+  rr(BC - 34, BT - 17, 68, 22, 8); ctx.fillStyle = C.shell; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3.5; ctx.stroke();
+  // shell + well
+  rr(L, BT, BW, BB - BT, BR); ctx.fillStyle = C.shell; ctx.fill();
+  rr(iL, iT, iW, iH, BR - inset); ctx.fillStyle = C.well; ctx.fill();
+  // liquid
+  ctx.save(); rr(iL, iT, iW, iH, BR - inset); ctx.clip();
+  const lvl = Math.max(.045, pct / 100), top = iT + iH * (1 - lvl) - (pct >= 100 ? 8 : 0);
+  const charging = plugT >= 0, amp = charging ? (pct < 100 ? 4.5 : 2 + 4 * Math.exp(-(((now - hopBase - .5) % HOP_EVERY + HOP_EVERY) % HOP_EVERY) * 3)) : 1.2;
+  ctx.beginPath(); ctx.moveTo(iL, iT + iH + 2);
+  for (let x = 0; x <= iW; x += 6) ctx.lineTo(iL + x, top + Math.sin(x * .07 + now * 5) * amp + Math.sin(x * .13 - now * 3.3) * amp * .5);
+  ctx.lineTo(iL + iW, iT + iH + 2); ctx.closePath();
+  if (!charging) { const blink = .55 + .45 * (Math.sin(sceneT() * 7) > -.2 ? 1 : 0); ctx.fillStyle = `rgba(229,72,77,${blink})`; }
+  else { const g = ctx.createLinearGradient(0, top, 0, iT + iH); g.addColorStop(0, H(72, 90)); g.addColorStop(1, H(56, 84)); ctx.fillStyle = g; }
+  ctx.fill();
+  if (charging) {                                     // bubbles inside the liquid
+    if (Math.random() < (pct < 100 ? .7 : .25)) bubbles.push({ x: iL + 12 + Math.random() * (iW - 24), y: iT + iH + 6, r: 2 + Math.random() * 4.5, v: 60 + Math.random() * 90, ph: Math.random() * 6 });
+    for (const q of bubbles) { q.y -= q.v * (now - last || .033); q.x += Math.sin(now * 5 + q.ph) * .4; }
+    bubbles = bubbles.filter(q => q.y > top + 4);
+    ctx.strokeStyle = "rgba(255,255,255,.75)"; ctx.lineWidth = 1.6; ctx.fillStyle = "rgba(255,255,255,.22)";
+    for (const q of bubbles) { ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, 7); ctx.fill(); ctx.stroke(); }
+    ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.fillRect(iL, top + 3, iW, 3);
+  }
+  ctx.restore();
+  // glass shine
+  ctx.fillStyle = "rgba(255,255,255,.5)"; rr(iL + 9, iT + 16, 9, iH * .42, 5); ctx.fill(); rr(iL + 9, iT + 22 + iH * .42, 9, 12, 5); ctx.fill();
+  drawFace(b);
+  // counter + tag
+  const p = Math.round(pct), low = plugT < 0, bl = low ? (Math.sin(sceneT() * 7) > -.2 ? 1 : .35) : 1;
+  const pop = fullT >= 0 ? 1 + .25 * Math.exp(-(now - fullT) * 7) * (now > fullT ? 1 : 0) : 1;
+  ctx.save(); ctx.translate(BC, BT + 232); ctx.scale(pop, pop); ctx.globalAlpha = bl;
+  text(p + "%", 0, 0, F.ui(800, 40), 40, low ? C.red : C.ink, "center"); ctx.restore(); ctx.globalAlpha = 1;
+  const tag = low ? CONFIG.lines.lowTag : pct < 100 ? CONFIG.lines.charging : CONFIG.lines.fullTag;
+  text(tag, BC, BT + 252, F.mono(500, 10.5), 10.5, low ? "rgba(43,33,28,.55)" : "rgba(43,33,28,.7)", "center");
+  // port
+  rr(BC - 17, BB - 6, 34, 8, 3); ctx.fillStyle = C.ink; ctx.fill();
+  // outline on top
+  rr(L, BT, BW, BB - BT, BR); ctx.strokeStyle = C.ink; ctx.lineWidth = 3.5; ctx.stroke();
+  rr(iL, iT, iW, iH, BR - inset); ctx.strokeStyle = "rgba(43,33,28,.12)"; ctx.lineWidth = 1.5; ctx.stroke();
+  // charge badge: a bolt that turns into a heart
+  if (charging) {
+    const e = now - plugT, k = outBack(e / .32), m = sm((e - .38) / .22), bx = R - 10, by = BT + 16;
+    ctx.save(); ctx.translate(bx, by); ctx.scale(k * (1 - .25 * Math.sin(m * Math.PI)), k);
+    ctx.beginPath(); ctx.arc(0, 0, 21, 0, 7); ctx.fillStyle = C.shell; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+    if (m < 1) { ctx.globalAlpha = 1 - m; bolt(0, 0, 26, C.gold); ctx.strokeStyle = C.ink; ctx.lineWidth = 1.6; ctx.stroke(); }
+    if (m > 0) { ctx.globalAlpha = m; const hb = 1 + .14 * Math.max(0, Math.sin(now * 9)) * (pct < 100 ? 1 : .5); heart(0, 1, 28 * hb, H(58, 86)); }
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+function setFace(k) { if (k !== faceKey) { faceKey = k; faceT = now; } }
+function drawFace(b) {
+  const fx = BC, fy = BT + 112, low = plugT < 0, s = sleepy();
+  let key = "tired";
+  if (!low) { const e = now - plugT; key = e < .55 ? "shock" : pct < 38 ? "smile" : pct < 90 ? "blush" : "sparkle"; }
+  setFace(key);
+  const pk = key === "tired" ? 1 : outBack((now - faceT) / .3), ink = C.ink;
+  ctx.save(); ctx.translate(fx, fy); ctx.scale(pk, pk);
+  // cheeks
+  const cheek = { tired: .18, shock: .3, smile: .45, blush: .85, sparkle: .7 }[key];
+  ctx.fillStyle = H(68, 92, cheek);
+  for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sx * 48, 16, 14, 8, 0, 0, 7); ctx.fill(); }
+  if (key === "blush" || key === "sparkle") { ctx.strokeStyle = H(48, 80, .8); ctx.lineWidth = 1.8; ctx.lineCap = "round";
+    for (const sx of [-1, 1]) for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(sx * 48 + i * 6 - 2, 20); ctx.lineTo(sx * 48 + i * 6 + 3, 12); ctx.stroke(); } }
+  // eyes
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for (const sx of [-1, 1]) {
+    const ex = sx * 31, ey = -6;
+    if (key === "tired") {
+      const lid = s.lid, ry = 11;
+      ctx.save(); ctx.beginPath(); ctx.rect(ex - 14, ey - ry + lid * ry * 2, 28, 30); ctx.clip();
+      ctx.fillStyle = ink; ctx.beginPath(); ctx.ellipse(ex, ey, 8.5, ry, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex + 2.5, ey + 3, 2.4, 0, 7); ctx.fill(); ctx.restore();
+      const ly = ey - ry + lid * ry * 2; ctx.strokeStyle = ink; ctx.lineWidth = 3.2;
+      ctx.beginPath(); ctx.moveTo(ex - 11, ly + 1.5 * sx * 0); ctx.quadraticCurveTo(ex, ly - 2.5, ex + 11, ly); ctx.stroke();
+      ctx.strokeStyle = "rgba(43,33,28,.35)"; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(ex, ey + 9, 8, Math.PI * .2, Math.PI * .8); ctx.stroke();
+    } else if (key === "shock") {
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(ex, ey, 12, 14, 0, 0, 7); ctx.fill(); ctx.strokeStyle = ink; ctx.lineWidth = 3; ctx.stroke();
+      ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(ex, ey + 1, 5.5, 0, 7); ctx.fill();
+    } else if (key === "smile") {
+      ctx.fillStyle = ink; ctx.beginPath(); ctx.ellipse(ex, ey, 8.5, 11, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex + 2.5, ey - 3.5, 3, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(ex - 2.5, ey + 4, 1.4, 0, 7); ctx.fill();
+    } else if (key === "blush") {
+      ctx.strokeStyle = ink; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(ex, ey + 5, 9, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+    } else {
+      const tw = 1 + .12 * Math.sin(now * 10 + sx);
+      star(ex, ey, 15 * tw, ink, Math.PI / 4 * 0); star(ex, ey, 10.5 * tw, C.gold); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex + 2, ey - 2, 2, 0, 7); ctx.fill();
+    }
+  }
+  // mouth
+  const my = 20; ctx.strokeStyle = ink; ctx.lineWidth = 3.2;
+  if (key === "tired") {
+    const y = s.yawn * (s.n === undefined ? 0 : 1);
+    if (y > .05) { ctx.fillStyle = "#7a2a33"; ctx.beginPath(); ctx.ellipse(0, my + 2, 6 + 3 * y, 3 + 9 * y, 0, 0, 7); ctx.fill(); ctx.stroke(); }
+    else { ctx.beginPath(); ctx.moveTo(-8, my + 2); ctx.quadraticCurveTo(-4, my - 1, 0, my + 2); ctx.quadraticCurveTo(4, my + 5, 8, my + 2); ctx.stroke(); }
+  } else if (key === "shock") { ctx.fillStyle = "#7a2a33"; ctx.beginPath(); ctx.ellipse(0, my + 3, 6, 8, 0, 0, 7); ctx.fill(); ctx.stroke(); }
+  else if (key === "smile") { ctx.beginPath(); ctx.arc(0, my - 4, 9, Math.PI * .15, Math.PI * .85); ctx.stroke(); }
+  else if (key === "blush") { ctx.beginPath(); ctx.moveTo(-10, my); ctx.quadraticCurveTo(-5, my + 7, 0, my + 1); ctx.quadraticCurveTo(5, my + 7, 10, my); ctx.stroke(); }
+  else { ctx.beginPath(); ctx.moveTo(-14, my - 3); ctx.quadraticCurveTo(0, my - 1, 14, my - 3); ctx.quadraticCurveTo(12, my + 15, 0, my + 15); ctx.quadraticCurveTo(-12, my + 15, -14, my - 3); ctx.closePath();
+    ctx.fillStyle = "#7a2a33"; ctx.fill(); ctx.stroke(); ctx.save(); ctx.clip(); ctx.fillStyle = "#f2788c"; ctx.beginPath(); ctx.ellipse(0, my + 15, 8, 6, 0, 0, 7); ctx.fill(); ctx.restore(); }
+  // sweat drop when it's dying
+  if (key === "tired") { const dy = (sceneT() * 14) % 18; ctx.globalAlpha = 1 - dy / 18; ctx.fillStyle = "#8fc6ea"; ctx.beginPath(); ctx.moveTo(58, -26 + dy); ctx.quadraticCurveTo(66, -12 + dy, 58, -8 + dy); ctx.quadraticCurveTo(50, -12 + dy, 58, -26 + dy); ctx.fill(); ctx.strokeStyle = ink; ctx.lineWidth = 1.6; ctx.stroke(); ctx.globalAlpha = 1; }
+  ctx.restore();
+}
+
+// ---------- overlays ----------
+function drawToast() {
+  const inK = outBack((sceneT() + .14) / .32), full = fullT >= 0, fk = full ? outBack((now - fullT) / .4) : 0;
+  const chg = plugT >= 0 && !full, L = CONFIG.lines;
+  const title = nm(full ? CONFIG.msg : chg ? L.chargeTitle : L.lowTitle), sub = nm(full ? L.fullSub : chg ? L.chargeSub : L.lowSub);
+  let tf = full ? 17 : 15.5; while (tf > 11 && measure(title, F.ui(800, tf), tf) + 76 > DW - 20) tf -= .5;
+  const tw = Math.max(measure(title, F.ui(800, tf), tf), measure(sub, F.mono(400, 10.5), 10.5));
+  const w = Math.min(DW - 20, tw + 76), h = 52, x = BC - w / 2, y = lerp(-70, 18, inK);
+  const sc = full ? 1 + .08 * Math.sin(clamp((now - fullT) / .35, 0, 1) * Math.PI) : 1;
+  ctx.save(); ctx.translate(BC, y + h / 2); ctx.scale(sc, sc); ctx.translate(-BC, -y - h / 2);
+  ctx.shadowColor = "rgba(70,40,25,.14)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 5;
+  rr(x, y, w, h, 18); ctx.fillStyle = C.shell; ctx.fill(); ctx.shadowColor = "transparent";
+  ctx.strokeStyle = plugT >= 0 ? H(62, 80) : C.ink; ctx.lineWidth = full ? 2 : 2; ctx.stroke();
+  // icon
+  const ix = x + 30, iy = y + h / 2;
+  ctx.beginPath(); ctx.arc(ix, iy, 16, 0, 7); ctx.fillStyle = plugT >= 0 ? H(92, 80) : "#fde4e2"; ctx.fill();
+  if (full) heart(ix, iy + 1, 21 * (.9 + .1 * fk), H(58, 86));
+  else if (chg) bolt(ix, iy, 24, H(56, 86));
+  else { rr(ix - 6, iy - 10, 12, 19, 3); ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = C.red; ctx.fillRect(ix - 2.5, iy - 12.5, 5, 2.5);
+    if (Math.sin(sceneT() * 7) > -.2) { rr(ix - 3, iy + 3, 6, 3.5, 1); ctx.fill(); } }
+  text(title, x + 56, y + 24, F.ui(800, tf), tf, C.ink, "left", H(58, 86));
+  text(sub, x + 56, y + 40, F.mono(400, 10.5), 10.5, C.mute);
+  ctx.restore();
+}
+function drawDrains() {
+  if (plugT >= 0) return;
+  CONFIG.drains.forEach((d, i) => {
+    const e = sceneT() - d.at; if (e < 0) return;
+    if (!drained[i]) { drained[i] = { t: now }; ev("drain"); sfx.pop(); }
+    if (e > 1.9) return;
+    const k = outBack(e / .3), out = sm((e - 1.6) / .3), side = i % 2 ? 1 : -1;
+    ctx.font = F.mono(500, 11.5); const tw = ctx.measureText(d.text).width; ctx.font = F.mono(500, 11); const cw = ctx.measureText(d.cost).width;
+    const w = tw + cw + 34, h = 30, ys = [BT + 50, BT + 114, BT + 186];
+    let cx = BC + side * (BW / 2 + 8) + side * w * .28; cx = clamp(cx, w / 2 + 8, DW - w / 2 - 8);
+    const cy = ys[i % 3] - e * 6;
+    ctx.save(); ctx.globalAlpha = 1 - out; ctx.translate(cx, cy); ctx.rotate(side * .05 + Math.sin(e * 3 + i) * .02); ctx.scale(k * (1 - out * .3), k * (1 - out * .3));
+    ctx.shadowColor = "rgba(70,40,25,.15)"; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3;
+    rr(-w / 2, -h / 2, w, h, 15); ctx.fillStyle = "#fff"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.stroke();
+    text(d.text, -w / 2 + 13, 4.5, F.mono(500, 11.5), 11.5, C.ink);
+    rr(w / 2 - cw - 17, -9.5, cw + 10, 19, 9.5); ctx.fillStyle = "#fde4e2"; ctx.fill();
+    text(d.cost, w / 2 - cw - 12, 4, F.mono(500, 11), 11, C.red);
+    ctx.restore();
+  });
+}
+function drawZzz(b) {
+  if (plugT >= 0) return; const s = sleepy();
+  if (s.lid > .7 && now - (zs.lastT || -9) > .32) { zs.lastT = now; zs.push({ t: now, s: 11 + Math.random() * 5 }); }
+  for (let i = zs.length - 1; i >= 0; i--) if (now - zs[i].t > 1.3) zs.splice(i, 1);
+  const o = toWorld(b, BC + BW / 2 - 18, BT - 4);
+  for (const z of zs) { const e = (now - z.t) / 1.3; ctx.globalAlpha = Math.sin(e * Math.PI) * .9;
+    text("z", o.x + 8 + e * 34 + Math.sin(e * 9) * 4, o.y - e * 46, F.ui(800, z.s * (1 + e * .6)), z.s, C.ink); }
+  ctx.globalAlpha = 1;
+}
+function drawCursor() {
+  if (!cur.on) return;
+  const k = now - cur.down, s = 1.25 * (cur.held || k < .12 ? .88 : 1);
+  if (k < .4) { ctx.strokeStyle = `rgba(43,33,28,${.5 * (1 - k / .4)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cur.x, cur.y, 6 + k * 60, 0, 7); ctx.stroke(); }
+  ctx.save(); ctx.translate(cur.x, cur.y); ctx.scale(s, s);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 17); ctx.lineTo(4.2, 13.2); ctx.lineTo(7, 19.6); ctx.lineTo(9.8, 18.4); ctx.lineTo(7.1, 12.2); ctx.lineTo(12.4, 12.2); ctx.closePath();
+  ctx.shadowColor = "rgba(0,0,0,.3)"; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1.5;
+  ctx.fillStyle = "#fff"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = "#111"; ctx.lineWidth = 1.1; ctx.lineJoin = "round"; ctx.stroke(); ctx.restore();
+}
+
+// ---------- one loop for everything ----------
+function frame() {
+  now = (performance.now() - T0) / 1000; const dt = Math.min(.05, Math.max(0, now - last));
+  if (CONFIG.auto) runAuto();
+  const st = sceneT();
+  if (!beeped && st >= .1) { beeped = true; sfx.beep(); ev("beep"); }
+  if (plugT < 0) { const s = sleepy(); if (s.n !== undefined && s.n > yawnN && s.yawn > .05) { yawnN = s.n; ev("yawn"); } if (s.n !== undefined && s.jolt < 9 && s.n > cycleN) { cycleN = s.n; ev("jolt"); } }
+  // charging
+  if (plugT >= 0 && fullT < 0) {
+    const u = clamp((now - plugT - .12) / CONFIG.fill, 0, 1); pct = 1 + 99 * (1 - Math.pow(1 - u, 1.7));
+    if (u > 0 && Math.random() < .5) { const lvl = pct / 100; parts.push({ k: "fizz", x: BC - 50 + Math.random() * 100, y: BB - 11 - (BB - BT - 22) * lvl, vx: (Math.random() - .5) * 40, vy: -90 - Math.random() * 80, t: now, life: .9 + Math.random() * .5, s: 6 + Math.random() * 6, g: -30, ph: Math.random() * 6, dh: [0, 16, -16][Math.floor(Math.random() * 3)] }); }
+    if (u >= 1) { pct = 100; fullT = now; hopBase = now + .02; sfx.full(); ev("full"); sparkles(26); }
+  }
+  if (fullT >= 0) { const k = Math.floor((now - hopBase) / HOP_EVERY); if (k >= hopN) { hopN = k + 1; sfx.boing(); ev("hop"); } }
+  // plug glide animation
+  if (plug.anim) { const a = plug.anim, u = clamp((now - a.t0) / a.len, 0, 1), e = inOut(u);
+    plug.x = lerp(a.from.x, a.to.x, e); plug.y = lerp(a.from.y, a.to.y, e) - Math.sin(u * Math.PI) * 18; plug.r = lerp(a.from.r, a.to.r, e);
+    if (u >= 1) { plug.anim = null; if (a.then) a.then(); } }
+  const b = body();
+  if (plugT >= 0) { const p = toWorld(b, BC, BB + 1); plug.x = p.x; plug.y = p.y; plug.r = b.tilt; }
+  else if (!drag && !plug.anim) { plug.r = REST.r + Math.sin(now * 2.2) * .04; }
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, Hh);
+  const glowK = fullT >= 0 ? .5 + .5 * sm((now - fullT) / .6) : plugT >= 0 ? .35 * sm((now - plugT) / .4) : 0;
+  const gx = W / 2, gy = OY + 230 * S, glow = ctx.createRadialGradient(gx, gy, 10, gx, gy, Math.max(W, Hh) * .7);
+  if (plugT < 0) { glow.addColorStop(0, `rgba(229,72,77,${.07 + .05 * Math.sin(st * 7)})`); glow.addColorStop(1, "rgba(245,238,229,0)"); }
+  else { glow.addColorStop(0, H(88, 85, .25 + .45 * glowK)); glow.addColorStop(1, "rgba(245,238,229,0)"); }
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, Hh);
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, OX * DPR, OY * DPR);
+  // faint dotted desk
+  ctx.fillStyle = "rgba(43,33,28,.07)"; for (let y = 24; y < CH; y += 22) for (let x = (y / 22 % 2) * 11 + 6; x < DW; x += 22) ctx.fillRect(x, y, 2, 2);
+  drawFloaters(dt);
+  // shadow
+  ctx.fillStyle = `rgba(43,33,28,${.12 * (1 - Math.min(.6, b.hop / 80))})`; ctx.beginPath(); ctx.ellipse(BC, BB + 6, BW * .55 * (1 - b.hop / 200), 9, 0, 0, 7); ctx.fill();
+  drawCable(plug); drawPlug(plug);
+  drawBattery(b); drawZzz(b); drawDrains(); drawParts(dt); drawToast();
+  if (!CONFIG.auto && plugT < 0 && !drag && !plug.anim) { ctx.globalAlpha = .55 + .45 * Math.sin(now * 3); text(CONFIG.lines.hint, BC, CH - 12, F.mono(400, 11.5), 11.5, C.mute, "center"); ctx.globalAlpha = 1; }
+  drawCursor();
+  last = now;
+  requestAnimationFrame(frame);
+}
+resize(); reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
