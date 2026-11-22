@@ -57,6 +57,7 @@ Saw a drop in a video? Its number is the folder.
 | 48 | [🤖 Love Captcha](48-love-captcha) | A verification check for your person: pick the person you love, it asks for more, every square turns into Delly, and the checkbox becomes a beating heart. |
 | 49 | [🥊 Merge Conflict](49-merge-conflict) | Two versions of one line sumo-wrestle inside a git merge conflict; Accept Both and they hug, squish into one purple blob and become a single clean line. |
 | 50 | [🔋 Love Charger](50-love-charger) | A tired little battery for your person: it opens at 1%, plug in the heart that says Delly and it fills 1% → 100% with bubbly pink, blushes and hops. |
+| 51 | [🐹 Infinite Loop](51-infinite-loop) | Your while(true) loop is a hamster in a wheel: Ctrl+C only makes it run faster, type break; and it flies out, bounces off the terminal and gives you a thumbs-up. |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
