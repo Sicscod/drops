@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ctrl+Z Us</title>
+<meta name="description" content="A couple's fight typed into us.txt. Hammer Ctrl+Z and every angry line un-types while a big broken heart stitches itself shut. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=DM+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#0c0d13}
+canvas{position:fixed;left:0;top:0;width:100%;height:calc(100% - 30px);display:block}
+.credit{position:fixed;left:0;right:0;bottom:0;height:30px;display:flex;align-items:center;justify-content:center;font:400 11.5px "DM Mono",ui-monospace,monospace;letter-spacing:.02em;color:#575c74;background:#0c0d13}
+.credit a{color:#8b90ab;text-decoration:none}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:600 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:700 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:800 20px 'Bricolage Grotesque'">a</span><span class="pre" style="font:400 20px 'DM Mono'">a</span><span class="pre" style="font:500 20px 'DM Mono'">a</span>
+<script>
+// ===== Ctrl+Z Us · free code by @sicscod.drops =====
+// Try: yoursite/?name=Delly&msg=i%20love%20you%20%C2%B7%20we're%20okay&hue=340   (?auto=1 plays it by itself)
+const P = new URLSearchParams(location.search);
+const hueP = parseFloat(P.get("hue"));
+const CONFIG = {
+  name: (P.get("name") || "Delly").slice(0, 14),                        // the name shown once it's saved
+  msg:  (P.get("msg")  || "i love you · we're okay").slice(0, 36),      // the sweet line that gets restored
+  hue:  isFinite(hueP) ? ((hueP % 360) + 360) % 360 : 340,             // 340 pink, 0 red, 275 purple, 200 blue
+  auto: P.get("auto") === "1",                                         // a cursor plays the whole thing
+  // the fight, as it was typed into us.txt (undone from the bottom up)
+  angry: ["you never listen", "whatever", "fine."],
+  lines: {
+    unsaved: "— unsaved changes",
+    saved:   "— saved",
+    hint:    "press Ctrl+Z to rewind",
+  },
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const T0 = performance.now();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.6 * Math.pow(x - 1, 3) + 1.6 * Math.pow(x - 1, 2));
+const inOut = x => (x = clamp(x, 0, 1), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const H = (l, s = 80, a = 1, dh = 0) => `hsla(${CONFIG.hue + dh},${s}%,${l}%,${a})`;
+const C = { bg0: "#11131c", bg1: "#0a0b11", panel: "#191b24", bar: "#14151d",
+  stroke: "#2b2f3d", ln: "#525877", ink: "#e9ebf5", cmt: "#636a8a", red: "#ff5666", redDim: "rgba(255,110,124,.6)",
+  key: "#2a2e3c", keyHi: "#373c4e", keyLo: "#191c26", keyInk: "#e4e7f3", dot: "#8b90ab" };
+const F = { ui: (w, s) => `${w} ${s}px "Bricolage Grotesque", system-ui, sans-serif`, mono: (w, s) => `${w} ${s}px "DM Mono", ui-monospace, monospace` };
+
+const CH = 512;
+let W = 0, Hh = 0, DPR = 1, S = 1, OX = 0, OY = 0, DW = 440, BC = 220;
+let WX = 12, WW = 416, WY = 40, WH = 384;                               // editor window rect
+const TBH = 44, GUT = 40, LH = 39, FSB = 22;                           // titlebar, gutter, line height, big font
+let KEYY = 458, KZx = 0, KCx = 0, HX = 0, HY = 0, HS = 150;            // keycaps + big heart centre/size
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; Hh = Math.max(240, innerHeight - 30);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(Hh * DPR);
+  S = Math.min(Hh / CH, W / 350, 1.5); DW = Math.min(W / S, 470); BC = DW / 2;
+  OX = (W - DW * S) / 2; OY = (Hh - CH * S) / 2;
+  WX = 12; WW = DW - 24; WY = 40; WH = 384;
+  HS = Math.min(150, WW * .30); HX = BC; HY = WY + TBH + 250;
+  KEYY = WY + WH + 32; KCx = BC - 74; KZx = BC + 14;
+}
+addEventListener("resize", resize);
+const toU = (x, y) => ({ x: (x - OX) / S, y: (y - OY) / S });
+
+// ---------- drawing helpers ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function heartPt(t) { const x = 16 * Math.sin(t) ** 3, y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t); return [x / 16 * .66, -(y + 2.5) / 14.5 * .6]; }
+function heartPath(cx, cy, s) { ctx.beginPath(); for (let i = 0; i <= 56; i++) { const [x, y] = heartPt(i / 56 * Math.PI * 2); i ? ctx.lineTo(cx + x * s, cy + y * s) : ctx.moveTo(cx + x * s, cy + y * s); } ctx.closePath(); }
+function heart(cx, cy, s, col) { heartPath(cx, cy, s); ctx.fillStyle = col; ctx.fill(); }
+const SEAM = [[-.02, -1.48], [.16, -.78], [-.12, -.3], [.14, .14], [-.1, .56], [.12, 1.0], [-.02, 1.5]];
+function crackClip(side, cx, cy, s) {
+  ctx.beginPath(); const far = side * 2.3 * s;
+  ctx.moveTo(cx + far, cy - 1.7 * s); ctx.lineTo(cx + far, cy + 1.7 * s);
+  for (let i = SEAM.length - 1; i >= 0; i--) ctx.lineTo(cx + SEAM[i][0] * s, cy + SEAM[i][1] * s);
+  ctx.closePath(); ctx.clip();
+}
+function check(cx, cy, s, col) { ctx.strokeStyle = col; ctx.lineWidth = s * .34; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.beginPath(); ctx.moveTo(cx - s * .5, cy + s * .05); ctx.lineTo(cx - s * .12, cy + s * .45); ctx.lineTo(cx + s * .55, cy - s * .5); ctx.stroke(); }
+function sdot(cx, cy, r, col) { ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = col; ctx.fill(); }
+function star(cx, cy, r, col, rot = 0) { ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = rot + i * Math.PI / 4, q = i % 2 ? r * .36 : r; ctx.lineTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q); } ctx.closePath(); ctx.fillStyle = col; ctx.fill(); }
+function measM(str, fs) { ctx.font = F.mono(500, fs); let w = 0; for (const ch of str) w += (ch === "♥" || ch === "·") ? fs * .62 : ctx.measureText(ch).width; return w; }
+function monoText(str, x, y, fs, col, align = "left", hcol) {
+  const w = measM(str, fs); let cx = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
+  ctx.font = F.mono(500, fs); ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = col;
+  for (const ch of str) {
+    if (ch === "♥") { heart(cx + fs * .31, y - fs * .33, fs * .46, hcol || col); cx += fs * .62; }
+    else if (ch === "·") { sdot(cx + fs * .31, y - fs * .28, fs * .1, col); cx += fs * .62; }
+    else { ctx.fillStyle = col; ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width; }
+  }
+  return w;
+}
+
+// the big cracked heart: halves split by a jagged seam, stitched shut as it heals, beats after the snap
+function bigHeart(cx, cy, s, gap, col, o) {
+  o = o || {}; const glitch = o.glitch || 0, pop = o.pop || 1, beat = o.beat || 0, glow = o.glow || 0, stitch = o.stitch || 0;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(pop * (1 + beat), pop * (1 + beat)); ctx.translate(-cx, -cy);
+  if (glow > 0) { ctx.save(); heartPath(cx, cy, s * 1.04); ctx.shadowColor = H(60, 90, .9); ctx.shadowBlur = 22 * glow; ctx.fillStyle = H(60, 85, .0001); ctx.fill(); ctx.restore(); }
+  for (const side of [-1, 1]) {
+    ctx.save();
+    const jx = side * gap * s * .5 + side * glitch * 3 * Math.sin(now * 42 + side * 2);
+    const jy = glitch * 2.4 * Math.sin(now * 31 + side);
+    ctx.translate(jx, jy); ctx.rotate(side * gap * .05);
+    crackClip(side, cx, cy, s);
+    if (glitch > .12) { heart(cx + glitch * 3, cy, s, "rgba(255,40,78,.45)"); heart(cx - glitch * 3, cy, s, "rgba(70,220,255,.35)"); }
+    heart(cx, cy, s, col);
+    ctx.fillStyle = "rgba(255,255,255,.14)"; ctx.beginPath(); ctx.ellipse(cx - s * .34, cy - s * .18, s * .22, s * .13, -.5, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  // seam glow + sutures while healing — clipped to the heart so nothing spills outside it
+  if (glow > .02 || stitch > 0) {
+    ctx.save(); heartPath(cx, cy, s * 1.06); ctx.clip();
+    if (glow > .02) { ctx.globalAlpha = glow; ctx.strokeStyle = H(74, 95); ctx.lineWidth = 2.6; ctx.lineCap = "round"; ctx.shadowColor = H(62, 92, .8); ctx.shadowBlur = 8;
+      ctx.beginPath(); for (let i = 1; i < SEAM.length - 1; i++) { const px = cx + SEAM[i][0] * s, py = cy + SEAM[i][1] * s; i === 1 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); } ctx.stroke(); ctx.shadowColor = "transparent"; ctx.globalAlpha = 1; }
+    if (stitch > 0) { ctx.strokeStyle = H(84, 72); ctx.lineWidth = 2.2; ctx.lineCap = "round";
+      for (let i = 0; i < stitch; i++) { const yy = cy - s * .48 + i * s * .34, w = s * (.14 + gap * .4);
+        ctx.beginPath(); ctx.moveTo(cx - w, yy - 5); ctx.lineTo(cx + w, yy + 5); ctx.moveTo(cx - w, yy + 5); ctx.lineTo(cx + w, yy - 5); ctx.stroke(); } }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------- sound ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } }
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur + .02);
+}
+function noiseSwell(dur, vol) {
+  if (!AC) return; const n = Math.floor(AC.sampleRate * dur), b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(i / n, 2);
+  const src = AC.createBufferSource(); src.buffer = b; const f = AC.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 900; f.Q.value = .7;
+  const g = AC.createGain(); g.gain.value = vol; src.connect(f).connect(g).connect(AC.destination); src.start();
+}
+const sfx = {
+  key()   { tone("square", 520, 180, .05, .05); tone("sine", 150, 70, .09, .18); },
+  whoosh(){ noiseSwell(.34, .09); tone("sine", 240, 520, .3, .04); },
+  tick()  { tone("square", 2200, 1400, .02, .025); },
+  snap()  { tone("sine", 320, 760, .12, .14); tone("triangle", 660, 990, .22, .07, .02); },
+  chime() { [784, 988, 1318, 1568].forEach((f, i) => tone("triangle", f, f, .4, .06, i * .06)); },
+  spark() { tone("triangle", 1760, 2400, .18, .04); },
+};
+const EV = window.__ev = [];
+const ev = k => EV.push([k, +now.toFixed(3)]);
+
+// ---------- state / document ----------
+let now = 0, last = 0, t0 = 0, sIdx = 0, moodV = 0, resolvedT = -1, snapT = -1, keyT = -9, shakeSeed = 0;
+let parts = [], floaters = [];
+const NSTEP = 4;
+let doc = [], actions = [];
+function reset() {
+  t0 = now; sIdx = 0; moodV = 0; resolvedT = -1; snapT = -1; keyT = -9; parts = []; floaters = []; floaters.acc = 0;
+  const sweet = { kind: "sweet", text: CONFIG.msg, del: true, animT: -9, animType: null };
+  const angry = CONFIG.angry.map(t => ({ kind: "angry", text: t, animT: -9, animType: null, gone: false, ticks: 0 }));
+  doc = [sweet, ...angry];
+  actions = [];
+  for (let i = angry.length - 1; i >= 0; i--) actions.push({ type: "untype", line: angry[i] });
+  actions.push({ type: "restore", line: sweet });
+}
+const sceneT = () => now - t0;
+function doUndo() {
+  if (sIdx >= actions.length || resolvedT >= 0) return;
+  const a = actions[sIdx]; a.line.animT = now; a.line.animType = a.type;
+  sIdx++; keyT = now; shakeSeed = Math.random() * 99;
+  sfx.key(); sfx.whoosh(); ev("z" + sIdx);
+  if (a.type === "restore") resolvedT = now + REST_DUR;
+}
+const UNTYPE = .3, COLLAPSE = .2, REST_DUR = .3;
+function lineH(l) {
+  if (l.kind === "angry" && l.animType === "untype") {
+    const e = now - l.animT;
+    if (e >= UNTYPE + COLLAPSE) { l.gone = true; return 0; }
+    if (e >= UNTYPE) return LH * (1 - sm((e - UNTYPE) / COLLAPSE));
+  }
+  return LH;
+}
+
+// ---------- ?auto=1 ----------
+const PRESS = [1.00, 1.90, 2.80, 3.70];
+const cur = { on: false, x: 0, y: 0, down: -9 };
+let autoI = 0;
+function runAuto() {
+  const t = sceneT(), hv = { x: KZx, y: KEYY };
+  if (t < .45) { cur.on = false; cur.x = BC; cur.y = CH + 20; }
+  else {
+    cur.on = true; const app = sm((t - .45) / .45);
+    cur.x = lerp(BC, hv.x, app) + Math.sin(t * 2.3) * 2 * app;
+    const dip = now - cur.down < .2 ? Math.sin(clamp((now - cur.down) / .2, 0, 1) * Math.PI) * 11 : 0;
+    cur.y = lerp(CH + 20, hv.y + 4, app) + dip - Math.sin(t * 2.3) * 2 * app;
+  }
+  while (autoI < PRESS.length && t >= PRESS[autoI]) { autoI++; cur.down = now; doUndo(); }
+}
+
+// ---------- input ----------
+addEventListener("pointerdown", e => {
+  audio(); if (CONFIG.auto) return; const u = toU(e.clientX, e.clientY);
+  if (u.y > KEYY - 34 && u.y < KEYY + 34 && u.x > KCx - 56 && u.x < KZx + 36) { cur.down = now; doUndo(); }
+  else if (resolvedT >= 0) reset();
+});
+addEventListener("keydown", e => {
+  audio(); if (CONFIG.auto) return;
+  if (e.key === "z" || e.key === "Z") { if (e.ctrlKey || e.metaKey) e.preventDefault(); doUndo(); }
+});
+
+// ---------- particles ----------
+function burst(cx, cy, n = 34) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 120 + Math.random() * 280;
+    parts.push({ k: Math.random() < .62 ? "heart" : "star", x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, t: now, life: 1 + Math.random() * .8, s: 5 + Math.random() * 8, g: 240, r: Math.random() * 6, dh: [0, 20, -20][i % 3] }); }
+}
+function drawParts(dt) {
+  parts = parts.filter(p => now - p.t < p.life);
+  for (const p of parts) {
+    p.vx *= Math.exp(-dt * 2.2); p.vy = p.vy * Math.exp(-dt * 2.2) + p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += dt * 4;
+    const k = 1 - (now - p.t) / p.life; ctx.globalAlpha = Math.min(1, k * 2.2);
+    if (p.k === "heart") heart(p.x, p.y, p.s * 1.6, H(64, 90, 1, p.dh));
+    else star(p.x, p.y, p.s, p.dh > 0 ? "#ffd56b" : "#fff", p.r);
+  }
+  ctx.globalAlpha = 1;
+}
+function drawFloaters(dt) {
+  if (resolvedT >= 0 && now - resolvedT > .15) { floaters.acc = (floaters.acc || 0) + dt * 5.5;
+    while (floaters.acc > 1) { floaters.acc--; floaters.push({ x: 14 + Math.random() * (DW - 28), y: CH + 14, s: 5 + Math.random() * 9, v: 36 + Math.random() * 44, ph: Math.random() * 6, t: now, dh: [0, 18, -18][Math.floor(Math.random() * 3)] }); } }
+  for (let i = floaters.length - 1; i >= 0; i--) { const f = floaters[i]; f.y -= f.v * dt; if (f.y < -24) floaters.splice(i, 1); }
+  for (const f of floaters) { ctx.globalAlpha = Math.min(1, (now - f.t) * 2) * clamp((f.y - 8) / 150, 0, 1) * .5; heart(f.x + Math.sin(now * 2 + f.ph) * 8, f.y, f.s, H(72, 84, 1, f.dh)); }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- editor ----------
+function drawEditor() {
+  const tension = (1 - moodV) * (resolvedT < 0 ? 1 : 0);
+  const sh = tension * 1.5;
+  const shx = Math.sin(now * 47 + shakeSeed) * sh + Math.sin(now * 23) * sh * .4;
+  const shy = Math.cos(now * 41 + shakeSeed) * sh * .7;
+  ctx.save(); ctx.translate(shx, shy);
+  ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 28; ctx.shadowOffsetY = 14;
+  rr(WX, WY, WW, WH, 19); ctx.fillStyle = C.panel; ctx.fill(); ctx.shadowColor = "transparent";
+  rr(WX, WY, WW, WH, 19); ctx.strokeStyle = C.stroke; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.save(); rr(WX, WY, WW, WH, 19); ctx.clip();
+  ctx.fillStyle = C.bar; ctx.fillRect(WX, WY, WW, TBH); ctx.fillStyle = C.stroke; ctx.fillRect(WX, WY + TBH - 1, WW, 1);
+  ctx.restore();
+  const dc = ["#ff5f57", "#febc2e", "#28c840"]; dc.forEach((c, i) => sdot(WX + 20 + i * 15, WY + TBH / 2, 5, c));
+  const solved = resolvedT >= 0;
+  let tx = WX + 70, ty = WY + TBH / 2 + 4.5;
+  monoText("us.txt ", tx, ty, 14, C.ink); tx += measM("us.txt ", 14);
+  if (!solved) {
+    const dim = lerp(.5, .9, (Math.sin(now * 3) + 1) / 2);
+    monoText(CONFIG.lines.unsaved + " ", tx, ty, 11.5, `rgba(255,110,124,${dim})`); tx += measM(CONFIG.lines.unsaved + " ", 11.5);
+    sdot(tx + 4, ty - 4, 4, C.red);
+  } else {
+    const pk = outBack((now - resolvedT) / .4);
+    monoText(CONFIG.lines.saved + " ", tx, ty, 11.5, H(70, 55)); tx += measM(CONFIG.lines.saved + " ", 11.5);
+    ctx.save(); ctx.globalAlpha = clamp((now - resolvedT) / .3, 0, 1); check(tx + 6, ty - 4, 7 * pk, "#3ddc84"); ctx.restore(); tx += 16;
+    ctx.globalAlpha = clamp((now - resolvedT - .15) / .3, 0, 1);
+    monoText("· " + CONFIG.name + " ♥", tx, ty, 11.5, H(76, 72), "left", H(62, 90)); ctx.globalAlpha = 1;
+  }
+  // mood meter BAR in the titlebar (💔 -> ❤️)
+  const tkR = WX + WW - 18, tkL = tkR - 70, tkY = WY + TBH / 2, tkH = 8;
+  brokenHeart8(tkL - 11, tkY, (1 - moodV) * .9);                       // tiny broken heart at the sad end
+  rr(tkL, tkY - tkH / 2, tkR - tkL, tkH, tkH / 2); ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fill();
+  rr(tkL, tkY - tkH / 2, (tkR - tkL) * moodV, tkH, tkH / 2); ctx.fillStyle = H(62, 85); ctx.fill();
+  heart(tkR + 10, tkY, 6.5, moodV > .98 ? H(62, 88) : "rgba(255,255,255,.22)");  // whole heart at the happy end
+
+  // content
+  ctx.save(); rr(WX + 1, WY + TBH, WW - 2, WH - TBH, 0); ctx.clip();
+  let y = WY + TBH + 20; let num = 0;
+  // sweet line (deleted -> restored), big
+  const sw = doc[0]; num++;
+  { const h = LH, tcx = WX + GUT + 8, base = y + FSB + 4;
+    monoText(String(num), WX + GUT - 10, base - 4, 13, C.ln, "right");
+    if (sw.del && sw.animType !== "restore") {
+      const w = monoText(sw.text, tcx, base, FSB, C.redDim);
+      ctx.strokeStyle = C.red; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(tcx, base - 7); ctx.lineTo(tcx + w, base - 7); ctx.stroke();
+    } else {
+      const e = now - sw.animT, k = sm(e / REST_DUR), done = resolvedT >= 0 && now >= resolvedT;
+      const col = done ? H(lerp(74, 82, Math.sin(now * 3) * .5 + .5), 88) : `rgb(${Math.round(lerp(255, 236, k))},${Math.round(lerp(110, 236, k))},${Math.round(lerp(124, 248, k))})`;
+      ctx.save(); if (done) { ctx.shadowColor = H(62, 92, .7); ctx.shadowBlur = 16; }
+      const w = monoText(sw.text, tcx, base, FSB, col, "left", H(62, 92)); ctx.restore();
+      if (k < 1) { ctx.strokeStyle = `rgba(255,86,102,${1 - k})`; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(tcx, base - 7); ctx.lineTo(tcx + w * (1 - k), base - 7); ctx.stroke(); }
+      if (done && Math.sin(now * 5) > 0) { ctx.fillStyle = H(70, 82); ctx.fillRect(tcx + w + 4, base - FSB + 2, 3, FSB + 2); }
+    }
+    y += h;
+  }
+  // angry lines, big + bold red with glitch split
+  doc.slice(1).forEach(l => {
+    if (l.gone) return; num++; const h = lineH(l); if (h <= 0) return;
+    const tcx = WX + GUT + 8, base = y + FSB + 4;
+    monoText(String(num), WX + GUT - 10, base - 4, 13, C.ln, "right");
+    let shown = l.text;
+    if (l.animType === "untype") { const e = now - l.animT; shown = e < UNTYPE ? l.text.slice(0, Math.ceil(l.text.length * (1 - e / UNTYPE))) : ""; }
+    const g = tension * .8 + .12;
+    if (g > .18 && shown) { ctx.globalAlpha = .5 * g; monoText(shown, tcx + 1.6 * g, base, FSB, "#49e3ff"); monoText(shown, tcx - 1.6 * g, base, FSB, "#ff2f5e"); ctx.globalAlpha = 1; }
+    ctx.save(); ctx.font = F.mono(500, FSB); ctx.restore();
+    monoTextBold(shown, tcx, base, FSB, C.red);
+    y += h;
+  });
+  // the BIG cracked heart, centre stage below the text
+  const gap = (1 - moodV) * 1.0;
+  let pop = 1, beat = 0;
+  if (snapT >= 0) { const e = now - snapT; pop = 1 + .36 * Math.exp(-e * 8) * Math.cos(e * 22);
+    const bb = ((now - snapT - .4) % .86 + .86) % .86;                 // lub-dub heartbeat
+    beat = e > .4 ? (.05 * Math.exp(-bb * 10) + .035 * Math.exp(-Math.max(0, bb - .16) * 12)) : 0; }
+  const glow = resolvedT >= 0 ? sm((now - resolvedT) / .5) : moodV * .3;
+  const col = H(lerp(56, 62, moodV), lerp(42, 86, moodV));
+  bigHeart(HX, HY, HS, gap, col, { glitch: tension, pop, beat, glow, stitch: Math.round(moodV * 4 + 0.01) });
+  ctx.restore();  // content clip
+  ctx.restore();  // shake
+}
+// bold mono (angry lines)
+function monoTextBold(str, x, y, fs, col) { ctx.font = F.mono(500, fs); ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = col;
+  let cx = x; for (const ch of str) { ctx.fillText(ch, cx, y); ctx.fillText(ch, cx + .6, y); cx += ctx.measureText(ch).width; } }
+// tiny broken heart glyph for the meter end
+function brokenHeart8(cx, cy, gap) {
+  for (const side of [-1, 1]) { ctx.save(); ctx.translate(side * gap * 4, 0); crackClip(side, cx, cy, 6.5); heart(cx, cy, 6.5, "rgba(255,120,132,.8)"); ctx.restore(); }
+}
+
+// ---------- keycaps + counter ----------
+function keycap(cx, w, label, fs) {
+  const press = clamp((now - keyT) / .12, 0, 1), down = now - keyT < .2 ? Math.sin(press * Math.PI) : 0;
+  const h = 46, dy = down * 5;
+  ctx.save(); ctx.translate(cx, KEYY + dy);
+  ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 10; ctx.shadowOffsetY = (1 - down) * 6 + 1;
+  rr(-w / 2, -h / 2, w, h, 11); ctx.fillStyle = C.key; ctx.fill(); ctx.shadowColor = "transparent";
+  rr(-w / 2, -h / 2, w, h, 11); ctx.strokeStyle = C.keyLo; ctx.lineWidth = 1.6; ctx.stroke();
+  rr(-w / 2 + 3, -h / 2 + 3, w - 6, h - 12, 8); ctx.fillStyle = C.keyHi; ctx.fill();
+  const glow = Math.max(0, 1 - (now - keyT) / .4);
+  if (glow > 0) { ctx.save(); ctx.globalAlpha = glow; rr(-w / 2, -h / 2, w, h, 11); ctx.strokeStyle = H(66, 92); ctx.lineWidth = 2.6; ctx.shadowColor = H(62, 90, .9); ctx.shadowBlur = 14 * glow; ctx.stroke(); ctx.restore(); }
+  monoText(label, 0, fs * .36, fs, C.keyInk, "center");
+  ctx.restore();
+}
+function drawKeys() {
+  keycap(KCx, 96, "Ctrl", 17);
+  ctx.fillStyle = C.ln; ctx.font = F.ui(700, 20); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("+", (KCx + 48 + KZx - 29) / 2, KEYY);
+  keycap(KZx, 58, "Z", 19);
+  // ×1 ×2 ×3 ×4 counter
+  const cy = KEYY + 40, gapx = 34, x0 = BC - gapx * 1.5;
+  for (let i = 0; i < NSTEP; i++) {
+    const on = i < sIdx, cur2 = i === sIdx - 1 && now - keyT < .3, px = x0 + i * gapx;
+    const pp = cur2 ? 1 + .3 * Math.exp(-(now - keyT) * 10) : 1;
+    ctx.save(); ctx.translate(px, cy); ctx.scale(pp, pp);
+    rr(-14, -11, 28, 22, 8); ctx.fillStyle = on ? H(60, 78, .95) : "rgba(255,255,255,.06)"; ctx.fill();
+    if (on) { ctx.strokeStyle = H(70, 85); ctx.lineWidth = 1.2; ctx.stroke(); }
+    monoText("×" + (i + 1), 0, 4, 12.5, on ? "#fff" : C.dot, "center"); ctx.restore();
+  }
+}
+function drawCursor() {
+  if (!cur.on) return;
+  const k = now - cur.down;
+  if (k < .4) { ctx.strokeStyle = `rgba(255,255,255,${.45 * (1 - k / .4)})`; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.arc(cur.x, cur.y, 10 + k * 60, 0, 7); ctx.stroke(); }
+  ctx.save(); ctx.translate(cur.x, cur.y); ctx.scale(1.35, 1.35);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 17); ctx.lineTo(4.2, 13.2); ctx.lineTo(7, 19.6); ctx.lineTo(9.8, 18.4); ctx.lineTo(7.1, 12.2); ctx.lineTo(12.4, 12.2); ctx.closePath();
+  ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1.5;
+  ctx.fillStyle = "#fff"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = "#111"; ctx.lineWidth = 1.1; ctx.lineJoin = "round"; ctx.stroke(); ctx.restore();
+}
+
+// ---------- one loop ----------
+function frame() {
+  now = (performance.now() - T0) / 1000; const dt = Math.min(.05, Math.max(0, now - last));
+  if (!started && sceneT() >= .05) { started = true; ev("mess"); }
+  if (CONFIG.auto) runAuto();
+  for (const l of doc) if (l.animType === "untype" && !l.gone) {
+    const e = now - l.animT; if (e < UNTYPE) { const want = Math.floor((e / UNTYPE) * l.text.length); if (want > (l.ticks || 0)) { l.ticks = want; if (Math.random() < .6) sfx.tick(); } }
+  }
+  moodV = lerp(moodV, sIdx / NSTEP, 1 - Math.exp(-dt * 11));
+  if (resolvedT >= 0 && snapT < 0 && now >= resolvedT) { snapT = now; moodV = 1; sfx.snap(); sfx.chime(); ev("snap"); burst(HX, HY, 38); }
+  if (resolvedT >= 0 && now - resolvedT > .4 && Math.random() < .04) { sfx.spark(); ev("spark"); }
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const bg = ctx.createLinearGradient(0, 0, 0, Hh); bg.addColorStop(0, C.bg0); bg.addColorStop(1, C.bg1);
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, Hh);
+  const gx = W / 2, gy = OY + HY * S, glow = ctx.createRadialGradient(gx, gy, 10, gx, gy, Math.max(W, Hh) * .7);
+  if (resolvedT < 0) { glow.addColorStop(0, `rgba(255,70,86,${.06 + .05 * (1 - moodV)})`); glow.addColorStop(1, "rgba(0,0,0,0)"); }
+  else { const gk = sm((now - resolvedT) / .7); glow.addColorStop(0, H(60, 82, .2 * gk)); glow.addColorStop(1, "rgba(0,0,0,0)"); }
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, Hh);
+
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, OX * DPR, OY * DPR);
+  drawFloaters(dt);
+  drawEditor();
+  drawParts(dt);
+  drawKeys();
+  if (!CONFIG.auto && resolvedT < 0 && sIdx === 0) { ctx.globalAlpha = .5 + .4 * Math.sin(now * 3); monoText(CONFIG.lines.hint, BC, CH - 10, 11.5, C.dot, "center"); ctx.globalAlpha = 1; }
+  drawCursor();
+  last = now;
+  requestAnimationFrame(frame);
+}
+let started = false;
+resize(); reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
