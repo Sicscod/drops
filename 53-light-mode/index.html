@@ -1,0 +1,651 @@
+<!doctype html>
+<!--
+  Light Mode · drop 53 · free code by @sicscod.drops (MIT)
+  A dark code editor at 3:00 AM. A tiny vampire developer is happily typing. Flip the theme toggle and the
+  whole editor flashbangs to light mode: he screams, hisses, smokes and shrinks, his coffee boils over and the
+  code goes pale. Flip it back and he puffs up again and sips his coffee. Try it one more time... he grabs it.
+  Tap the toggle to flashbang him, tap him to make him sip his coffee.
+  One HTML file, no libraries, everything drawn on a canvas from one requestAnimationFrame loop.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>light mode</title>
+<meta name="description" content="A tiny vampire developer at 3am. Flip the editor to light mode and watch him sizzle. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=JetBrains+Mono:wght@400;700&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#12131a}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.credit{position:fixed;left:0;right:0;bottom:0;height:24px;display:flex;align-items:center;justify-content:center;z-index:3;background:#0a0b10;border-top:1px solid #1d1f2a;font:400 10.5px "JetBrains Mono",ui-monospace,monospace;color:#5d6178}
+.credit a{color:inherit}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:400 20px 'JetBrains Mono'">a</span><span class="pre" style="font:700 20px 'JetBrains Mono'">a</span><span class="pre" style="font:500 20px 'Fredoka'">a</span><span class="pre" style="font:700 20px 'Fredoka'">a</span>
+<script>
+// ===== Light Mode · free code by @sicscod.drops =====
+// Try: yoursite/?hue=150&time=4:20%20AM   (?auto=1 plays the whole thing by itself)
+const P = new URLSearchParams(location.search);
+const num = (k, d) => P.get(k) !== null && P.get(k) !== "" && isFinite(+P.get(k)) ? +P.get(k) : d;
+const CONFIG = {
+  hue: num("hue", 205),                    // hoodie colour, 0-360 (205 navy, 150 green, 0 red, 30 orange)
+  time: (P.get("time") || "3:00 AM").slice(0, 10),   // the clock in the corner
+  auto: P.get("auto") === "1",             // a cursor plays the whole thing by itself
+  file: "night.js",
+  code: [
+    "// night.js · {time} · one more feature",
+    "const sun = null;   // not in this house",
+    "let coffee = Infinity;",
+    "",
+    "function lockIn() {",
+    "  while (!sunrise) {",
+    "    ship(nextFeature());",
+    "  }",
+    "}",
+    "",
+  ],
+  typing: "theme.set(\"dark\"); // forever",   // the line he keeps typing
+  mug: ["DARK", "ROAST"],                  // printed on the mug
+  hoodie: "404 SLEEP",                     // printed on the hoodie
+  quips: {
+    scream: "AAAAH!",
+    hiss: "HSSSSS!",
+    phew: "phew...",
+    sip: ["much better.", "ahh. dark.", "perfect."],
+    hot: "HOT HOT HOT",
+    tease: "don't.",
+    grab: "nope.",
+    lock: "dark mode. forever.",
+    rattle: ["nope.", "locked.", "no sun."],
+    unlock: "fine. ONE time.",
+  },
+  toast: "LIGHT MODE",
+  lockAfter: 2,                            // after this many flashbangs, the next try gets the toggle locked
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const F = { mono: '"JetBrains Mono", ui-monospace, monospace', ui: '"Fredoka", system-ui, sans-serif' };
+const HUE = ((CONFIG.hue % 360) + 360) % 360;
+const HOOD = (dl = 0) => `hsl(${HUE},40%,${36 + dl}%)`;
+const INK = "#16121c";
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, t) => { const A = hex(a), B = hex(b); return `rgb(${A.map((v, i) => Math.round(lerp(v, B[i], t))).join(",")})`; };
+// two themes; every colour on screen is a blend between them
+const DARK = { bg: "#12131a", tab: "#0b0c11", tabOn: "#12131a", line: "#1f2130", gut: "#3c3f54", text: "#d3d6e8", kw: "#ff7eb6", str: "#a3e39a", fn: "#7cc8ff",
+  com: "#5f647d", num: "#ffb86b", punc: "#8fdcff", stat: "#0b0c11", statText: "#8c91ab", desk: "#1b1922", deskTop: "#2b2833", kb: "#262833", key: "#33364a", mini: "#2a2d3f" };
+const LIGHT = { bg: "#ffffff", tab: "#f2f2f4", tabOn: "#ffffff", line: "#ececf1", gut: "#dcdde5", text: "#cdd0da", kw: "#efc3d6", str: "#c8e2c4", fn: "#c3d9ee",
+  com: "#e0e1e7", num: "#f0d8bd", punc: "#cde3ec", stat: "#f4f4f6", statText: "#a7aabb", desk: "#ebe7e0", deskTop: "#f8f5ef", kb: "#dfe0e6", key: "#f4f4f7", mini: "#ececf2" };
+const col = (k) => mix(DARK[k], LIGHT[k], TH);
+const CODE = CONFIG.code.map(l => l.replace("{time}", CONFIG.time));
+
+function tokens(s) {                                        // tiny JS highlighter -> class per char
+  const out = Array(s.length).fill("text"); let i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (s.startsWith("//", i)) { for (; i < s.length; i++) out[i] = "com"; break; }
+    if (ch === '"' || ch === "'") { let j = i + 1; while (j < s.length && s[j] !== ch) j++; for (let k = i; k <= j && k < s.length; k++) out[k] = "str"; i = j + 1; continue; }
+    if (/[A-Za-z_$]/.test(ch)) { let j = i; while (j < s.length && /[\w$]/.test(s[j])) j++; const w = s.slice(i, j);
+      const c = /^(const|let|var|function|return|if|else|for|while|break|new|true|false|null|Infinity)$/.test(w) ? "kw" : s[j] === "(" ? "fn" : "text";
+      for (let k = i; k < j; k++) out[k] = c; i = j; continue; }
+    if (/\d/.test(ch)) out[i] = "num"; else if (/[{}()\[\];,.:=+<>!]/.test(ch)) out[i] = "punc";
+    i++;
+  }
+  return out;
+}
+const TOK = CODE.map(tokens), TOKT = tokens(CONFIG.typing);
+
+let W = 0, H = 0, DPR = 1, S = 1, FOOT = 24, TABH = 44, SBH = 58, FS = 16, LH = 25, CW = 9, GUT = 40, CY0 = 60, R = 90, VX = 270, DY = 430, SB0 = 480;
+let TGL = { x: 0, y: 0, w: 90, h: 44 }, MUG = { x: 0, y: 0, w: 50, h: 60 };
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  S = clamp(Math.min(W / 540, H / 600), .6, 1.6);
+  TABH = 44 * S; SBH = 60 * S; SB0 = H - FOOT - SBH;
+  ctx.font = `400 100px ${F.mono}`; const ratio = ctx.measureText("M").width / 100;
+  const maxc = Math.max(...CODE.map(l => l.length), CONFIG.typing.length);
+  GUT = 44 * S; FS = clamp(Math.min(17.5 * S, (W - GUT - 14 * S) / (maxc * ratio)), 8, 22); CW = FS * ratio; LH = FS * 1.6; CY0 = TABH + 12 * S;
+  const stage = SB0 - TABH;
+  R = clamp(Math.min(W * .25, stage * .215), 36, 170);
+  VX = W * .5; DY = SB0 - .6 * R;
+  TGL = { w: 96 * S, h: 42 * S }; TGL.x = W - 14 * S - TGL.w; TGL.y = SB0 + (SBH - TGL.h) / 2;
+  MUG = { w: .62 * R, h: .72 * R }; MUG.x = Math.max(MUG.w * .6 + 6 * S, VX - 1.62 * R); MUG.y = DY + .02 * R;   // x: centre, y: bottom
+}
+
+// ---------- state ----------
+let now = 0, last = 0, T0 = -1, TH = 0, light = false, lightT = -9, darkT = -9, shrinkAtDark = 1, flashes = 0, shake = 0;
+let sipT = -9, grabT = -9, grabPt = null, grabHold = 0, locked = false, lockT = -9, rattleT = -9, rattles = 0, hover = false, susT = -9;
+let typed = 0, typeAcc = 0, typePause = 0, scale = 1, kbFlash = [], boilT = 0, smokeT = 0, sparkT = 0;
+const parts = [], bubbles = {};
+const cur = { x: 0, y: 0, seen: false, pressT: -9 };
+const events = window.__events = [];
+const ev = (name, extra) => events.push([name, +(now - T0).toFixed(3), extra]);
+const later = [];
+function after(d, fn) { later.push({ t: now + d, fn }); }     // tiny scheduler driven by the rAF loop (no setTimeout)
+function say(text, life = 1, style = "talk", delay = 0) { bubbles.v = { text, t0: now + delay, life, style }; }
+
+// ---------- sound (Web Audio, starts on the first tap) ----------
+let AC = null, sizz = null;
+function audio() {
+  if (!CONFIG.sound) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume();
+    if (!sizz) {                                              // the sizzle: looped noise, louder while he burns
+      const n = AC.sampleRate * 2, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (Math.random() < .03 ? 3 : .5);
+      const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+      s.buffer = b; s.loop = true; f.type = "highpass"; f.frequency.value = 3500; g.gain.value = 0;
+      s.connect(f).connect(g).connect(AC.destination); s.start(); sizz = g;
+    }
+  } catch (e) { AC = null; }
+}
+function tone(type, f0, f1, len, vol, delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len * .8);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .006); g.gain.exponentialRampToValueAtTime(.0006, t + len);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + len + .02);
+}
+function noise(len, vol, fc, q = 1, type = "bandpass", delay = 0, f1) {
+  if (!AC) return; const n = AC.sampleRate * len | 0, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 1.5);
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain(), t = AC.currentTime + delay;
+  f.type = type; f.frequency.setValueAtTime(fc, t); if (f1) f.frequency.exponentialRampToValueAtTime(f1, t + len); f.Q.value = q; g.gain.value = vol;
+  s.buffer = b; s.connect(f).connect(g).connect(AC.destination); s.start(t);
+}
+const sfx = {
+  click() { tone("square", 1800, 900, .03, .05); noise(.04, .6, 3000, 1.5); },
+  flash() { noise(.7, .9, 6000, .7, "highpass"); [1760, 2217, 2637].forEach(f => tone("sawtooth", f, f * 1.02, .9, .025)); tone("sine", 3200, 5200, .5, .04); },
+  scream() { tone("sawtooth", 700, 1250, .75, .06); tone("square", 1050, 1600, .7, .02); },
+  hiss() { noise(.8, .7, 5200, .8, "highpass"); },
+  puff() { noise(.4, .7, 600, .8, "lowpass", 0, 200); tone("sine", 220, 110, .3, .15); },
+  sip() { noise(.45, .5, 700, 4, "bandpass", 0, 1600); tone("sine", 330, 260, .3, .04, .45); },
+  boil() { tone("sine", rnd(220, 380), rnd(500, 800), .06, .05); },
+  grab() { noise(.18, .6, 1500, 1, "bandpass", 0, 400); tone("sine", 160, 60, .15, .25, .12); },
+  lock() { tone("square", 2400, 2400, .02, .06); tone("square", 1700, 1700, .03, .06, .06); tone("sine", 90, 38, .8, .5, .06); },
+  rattle() { [0, .05, .1].forEach(d => tone("square", 1900 + rnd(-200, 200), 1500, .025, .04, d)); },
+};
+
+// ---------- the story ----------
+function goLight() {
+  light = true; lightT = now; flashes++; shake = 1; typePause = 0;
+  say(CONFIG.quips.scream, 1, "shout", .04);
+  after(1.05, () => { if (light) { say(CONFIG.quips.hiss, .9, "shout"); sfx.hiss(); } });
+  sfx.click(); sfx.flash(); sfx.scream(); ev("light", flashes);
+}
+function goDark() {
+  light = false; darkT = now; shrinkAtDark = scale; shake = .3;
+  for (let i = parts.length - 1; i >= 0; i--) if (parts[i].kind === "smoke") parts.splice(i, 1);
+  for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; parts.push({ kind: "puff", x: VX + Math.cos(a) * R * 1.35, y: DY - 1.9 * R + Math.sin(a) * R * 1.3, vx: Math.cos(a) * 120 * S, vy: Math.sin(a) * 90 * S, r: R * rnd(.12, .2), t0: now, life: .5 }); }
+  say(CONFIG.quips.phew, .85, "talk", .1);
+  sfx.click(); sfx.puff(); ev("dark");
+}
+function toggle(x, y) {
+  if (locked) { rattleT = now; rattles++; sfx.rattle(); ev("rattle", rattles);
+    if (rattles >= 3) { locked = false; rattles = 0; flashes = 0; say(CONFIG.quips.unlock, 1.2); ev("unlock"); }
+    else say(CONFIG.quips.rattle[(rattles - 1) % CONFIG.quips.rattle.length], .8);
+    return; }
+  if (now - grabT < 1.2) return;
+  if (light) { goDark(); return; }
+  if (!CONFIG.auto && flashes >= CONFIG.lockAfter) { grab(x, y); return; }
+  goLight();
+}
+function sip(quiet) {
+  if (now - sipT < 1.3 || now - grabT < .9 && !CONFIG.auto) return;
+  sipT = now; sfx.sip(); ev("sip");
+  if (light) say(CONFIG.quips.hot, .9, "shout", .35);
+  else if (!quiet) { const q = CONFIG.quips.sip; say(q[Math.floor(Math.random() * q.length)], 1.25, "talk", .85); }
+}
+function grab(x, y) {                                          // he grabs the cursor and locks the toggle
+  grabT = now; grabPt = { x, y }; grabHold = CONFIG.auto ? 99 : 2.4; shake = .5;
+  if (CONFIG.auto) { cseg = null; cur.x = x; cur.y = y; }
+  say(CONFIG.quips.grab, .6, "shout"); sfx.grab(); ev("grab");
+  after(.75, () => { locked = true; lockT = now; shake = 1; rattles = 0; sfx.lock(); say(CONFIG.quips.lock, 2.4, "talk", .05); ev("lock");
+    for (let k = 0; k < 12; k++) { const a = rnd(0, 7); parts.push({ kind: "spark", x: TGL.x + TGL.w / 2, y: TGL.y + TGL.h / 2, vx: Math.cos(a) * rnd(120, 260) * S, vy: Math.sin(a) * rnd(120, 260) * S - 60 * S, t0: now, life: rnd(.25, .45), c: "#ffd34d" }); } });
+}
+function reset() {
+  light = false; TH = 0; lightT = darkT = sipT = grabT = lockT = rattleT = -9; flashes = 0; locked = false; grabPt = null; scale = 1; shrinkAtDark = 1;
+  typed = 0; typePause = 0; parts.length = later.length = 0; for (const k in bubbles) delete bubbles[k]; ev("reset");
+}
+
+// ---------- input ----------
+const inToggle = (x, y) => x > TGL.x - 14 * S && x < TGL.x + TGL.w + 14 * S && y > TGL.y - 14 * S && y < TGL.y + TGL.h + 14 * S;
+const onVamp = (x, y) => Math.abs(x - VX) < 1.4 * R && y > DY - 3.3 * R * scale && y < DY + .3 * R || Math.hypot(x - MUG.x, y - (MUG.y - MUG.h / 2)) < MUG.w;
+cv.addEventListener("pointerdown", e => {
+  if (CONFIG.auto) return; audio();
+  const x = e.clientX, y = e.clientY;
+  if (inToggle(x, y)) toggle(x, y); else if (onVamp(x, y)) sip();
+});
+cv.addEventListener("pointermove", e => { if (CONFIG.auto) return; const h = e.pointerType === "mouse" && inToggle(e.clientX, e.clientY);
+  if (h && !hover && !light && !locked && now - susT > 2) { susT = now; say(CONFIG.quips.tease, 1); } hover = h; });
+addEventListener("keydown", e => { if (CONFIG.auto) return; audio(); if (e.key === "t" || e.key === "T") toggle(TGL.x + TGL.w / 2, TGL.y + TGL.h / 2); if (e.key === " ") sip(); });
+addEventListener("resize", resize);
+
+// ---------- ?auto=1: a scripted cursor plays the story (used for the video) ----------
+const tgc = (dx = 0, dy = 0) => () => ({ x: TGL.x + TGL.w * .5 + dx * S, y: TGL.y + TGL.h * .55 + dy * S });
+const AT = { flash: .1, dark: 2.4, sip: 3.3, tease: 4.9, grab: 6.45, sip2: 7.95, end: 10.6 };
+const CUR_AUTO = [     // [time, "move", duration, target, from?] / [time, "do", fn]
+  [0.0, "move", .09, tgc(-6, 2), tgc(-30, -26)],
+  [AT.flash, "do", () => { cur.pressT = now; goLight(); }],
+  [.45, "move", .5, tgc(-70, -40)],
+  [1.95, "move", .4, tgc(0, 0)],
+  [AT.dark, "do", () => { cur.pressT = now; goDark(); }],
+  [2.75, "move", .7, () => ({ x: W * .86, y: TABH + 70 * S })],
+  [AT.sip, "do", () => sip()],
+  [AT.tease, "move", .55, tgc(-40, -34)],
+  [5.25, "do", () => say(CONFIG.quips.tease, 1.1)],
+  [5.5, "move", .2, tgc(-6, -2)],
+  [5.75, "move", .2, tgc(-36, -24)],
+  [6.0, "move", .18, tgc(-22, -2)],
+  [6.2, "move", .15, tgc(-30, -12)],
+  [AT.grab, "do", () => { const p = tgc(-28, -14)(); grab(p.x, p.y); }],
+  [AT.sip2, "do", () => sip(true)],
+];
+let ci = 0, cseg = null;
+function runAuto() {
+  const t = now - T0;
+  while (ci < CUR_AUTO.length && t >= CUR_AUTO[ci][0]) {
+    const a = CUR_AUTO[ci++];
+    if (a[1] === "move") { const from = a[4] ? a[4]() : { x: cur.x, y: cur.y }; cseg = { t0: T0 + a[0], len: a[2], from, to: a[3]() }; cur.seen = true; }
+    else a[2]();
+  }
+  if (cseg) { const u = clamp((now - cseg.t0) / cseg.len, 0, 1), e = sm(u);
+    cur.x = lerp(cseg.from.x, cseg.to.x, e); cur.y = lerp(cseg.from.y, cseg.to.y, e); }
+  if (t > AT.end) { reset(); T0 = now; ci = 0; cseg = null; cur.seen = false; }
+}
+
+// ---------- drawing helpers ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function ell(x, y, rx, ry, rot, fill, lw) { ctx.beginPath(); ctx.ellipse(x, y, Math.max(.1, rx), Math.max(.1, ry), rot || 0, 0, 7); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (lw) { ctx.strokeStyle = INK; ctx.lineWidth = lw; ctx.stroke(); } }
+function inkFill(fill, lw) { ctx.fillStyle = fill; ctx.fill(); if (lw) { ctx.strokeStyle = INK; ctx.lineWidth = lw; ctx.stroke(); } }
+function sun(x, y, r, c = "#ffb000") { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, r * .55, 0, 7); ctx.fill(); ctx.strokeStyle = c; ctx.lineWidth = r * .2; ctx.lineCap = "round";
+  for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * r * .78, y + Math.sin(a) * r * .78); ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); ctx.stroke(); } }
+function moon(x, y, r, c, bg) { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(x + r * .45, y - r * .3, r * .8, 0, 7); ctx.fill(); }
+
+// ---------- the vampire ----------
+// o: {x, y (desk line), u (size), pose: type|burn|phew|sip|sus|smug, burn 0..1, look {x,y}}
+function arm(sx, sy, hx, hy, u, bend, cuff = true) {           // a hoodie sleeve as a thick bendy stroke
+  const mx = (sx + hx) / 2 + bend * u, my = (sy + hy) / 2 + Math.abs(bend) * u * .3;
+  ctx.lineCap = "round";
+  for (const [c, w] of [[INK, .34], [HOOD(4), .25]]) { ctx.strokeStyle = c; ctx.lineWidth = u * w; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(mx, my, hx, hy); ctx.stroke(); }
+  if (cuff) { const a = Math.atan2(hy - my, hx - mx); ell(hx - Math.cos(a) * u * .1, hy - Math.sin(a) * u * .1, u * .15, u * .15, 0, HOOD(-6), u * .045); }
+}
+function hand(x, y, u, skin, big = 1) { ell(x, y, u * .15 * big, u * .14 * big, 0, skin, u * .045); }
+function drawVamp(o) {
+  const u = o.u, lw = Math.max(1.5, u * .045), pose = o.pose;
+  const skin = mix("#ebe3f4", "#ff8a7a", o.burn * .85), skinD = mix("#cfc3dd", "#e8665a", o.burn * .85);
+  ctx.save(); ctx.translate(o.x, o.y); ctx.lineJoin = ctx.lineCap = "round";
+  // ---- collar + cape (behind)
+  for (const sd of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(sd * .12 * u, -1.28 * u); ctx.quadraticCurveTo(sd * .55 * u, -2.05 * u, sd * 1.28 * u, -2.78 * u);
+    ctx.quadraticCurveTo(sd * 1.12 * u, -1.95 * u, sd * .78 * u, -1.2 * u); ctx.closePath(); inkFill("#1d1424", lw * 1.1);
+    ctx.beginPath(); ctx.moveTo(sd * .2 * u, -1.3 * u); ctx.quadraticCurveTo(sd * .6 * u, -2.0 * u, sd * 1.16 * u, -2.6 * u);
+    ctx.quadraticCurveTo(sd * 1.0 * u, -1.95 * u, sd * .72 * u, -1.24 * u); ctx.closePath(); ctx.fillStyle = "#c4223f"; ctx.fill();
+  }
+  ctx.beginPath(); ctx.moveTo(-.78 * u, -1.22 * u); ctx.quadraticCurveTo(-1.25 * u, -.6 * u, -1.42 * u, .05 * u); ctx.lineTo(1.42 * u, .05 * u);
+  ctx.quadraticCurveTo(1.25 * u, -.6 * u, .78 * u, -1.22 * u); ctx.closePath(); inkFill("#1d1424", lw * 1.1);
+  ctx.strokeStyle = "#c4223f"; ctx.lineWidth = u * .07; for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sd * .78 * u, -1.1 * u); ctx.quadraticCurveTo(sd * 1.12 * u, -.55 * u, sd * 1.26 * u, 0); ctx.stroke(); }
+  // ---- hoodie body
+  ell(0, -1.22 * u, .58 * u, .2 * u, 0, HOOD(-8), lw);                              // hood bunched behind the neck
+  ctx.beginPath(); ctx.moveTo(-.9 * u, .05 * u); ctx.lineTo(-.9 * u, -.8 * u); ctx.quadraticCurveTo(-.88 * u, -1.22 * u, -.4 * u, -1.25 * u);
+  ctx.lineTo(.4 * u, -1.25 * u); ctx.quadraticCurveTo(.88 * u, -1.22 * u, .9 * u, -.8 * u); ctx.lineTo(.9 * u, .05 * u); ctx.closePath(); inkFill(HOOD(), lw * 1.1);
+  ell(0, -1.2 * u, .3 * u, .1 * u, 0, skinD);                                     // neck shadow
+  ctx.strokeStyle = "#f1ecf6"; ctx.lineWidth = u * .035;
+  for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sd * .18 * u, -1.15 * u); ctx.quadraticCurveTo(sd * .22 * u, -.95 * u, sd * .17 * u, -.78 * u); ctx.stroke(); ell(sd * .17 * u, -.75 * u, u * .035, u * .05, 0, "#f1ecf6"); }
+  ctx.fillStyle = "rgba(255,255,255,.82)"; ctx.font = `700 ${u * .15}px ${F.ui}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(CONFIG.hoodie, 0, -.5 * u);
+  // ---- head
+  const hy = -2.08 * u, bob = o.bob || 0;
+  ctx.save(); ctx.translate(0, bob);
+  for (const sd of [-1, 1]) {                                                       // pointy ears
+    ctx.beginPath(); ctx.moveTo(sd * .86 * u, hy - .22 * u); ctx.quadraticCurveTo(sd * 1.25 * u, hy - .5 * u, sd * 1.42 * u, hy - .72 * u);
+    ctx.quadraticCurveTo(sd * 1.28 * u, hy + .05 * u, sd * .9 * u, hy + .22 * u); ctx.closePath(); inkFill(skin, lw);
+    ctx.beginPath(); ctx.moveTo(sd * .95 * u, hy - .1 * u); ctx.quadraticCurveTo(sd * 1.2 * u, hy - .35 * u, sd * 1.3 * u, hy - .55 * u); ctx.quadraticCurveTo(sd * 1.18 * u, hy, sd * .97 * u, hy + .1 * u); ctx.closePath(); ctx.fillStyle = mix("#e7b6c9", "#ff6a5a", o.burn * .8); ctx.fill();
+  }
+  ell(0, hy, 1.0 * u, .94 * u, 0, skin, lw * 1.15);
+  // hair with a widow's peak and a cowlick
+  ctx.beginPath(); ctx.moveTo(-1.0 * u, hy - .05 * u); ctx.bezierCurveTo(-1.08 * u, hy - 1.2 * u, 1.08 * u, hy - 1.2 * u, 1.0 * u, hy - .05 * u);
+  ctx.quadraticCurveTo(.92 * u, hy - .42 * u, .58 * u, hy - .5 * u); ctx.quadraticCurveTo(.2 * u, hy - .5 * u, 0, hy - .2 * u);
+  ctx.quadraticCurveTo(-.2 * u, hy - .5 * u, -.58 * u, hy - .5 * u); ctx.quadraticCurveTo(-.92 * u, hy - .42 * u, -1.0 * u, hy - .05 * u); ctx.closePath();
+  inkFill(o.burn > .5 ? "#2a1d2e" : "#221a2c", lw);
+  ctx.beginPath(); ctx.moveTo(-.1 * u, hy - .88 * u); ctx.quadraticCurveTo(.1 * u, hy - 1.3 * u + Math.sin(now * 3) * .03 * u, .38 * u, hy - 1.22 * u); ctx.quadraticCurveTo(.15 * u, hy - 1.12 * u, .16 * u, hy - .9 * u); ctx.closePath(); inkFill("#221a2c", lw * .8);
+  ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = u * .06; ctx.beginPath(); ctx.ellipse(0, hy - .2 * u, .74 * u, .62 * u, 0, Math.PI * 1.15, Math.PI * 1.4); ctx.stroke();
+  // cheeks
+  for (const sd of [-1, 1]) ell(sd * .62 * u, hy + .3 * u, .15 * u, .09 * u, 0, `rgba(255,105,140,${.45 + o.burn * .3})`);
+  // eyes
+  const ex = .38 * u, ey = hy + .06 * u, er = .2 * u, ink = INK;
+  const lk = o.look ? { x: clamp((o.look.x - o.x) / (W * .5), -1, 1) * .06 * u, y: clamp((o.look.y - (o.y + hy)) / (H * .5), -1, 1) * .05 * u } : { x: 0, y: 0 };
+  ctx.strokeStyle = ink; ctx.lineWidth = lw * 1.3;
+  for (const sd of [-1, 1]) {
+    const x = sd * ex, y = ey;
+    if (pose === "phew" || pose === "sip") { ctx.beginPath(); ctx.arc(x, y + er * .35, er * .7, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); continue; }
+    if (pose === "burn") { ctx.beginPath(); ctx.moveTo(x - sd * er * .7, y - er * .6); ctx.lineTo(x + sd * er * .5, y); ctx.lineTo(x - sd * er * .7, y + er * .6); ctx.stroke(); continue; }
+    ell(x, y, er * .85, er * 1.08, 0, ink);
+    ell(x + lk.x, y + er * .3 + lk.y, er * .55, er * .55, 0, "#ff3b5c");
+    ell(x + lk.x + er * .28, y - er * .38, er * .3, er * .3, 0, "#fff"); ell(x + lk.x - er * .25, y + er * .5, er * .13, er * .13, 0, "rgba(255,255,255,.8)");
+    if (pose === "sus" || pose === "smug") {                                        // heavy lids
+      ctx.save(); ctx.beginPath(); ctx.ellipse(x, y, er * .9, er * 1.12, 0, 0, 7); ctx.clip(); ctx.fillStyle = skin; ctx.fillRect(x - er, y - er * 1.3, er * 2, er * (pose === "sus" ? 1.15 : .95)); ctx.restore();
+      ctx.beginPath(); ctx.moveTo(x - er * .95, y - er * (pose === "sus" ? .15 : .35)); ctx.lineTo(x + er * .95, y - er * (pose === "sus" ? .15 : .35)); ctx.stroke();
+    }
+  }
+  // brows
+  ctx.lineWidth = lw * 1.4;
+  for (const sd of [-1, 1]) {
+    const x = sd * ex, y = ey - er * 1.55, tilt = pose === "sus" ? .22 : pose === "smug" ? (sd > 0 ? -.2 : .12) : pose === "burn" ? -.22 : -.06;
+    ctx.beginPath(); ctx.moveTo(x - sd * er * .7, y + tilt * u * sd * .5 - (pose === "smug" && sd > 0 ? .06 * u : 0)); ctx.lineTo(x + sd * er * .6, y - tilt * u * sd * .5 - (pose === "smug" && sd > 0 ? .06 * u : 0)); ctx.stroke();
+  }
+  // mouth + fangs
+  const my = hy + .42 * u;
+  const fang = (x, y, s) => { ctx.beginPath(); ctx.moveTo(x - .055 * u * s, y); ctx.lineTo(x, y + .13 * u * s); ctx.lineTo(x + .055 * u * s, y); ctx.closePath(); ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = lw * .6; ctx.stroke(); };
+  ctx.strokeStyle = INK; ctx.lineWidth = lw * 1.1;
+  if (pose === "burn") {
+    const open = .26 + .05 * Math.sin(now * 40);
+    ctx.beginPath(); ctx.ellipse(0, my + .08 * u, .26 * u, open * u, 0, 0, 7); inkFill("#5a1022", lw);
+    ell(0, my + .08 * u + open * u * .55, .15 * u, .08 * u, 0, "#ff6f86");
+    fang(-.12 * u, my + .08 * u - open * u * .92, 1.1); fang(.12 * u, my + .08 * u - open * u * .92, 1.1);
+  } else if (pose === "sus") {
+    ctx.beginPath(); ctx.moveTo(-.16 * u, my); ctx.lineTo(.16 * u, my - .02 * u); ctx.stroke(); fang(.1 * u, my - .01 * u, .8);
+  } else if (pose === "smug") {
+    ctx.beginPath(); ctx.moveTo(-.28 * u, my - .06 * u); ctx.quadraticCurveTo(0, my + .2 * u, .3 * u, my - .1 * u); ctx.closePath(); inkFill("#5a1022", lw);
+    fang(-.13 * u, my - .02 * u, 1); fang(.13 * u, my - .03 * u, 1);
+  } else if (pose !== "sip") {
+    ctx.beginPath(); ctx.moveTo(-.2 * u, my - .02 * u); ctx.quadraticCurveTo(-.1 * u, my + .1 * u, 0, my); ctx.quadraticCurveTo(.1 * u, my + .1 * u, .2 * u, my - .02 * u); ctx.stroke();
+    fang(-.1 * u, my + .03 * u, .85); fang(.1 * u, my + .03 * u, .85);
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+// arms are drawn after the keyboard and mug, in screen space
+function drawArms(o) {
+  const u = o.u, x = o.x, y = o.y, skin = mix("#ebe3f4", "#ff8a7a", o.burn * .85), pose = o.pose, bob = o.bob || 0;
+  const sh = sd => ({ x: x + sd * .74 * u, y: y - 1.0 * u });
+  // right arm (screen right)
+  const gk = now - grabT, grabbing = grabPt && gk >= 0 && gk < grabHold + .3;
+  for (const sd of [-1, 1]) {
+    const s = sh(sd); let hx, hy, bend = sd * .25, big = 1;
+    if (pose === "burn") { hx = x + sd * .4 * u + Math.sin(now * 50 + sd) * 2 * S; hy = y - 2.0 * u + bob; bend = sd * .55; }
+    else if (sd < 0 && o.sipK > 0) { const m = mugPos(o); hx = m.x + MUG.w * .55; hy = m.y - MUG.h * .45; bend = -.3; }
+    else if (sd > 0 && grabbing) { continue; }
+    else { const typing = pose === "type" ? Math.abs(Math.sin(now * 17 + (sd > 0 ? 1.4 : 0))) : 0; hx = x + sd * .45 * u; hy = y - .12 * u - typing * .09 * u; }
+    arm(s.x, s.y, hx, hy, u, bend); hand(hx, hy, u, skin, big);
+  }
+}
+function drawGrabArm(o) {
+  const gk = now - grabT; if (!grabPt || gk < 0 || gk > grabHold + .3) return;
+  const u = o.u, s = { x: o.x + .74 * u, y: o.y - 1.0 * u };
+  const ext = gk < .14 ? sm(gk / .14) : gk > grabHold ? 1 - sm((gk - grabHold) / .3) : 1;
+  const tx = lerp(s.x, grabPt.x + 10 * S, ext), ty = lerp(s.y, grabPt.y + 16 * S, ext), skin = "#ebe3f4";
+  arm(s.x, s.y, tx, ty, u, .35 * ext);
+  ell(tx, ty, u * .3, u * .25, 0, skin, u * .05);                                         // palm
+  if (CONFIG.auto && ext > .9) drawCursor(true);                                       // the cursor, pinned in his fist
+  for (let k = -1; k <= 2; k++) ell(tx + (k - .5) * u * .13, ty + u * .1, u * .07, u * .085, 0, skin, u * .04);   // fingers over it
+}
+function mugPos(o) {
+  const k = o.sipK || 0, lift = k < .28 ? sm(k / .28) : k > .78 ? 1 - sm((k - .78) / .22) : 1;
+  const tx = o.x - .22 * u0(o), ty = o.y - 1.62 * u0(o);
+  return { x: lerp(MUG.x, tx, lift), y: lerp(MUG.y, ty + MUG.h * .5, lift), rot: lift * (k > .3 && k < .8 ? .55 : .3) };
+}
+const u0 = o => o.u;
+function drawMug(o) {
+  const m = mugPos(o), w = MUG.w, h = MUG.h, lw = Math.max(1.5, R * .045), boil = light ? sm((now - lightT - .35) / 1.2) : Math.max(0, 1 - (now - darkT) * 1.5) * (darkT > 0 ? 1 : 0);
+  const jx = light ? Math.sin(now * 60) * 1.5 * S * boil : 0;
+  ctx.save(); ctx.translate(m.x + jx, m.y); ctx.rotate(m.rot);
+  // handle
+  ctx.strokeStyle = INK; ctx.lineWidth = w * .2; ctx.beginPath(); ctx.arc(w * .5, -h * .5, h * .24, -Math.PI * .5, Math.PI * .5); ctx.stroke();
+  ctx.strokeStyle = "#f3eee6"; ctx.lineWidth = w * .1; ctx.stroke();
+  rr(-w / 2, -h, w, h, w * .16); inkFill("#f3eee6", lw);
+  ctx.fillStyle = "#c4223f"; ctx.font = `700 ${w * .25}px ${F.ui}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(CONFIG.mug[0], 0, -h * .58); ctx.fillText(CONFIG.mug[1] || "", 0, -h * .3);
+  ell(0, -h, w * .5, w * .13, 0, "#f3eee6", lw); ell(0, -h + 1, w * .42, w * .09, 0, "#3a2016");
+  // boiling over: bubbles above the rim + drips down the side
+  if (boil > 0) {
+    ctx.fillStyle = "#4a2a1c";
+    for (let k = 0; k < 6; k++) { const ph = (now * 2.2 + k * .37) % 1, bx = (-.35 + k * .14) * w, br = w * (.06 + .05 * Math.sin(k * 5 + now * 9) ** 2) * boil;
+      ctx.beginPath(); ctx.arc(bx, -h - w * .04 - ph * w * .12 * boil, br, 0, 7); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = lw * .5; ctx.stroke(); }
+    for (const [dx, sp] of [[-.36, 1], [.1, .7], [.33, 1.2]]) {
+      const len = clamp(boil * (light ? (now - lightT - .5) * sp : 1), 0, 1) * h * .7;
+      if (len <= 0) continue; ctx.fillStyle = "#4a2a1c"; rr(dx * w - w * .06, -h, w * .12, len, w * .06); ctx.fill();
+      ctx.beginPath(); ctx.arc(dx * w, -h + len, w * .08, 0, 7); ctx.fill();
+    }
+  }
+  ctx.restore();
+  // steam
+  const st = .4 + boil * 1.6;
+  ctx.strokeStyle = light ? `rgba(120,120,135,${.35 + .3 * boil})` : "rgba(210,214,235,.35)"; ctx.lineWidth = Math.max(1.5, w * .06) * (1 + boil * .5); ctx.lineCap = "round";
+  for (let k = -1; k <= 1; k++) { ctx.beginPath();
+    for (let j = 0; j <= 10; j++) { const q = j / 10, yy = m.y - h - w * .15 - q * h * .9 * st, xx = m.x + k * w * .22 + Math.sin(q * 6 + now * (3 + boil * 6) + k) * w * .1; j ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); }
+    ctx.stroke(); }
+}
+
+function drawKeyboard(o) {
+  const u = R, x = o.x, y = o.y, w = 1.9 * u, h = .3 * u;
+  ctx.fillStyle = "rgba(0,0,0,.25)"; rr(x - w / 2 + 3 * S, y - h * .2 + 4 * S, w, h, h * .25); ctx.fill();
+  rr(x - w / 2, y - h * .3, w, h, h * .25); inkFill(col("kb"), Math.max(1.5, u * .04));
+  const cols = 12, kw = (w - u * .16) / cols;
+  for (let r = 0; r < 2; r++) for (let c = 0; c < cols; c++) {
+    const lit = kbFlash.includes(r * cols + c);
+    ctx.fillStyle = lit ? "#7cc8ff" : col("key"); rr(x - w / 2 + u * .08 + c * kw + kw * .1, y - h * .3 + u * .05 + r * h * .4, kw * .8, h * .32, 2 * S); ctx.fill();
+  }
+}
+
+// ---------- scene parts ----------
+function drawCode() {
+  ctx.fillStyle = col("bg"); ctx.fillRect(0, 0, W, H);
+  // current line highlight under the typing line
+  const ty = CY0 + CODE.length * LH;
+  ctx.fillStyle = col("line"); ctx.fillRect(0, ty - LH * .18, W, LH);
+  ctx.textBaseline = "top"; ctx.textAlign = "left";
+  const cache = {}; for (const k of ["text", "kw", "str", "fn", "com", "num", "punc"]) cache[k] = col(k);
+  const line = (s, tk, y, n) => {
+    ctx.font = `400 ${FS * .82}px ${F.mono}`; ctx.fillStyle = col("gut"); ctx.textAlign = "right"; ctx.fillText(n, GUT - 12 * S, y + FS * .1); ctx.textAlign = "left";
+    for (let i = 0; i < s.length; i++) { ctx.font = `${tk[i] === "kw" || tk[i] === "fn" ? 700 : 400} ${FS}px ${F.mono}`; ctx.fillStyle = cache[tk[i]]; ctx.fillText(s[i], GUT + i * CW, y); }
+  };
+  CODE.forEach((s, i) => line(s, TOK[i], CY0 + i * LH, i + 1));
+  const n = Math.floor(typed); line(CONFIG.typing.slice(0, n), TOKT, ty, CODE.length + 1);
+  if (Math.sin(now * 9) > -.2 || n < CONFIG.typing.length) { ctx.fillStyle = TH > .5 ? "#c9ccd6" : "#ff7eb6"; ctx.fillRect(GUT + n * CW + 1, ty - FS * .05, Math.max(2, FS * .14), FS * 1.2); }
+  for (let i = CODE.length + 1; CY0 + i * LH < SB0; i++) { ctx.font = `400 ${FS * .82}px ${F.mono}`; ctx.fillStyle = col("gut"); ctx.textAlign = "right"; ctx.fillText(i + 1, GUT - 12 * S, CY0 + i * LH + FS * .1); }
+  ctx.textAlign = "left";
+  // minimap strip on the right
+  ctx.fillStyle = col("mini");
+  for (let i = 0; i < 34; i++) { const lw2 = ((i * 37) % 23) / 23; if (i % 7 === 3) continue; ctx.fillRect(W - 40 * S, TABH + 14 * S + i * 7 * S, (8 + lw2 * 22) * S, 3.2 * S); }
+}
+function drawTabs() {
+  ctx.fillStyle = col("tab"); ctx.fillRect(0, 0, W, TABH);
+  const tw = 150 * S; ctx.fillStyle = col("tabOn"); ctx.fillRect(0, 0, tw, TABH);
+  ctx.fillStyle = mix("#ff7eb6", "#e9b8cf", TH); ctx.fillRect(0, 0, tw, 2.5 * S);
+  ctx.fillStyle = "#f0c94a"; rr(14 * S, TABH / 2 - 8 * S, 16 * S, 16 * S, 3 * S); ctx.fill();
+  ctx.fillStyle = "#1b1b1b"; ctx.font = `700 ${8.5 * S}px ${F.mono}`; ctx.textBaseline = "middle"; ctx.fillText("JS", 15.5 * S, TABH / 2 + 2.5 * S);
+  ctx.fillStyle = mix("#e8eaf6", "#55596c", TH); ctx.font = `700 ${15 * S}px ${F.mono}`; ctx.fillText(CONFIG.file, 38 * S, TABH / 2 + 1);
+  // clock
+  ctx.font = `700 ${19 * S}px ${F.ui}`; ctx.textAlign = "right"; const cw = ctx.measureText(CONFIG.time).width;
+  ctx.fillStyle = mix("#f1f2fa", "#3b3e4e", TH); ctx.fillText(CONFIG.time, W - 16 * S, TABH / 2 + 1);
+  if (TH < .5) moon(W - 32 * S - cw, TABH / 2, 8 * S, "#ffd76a", col("tab")); else sun(W - 32 * S - cw, TABH / 2, 10 * S);
+  ctx.textAlign = "left";
+}
+function drawStatus() {
+  ctx.fillStyle = col("stat"); ctx.fillRect(0, SB0, W, SBH);
+  ctx.fillStyle = mix("#ff7eb6", "#f0c94a", TH); ctx.fillRect(0, SB0, W, 2 * S);
+  ctx.font = `700 ${16 * S}px ${F.mono}`; ctx.textBaseline = "middle"; ctx.fillStyle = col("statText");
+  const label = locked ? "theme: dark (locked)" : TH > .5 ? "theme: light" : "theme: dark";
+  ctx.fillText(label, 16 * S, SB0 + SBH / 2 + 1);
+  // the toggle
+  const t = TGL, rat = now - rattleT < .4 ? Math.sin((now - rattleT) * 70) * 4 * S * (1 - (now - rattleT) / .4) : 0;
+  ctx.save(); ctx.translate(rat, 0);
+  const on = TH, glow = light ? 1 : 0;
+  if (glow) { const g = ctx.createRadialGradient(t.x + t.w * .72, t.y + t.h / 2, 0, t.x + t.w * .72, t.y + t.h / 2, t.w); g.addColorStop(0, "rgba(255,210,80,.55)"); g.addColorStop(1, "rgba(255,210,80,0)"); ctx.fillStyle = g; ctx.fillRect(t.x - t.w, t.y - t.w, t.w * 3, t.w * 3); }
+  rr(t.x, t.y, t.w, t.h, t.h / 2); ctx.fillStyle = mix("#2b2e45", "#ffd34d", on); ctx.fill(); ctx.strokeStyle = mix("#4a4e6e", "#e0a800", on); ctx.lineWidth = 2 * S; ctx.stroke();
+  const kx = lerp(t.x + t.h / 2, t.x + t.w - t.h / 2, on), ky = t.y + t.h / 2, kr = t.h / 2 - 4 * S;
+  ell(kx, ky, kr, kr, 0, mix("#e9ebf7", "#ffffff", on));
+  if (on < .5) moon(kx, ky, kr * .55, "#6a6f96", "#e9ebf7"); else sun(kx, ky, kr * .75, "#ffaa00");
+  ctx.restore();
+}
+function drawPadlock() {
+  const t = TGL, rat = now - rattleT < .4 ? Math.sin((now - rattleT) * 70) * 4 * S * (1 - (now - rattleT) / .4) : 0;
+  ctx.save(); ctx.translate(rat, 0);
+  if (locked || now - grabT > .4 && grabPt && now - grabT < .8) {
+    const k = locked ? now - lockT : -(grabT + .75 - now), fall = locked ? 0 : clamp(-k / .35, 0, 1), bounce = locked ? Math.abs(Math.sin(k * 14)) * Math.exp(-k * 7) : 0;
+    const lx = t.x + t.w * .74, ly = t.y + t.h * .12 - fall * fall * 160 * S - bounce * 18 * S, s2 = t.h * 1.25;
+    ctx.strokeStyle = INK; ctx.lineWidth = s2 * .2; ctx.beginPath(); ctx.arc(lx, ly - s2 * .2, s2 * .3, Math.PI, 0); ctx.stroke();
+    ctx.strokeStyle = "#c9ccd8"; ctx.lineWidth = s2 * .11; ctx.stroke();
+    rr(lx - s2 * .48, ly - s2 * .22, s2 * .96, s2 * .78, s2 * .14); inkFill("#ffc83d", Math.max(2, s2 * .07));
+    ell(lx, ly + s2 * .1, s2 * .09, s2 * .09, 0, INK); ctx.fillStyle = INK; ctx.fillRect(lx - s2 * .035, ly + s2 * .12, s2 * .07, s2 * .2);
+  }
+  ctx.restore();
+}
+function drawDesk() {
+  ctx.fillStyle = col("deskTop"); ctx.fillRect(0, DY - .06 * R, W, .1 * R);
+  ctx.fillStyle = col("desk"); ctx.fillRect(0, DY + .04 * R, W, SB0 - DY);
+}
+function drawGlare() {                                         // light mode: the screen is the sun now
+  if (TH <= .01) return;
+  ctx.save(); ctx.globalAlpha = TH;
+  const g = ctx.createRadialGradient(W * .5, H * .3, 0, W * .5, H * .3, H * .8); g.addColorStop(0, "rgba(255,246,190,.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(255,214,90,.13)";
+  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6 + now * .25; ctx.beginPath(); ctx.moveTo(W * .5, H * .3); ctx.arc(W * .5, H * .3, H * 1.2, a, a + .14); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+}
+function drawToast() {
+  if (!light) return; const k = now - lightT; if (k < .08) return;
+  const pop = outBack((k - .08) / .25);
+  ctx.save(); ctx.font = `700 ${27 * S}px ${F.ui}`; const tw = ctx.measureText(CONFIG.toast).width + 66 * S, th = 50 * S, x = 14 * S, y = TABH + 12 * S;
+  ctx.translate(x + tw / 2, y + th / 2); ctx.scale(pop, pop); ctx.rotate(-.04); ctx.translate(-(x + tw / 2), -(y + th / 2));
+  rr(x + 3 * S, y + 4 * S, tw, th, th / 2); ctx.fillStyle = INK; ctx.fill();
+  rr(x, y, tw, th, th / 2); inkFill("#ffd34d", 2.5 * S);
+  sun(x + 27 * S, y + th / 2, 14 * S, "#e07800");
+  ctx.fillStyle = INK; ctx.textBaseline = "middle"; ctx.fillText(CONFIG.toast, x + 48 * S, y + th / 2 + 1);
+  ctx.restore();
+}
+function drawBubble(ax, ay) {
+  const q = bubbles.v; if (!q || now < q.t0 || now > q.t0 + q.life) return;
+  const k = now - q.t0, a = k > q.life - .15 ? (q.life - k) / .15 : 1, pop = outBack(k / .16), shout = q.style === "shout";
+  ctx.font = `700 ${(shout ? 31 : 27) * S}px ${F.ui}`; const tw = ctx.measureText(q.text).width + 34 * S, th = (shout ? 54 : 48) * S;
+  let bx = ax + tw / 2, by = ay - th;                                   // prefer right of the head
+  if (bx + tw / 2 > W - 8 * S) { bx = clamp(VX, tw / 2 + 8 * S, W - tw / 2 - 8 * S); by = Math.min(ay - th, DY - 3.35 * R * scale - th - 6 * S); }
+  by = Math.max(by, TABH + 6 * S);
+  const jx = shout ? Math.sin(now * 55) * 2 * S : 0;
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(bx + jx, by + th / 2); ctx.scale(pop, pop); ctx.rotate(shout ? -.05 : 0);
+  const path = () => {
+    if (!shout) { rr(-tw / 2, -th / 2, tw, th, 14 * S); return; }
+    ctx.beginPath(); const n = 22;
+    for (let i = 0; i < n; i++) { const t = i / n * Math.PI * 2, r1 = i % 2 ? 1 : 1.18, x = Math.cos(t) * tw * .56 * r1, y = Math.sin(t) * th * .72 * r1; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.closePath();
+  };
+  ctx.translate(3 * S, 4 * S); path(); ctx.fillStyle = INK; ctx.fill(); ctx.translate(-3 * S, -4 * S);
+  path(); ctx.fillStyle = shout ? "#ffffff" : "#fbf7ee"; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2.6 * S; ctx.lineJoin = "round"; ctx.stroke();
+  if (!shout) { const tx = clamp(ax - bx, -tw / 2 + 16 * S, tw / 2 - 16 * S); ctx.beginPath(); ctx.moveTo(tx - 8 * S, th / 2 - 1); ctx.lineTo(tx - 14 * S, th / 2 + 12 * S); ctx.lineTo(tx + 6 * S, th / 2 - 1); ctx.fillStyle = "#fbf7ee"; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#fbf7ee"; ctx.fillRect(tx - 9 * S, th / 2 - 4 * S, 16 * S, 4 * S); }
+  ctx.fillStyle = shout ? "#d4142f" : INK; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(q.text, 0, 1.5 * S);
+  ctx.restore();
+}
+function drawCursor(force) {
+  if (!CONFIG.auto || !cur.seen) return;
+  if (!force && grabPt && now - grabT > .12 && now - grabT < grabHold) return;     // drawn under his hand instead
+  const pk = now - cur.pressT, sc = pk < .15 ? lerp(.8, 1, pk / .15) : 1;
+  let x = cur.x, y = cur.y;
+  if (force) { x += Math.sin(now * 47) * 3 * S; y += Math.cos(now * 39) * 2 * S; }   // struggling to escape
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc * 1.7 * S, sc * 1.7 * S);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 17); ctx.lineTo(4.2, 13); ctx.lineTo(7, 19.5); ctx.lineTo(9.6, 18.4); ctx.lineTo(6.9, 12.2); ctx.lineTo(12.2, 12.2); ctx.closePath();
+  ctx.shadowColor = "rgba(0,0,0,.35)"; ctx.shadowBlur = 5; ctx.shadowOffsetY = 2;
+  ctx.fillStyle = "#111"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.4; ctx.lineJoin = "round"; ctx.stroke();
+  ctx.restore();
+  if (pk < .45 && !force) { const k = pk / .45; ctx.strokeStyle = `rgba(255,126,182,${.9 * (1 - k)})`; ctx.lineWidth = 3 * S; ctx.beginPath(); ctx.arc(cur.x, cur.y, (6 + k * 30) * S, 0, 7); ctx.stroke(); }
+}
+function drawFlash() {                                         // the flashbang: white-out + camera burst from the toggle
+  const k = now - lightT; if (k < 0 || k > .9) return;
+  const cx = TGL.x + TGL.w * .7, cy = TGL.y + TGL.h / 2;
+  ctx.save();
+  ctx.globalAlpha = clamp(1 - (k - .05) / .55, 0, 1) ** 1.4;
+  ctx.fillStyle = "#fffef6"; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = clamp(1 - k / .7, 0, 1);
+  ctx.fillStyle = "#fff6c2";
+  for (let i = 0; i < 14; i++) { const a = i * Math.PI / 7 + .2, len = H * (.6 + .5 * (i % 2)) * (.4 + k * 1.2);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a - .05) * len, cy + Math.sin(a - .05) * len); ctx.lineTo(cx + Math.cos(a + .05) * len, cy + Math.sin(a + .05) * len); ctx.closePath(); ctx.fill(); }
+  ctx.strokeStyle = "rgba(255,200,60,.8)"; ctx.lineWidth = 6 * S; ctx.beginPath(); ctx.arc(cx, cy, k * H * 1.3, 0, 7); ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- one loop for everything ----------
+function frame(t) {
+  now = t / 1000; const dt = Math.min(.05, last ? now - last : 1 / 60); last = now;
+  if (T0 < 0) { T0 = now; }
+  if (CONFIG.auto) runAuto();
+  for (let i = later.length - 1; i >= 0; i--) if (now >= later[i].t) { const f = later[i].fn; later.splice(i, 1); f(); }
+
+  // ----- simulation -----
+  TH = light ? sm((now - lightT) / .08) : 1 - sm((now - darkT) / .22);
+  const burnK = light ? clamp((now - lightT) / 2.1, 0, 1) : 0;
+  if (light) scale = 1 - .34 * sm(burnK);
+  else { const k = now - darkT; scale = darkT < 0 ? 1 : 1 - (1 - shrinkAtDark) * Math.exp(-k * 6) * Math.cos(k * 14); }
+  const sipK = clamp((now - sipT) / 1.15, 0, 1), sipping = now - sipT < 1.15;
+  const grabbing = grabPt && now - grabT >= 0 && now - grabT < grabHold + .3;
+  const tease = CONFIG.auto ? (now - T0 > AT.tease + .3 && now - T0 < AT.grab) : hover && !light && !locked;
+  let pose = "type";
+  if (light) pose = "burn";
+  else if (sipping) pose = "sip";
+  else if (grabbing || locked) pose = "smug";
+  else if (tease) pose = "sus";
+  else if (now - darkT < 1.0) pose = "phew";
+  if (pose === "type") {                                       // he types the next line
+    typeAcc += dt * 13; while (typeAcc > 1) { typeAcc--; if (typed < CONFIG.typing.length) { typed++; kbFlash = [Math.floor(Math.random() * 24), Math.floor(Math.random() * 24)]; } else { typePause += 1; if (typePause > 22) { typed = 0; typePause = 0; } } }
+  } else kbFlash = [];
+  if (light) {
+    smokeT -= dt; sparkT -= dt; boilT -= dt;
+    if (smokeT < 0) { smokeT = .05; const a = rnd(-1, 1); parts.push({ kind: "smoke", x: VX + a * R * scale * .9, y: DY - (2.95 + rnd(0, .25)) * R * scale, vx: a * 40 * S, vy: -rnd(60, 110) * S, r: R * rnd(.13, .2) * (.7 + .5 * burnK), t0: now, life: rnd(.7, 1.1) }); }
+    if (sparkT < 0) { sparkT = .035; const a = rnd(0, Math.PI * 2); parts.push({ kind: "spark", x: VX + Math.cos(a) * R * scale, y: DY - 2.08 * R * scale + Math.sin(a) * R * scale * .9, vx: Math.cos(a) * rnd(60, 160) * S, vy: Math.sin(a) * rnd(60, 160) * S - 80 * S, t0: now, life: rnd(.2, .4), c: Math.random() < .5 ? "#ff8a1e" : "#ffd34d" }); }
+    if (boilT < 0 && now - lightT > .4) { boilT = rnd(.05, .12); sfx.boil(); }
+    if (sizz) sizz.gain.value = .05 + .04 * burnK;
+  } else if (sizz) sizz.gain.value = 0;
+  shake *= Math.exp(-dt * 6);
+  for (const p of parts) { if (p.kind === "smoke") { p.vx *= .99; } }
+
+  // ----- draw -----
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const sx = (Math.random() - .5) * 14 * S * shake, sy = (Math.random() - .5) * 14 * S * shake;
+  ctx.save(); ctx.translate(sx, sy);
+  drawCode(); drawGlare();
+  const bob = pose === "type" ? Math.abs(Math.sin(now * Math.PI * 100 / 60)) * -.04 * R : pose === "burn" ? Math.sin(now * 45) * .03 * R : 0;
+  const lookAt = CONFIG.auto ? cur : (hover ? { x: TGL.x, y: TGL.y } : null);
+  const o = { x: VX + (light ? Math.sin(now * 38) * 3 * S : 0), y: DY, u: R * scale, pose, burn: light ? sm(burnK * 1.5) : Math.max(0, 1 - (now - darkT) * 2) * (darkT > 0 ? 1 : 0), bob, look: (pose === "sus" || pose === "smug") && lookAt ? lookAt : null, sipK: sipping ? sipK : 0 };
+  for (const p of parts) { if (p.kind !== "puff") continue; const k = (now - p.t0) / p.life; if (k < 0 || k > 1) continue;
+    ctx.strokeStyle = `rgba(235,230,255,${.75 * (1 - k)})`; ctx.lineWidth = 3 * S * (1 - k); ctx.beginPath(); ctx.arc(p.x + p.vx * k * p.life, p.y + p.vy * k * p.life, p.r * (.6 + k), 0, 7); ctx.stroke(); }
+  if (darkT > 0 && now - darkT < .5) { const k = (now - darkT) / .5; ctx.strokeStyle = `rgba(235,230,255,${.6 * (1 - k)})`; ctx.lineWidth = 5 * S * (1 - k); ctx.beginPath(); ctx.ellipse(VX, DY - 1.9 * R, R * (1 + k * 1.2), R * (1.2 + k * 1.2), 0, 0, 7); ctx.stroke(); }
+  drawVamp(o);
+  // smoke + sparks + puffs (behind desk front, in front of him)
+  for (const p of parts) { const k = (now - p.t0) / p.life; if (k < 0 || k > 1) continue;
+    const x = p.x + p.vx * k * p.life, y = p.y + p.vy * k * p.life;
+    if (p.kind === "smoke") { ctx.fillStyle = `rgba(110,108,122,${.38 * (1 - k)})`; ctx.beginPath(); ctx.arc(x + Math.sin(k * 6 + p.t0) * 6 * S, y, p.r * (1 + k * 1.4), 0, 7); ctx.fill(); }
+  }
+  drawDesk(); drawKeyboard(o); drawMug(o); drawArms(o);
+  for (const p of parts) { const k = (now - p.t0) / p.life; if (k < 0 || k > 1 || p.kind !== "spark") continue;
+    const x = p.x + p.vx * k * p.life, y = p.y + p.vy * k * p.life + 200 * S * k * k * p.life;
+    ctx.strokeStyle = p.c; ctx.lineWidth = 3 * S * (1 - k); ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - p.vx * .03, y - p.vy * .03); ctx.stroke(); }
+  ctx.restore();
+  drawTabs(); drawStatus();
+  ctx.save(); ctx.translate(sx, sy); drawGrabArm(o); ctx.restore(); drawPadlock();
+  drawToast();
+  drawBubble(VX + 1.05 * R * scale, DY - 2.55 * R * scale);
+  drawCursor(false);
+  drawFlash();
+  for (let i = parts.length - 1; i >= 0; i--) if (now - parts[i].t0 > parts[i].life + .1) parts.splice(i, 1);
+  requestAnimationFrame(frame);
+}
+resize(); reset();
+document.fonts && document.fonts.ready.then(resize);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
