@@ -60,6 +60,7 @@ Saw a drop in a video? Its number is the folder.
 | 51 | [🐹 Infinite Loop](51-infinite-loop) | Your while(true) loop is a hamster in a wheel: Ctrl+C only makes it run faster, type break; and it flies out, bounces off the terminal and gives you a thumbs-up. |
 | 52 | [💔 Ctrl+Z Us](52-undo-us) | A fight saved as us.txt: Ctrl+Z un-types every angry line while a big broken heart stitches itself back together, then snaps whole: "i love you · we're okay". |
 | 53 | [🧛 Light Mode](53-light-mode) | A tiny vampire developer codes at 3:00 AM. Flip the theme toggle and the editor flashbangs: he screams, sizzles and shrinks. Flip it back and he sips: "much better." Try again and he padlocks the toggle. |
+| 54 | [☀️ Love Forecast](54-love-forecast) | A weather app where swiping to them turns −12° snow into 36.6° sunshine and falling hearts. |
 
 ## How to use a drop
 1. Open its folder → download `index.html`

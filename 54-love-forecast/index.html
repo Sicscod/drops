@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Love Forecast</title>
+<meta name="description" content="-12° and heavy snow when you're alone. Swipe the location to them and the forecast turns into sunshine and falling hearts. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=DM+Mono:wght@400;500&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#8792a3}
+canvas{position:fixed;left:0;top:0;width:100%;height:calc(100% - 30px);display:block}
+.credit{position:fixed;left:0;right:0;bottom:0;height:30px;display:flex;align-items:center;justify-content:center;font:400 11.5px "DM Mono",ui-monospace,monospace;letter-spacing:.02em;color:rgba(255,255,255,.72);background:#2c2630}
+.credit a{color:#fff;text-decoration:none}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:700 20px Nunito">a</span><span class="pre" style="font:800 20px Nunito">a</span><span class="pre" style="font:900 20px Nunito">a</span><span class="pre" style="font:400 20px 'DM Mono'">a</span><span class="pre" style="font:500 20px 'DM Mono'">a</span>
+<script>
+// ===== Love Forecast · free code by @sicscod.drops =====
+// Try: yoursite/?name=Delly&msg=home&hue=340   (?auto=1 plays it by itself)
+const P = new URLSearchParams(location.search);
+const hueP = parseFloat(P.get("hue"));
+const CONFIG = {
+  name: (P.get("name") || "Delly").slice(0, 12),                     // who changes the weather
+  msg: (P.get("msg") || "home").slice(0, 14),                         // "feels like: …" when they're here
+  hue: isFinite(hueP) ? ((hueP % 360) + 360) % 360 : 340,             // 340 pink, 0 red, 280 purple, 200 blue
+  auto: P.get("auto") === "1",                                        // a cursor plays the whole thing
+  temps: { alone: -12, together: 36.6 },                              // the big number, before and after
+  lines: {
+    app: "LOVE FORECAST",
+    date: "Thu, Dec 10 · 9:41 PM",
+    alone: "alone",                                                   // left side of the location switch
+    together: "with {name}",                                          // right side
+    feelsAlone: "lonely",                                             // "feels like: …" while alone
+    chance: "{p}% chance of {name}",
+  },
+  hours: ["Now", "10PM", "11PM", "12AM", "1AM"],
+  iconsAlone: ["snow", "snow", "rain", "snow", "snow"],               // snow, rain, sun, heart
+  iconsTogether: ["sun", "heart", "sun", "heart", "sun"],
+  sound: true,
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const T0 = performance.now();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const outBack = x => (x = clamp(x, 0, 1), 1 + 2.4 * Math.pow(x - 1, 3) + 1.4 * Math.pow(x - 1, 2));
+const inOut = x => (x = clamp(x, 0, 1), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const H = (l, s = 82, a = 1, dh = 0) => `hsla(${CONFIG.hue + dh},${s}%,${l}%,${a})`;
+const nm = s => s.replace(/\{name\}/g, CONFIG.name);
+const INK = "#33262f";
+const F = { ui: (w, s) => `${w} ${s}px Nunito, system-ui, sans-serif`, mono: (w, s) => `${w} ${s}px "DM Mono", ui-monospace, monospace` };
+function hsl(h, s, l) { s /= 100; l /= 100; const f = n => { const k = (n + h / 30) % 12; return l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1)); }; return [f(0) * 255, f(8) * 255, f(4) * 255]; }
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k, al = 1) => `rgba(${a.map((v, i) => Math.round(lerp(v, b[i], k))).join(",")},${al})`;
+const SKY = { cold: [hex("#5d6879"), hex("#8691a2"), hex("#b7bec9")], warm: [hsl(CONFIG.hue, 78, 72), hsl(CONFIG.hue + 24, 92, 75), hsl(42, 96, 72)] };
+
+let W = 0, Hh = 0, DPR = 1, S = 1, OX = 0, DW = 360, CH = 353, L = {};
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; Hh = Math.max(260, innerHeight - 30);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(Hh * DPR);
+  S = Math.min(W / 360, Hh / 353, 2.2); DW = Math.min(W / S, 440); CH = Hh / S; OX = (W - DW * S) / 2;
+  const ex = Math.max(0, CH - 353), big = 1 + Math.min(.5, ex / 560);
+  L = { headY: 21, chip: { x: DW / 2 - 150, y: 32 + ex * .05, w: 300, h: 44 },
+    sun: { x: DW - 96, y: 128 + ex * .3, r: 50 * big }, cloudTo: { x: 72, y: 116 + ex * .26, s: .56 * big },
+    tempY: 228 + ex * .6, card: { x: 12, y: CH - 60, w: DW - 24, h: 52 } };
+  L.cloudFrom = { x: L.sun.x, y: L.sun.y, s: big };
+  seedSnow();
+}
+addEventListener("resize", resize);
+const toU = (x, y) => ({ x: (x - OX) / S, y: y / S });
+
+// ---------- drawing helpers ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function heartPt(t) { const x = 16 * Math.sin(t) ** 3, y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t); return [x / 16 * .66, -(y + 2.5) / 14.5 * .6]; }
+function heartPath(cx, cy, s) { ctx.beginPath(); for (let i = 0; i <= 40; i++) { const [x, y] = heartPt(i / 40 * Math.PI * 2); i ? ctx.lineTo(cx + x * s, cy + y * s) : ctx.moveTo(cx + x * s, cy + y * s); } ctx.closePath(); }
+function heart(cx, cy, s, col) { heartPath(cx, cy, s); ctx.fillStyle = col; ctx.fill(); }
+function measure(str, font, fs) { ctx.font = font; return str.split("♥").reduce((w, p, i) => w + ctx.measureText(p).width + (i ? fs * .8 : 0), 0); }
+function text(str, x, y, font, fs, col, align = "left", hcol) {   // every ♥ is drawn as a real heart
+  const w = measure(str, font, fs); let cx = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
+  ctx.fillStyle = col; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  str.split("♥").forEach((p, i) => {
+    if (i) { heart(cx + fs * .4, y - fs * .33, fs * .62, hcol || col); cx += fs * .8; ctx.fillStyle = col; }
+    ctx.fillText(p, cx, y); cx += ctx.measureText(p).width;
+  });
+  return w;
+}
+function star(cx, cy, r, col, rot = 0) {
+  ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = rot + i * Math.PI / 4, q = i % 2 ? r * .3 : r; ctx.lineTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q); } ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+}
+function flake(x, y, r, rot, col, lw) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.beginPath();
+  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3, c = Math.cos(a), s = Math.sin(a);
+    ctx.moveTo(0, 0); ctx.lineTo(c * r, s * r);
+    const m = r * .58, b = r * .32; ctx.moveTo(c * m, s * m); ctx.lineTo(c * m + Math.cos(a + .8) * b, s * m + Math.sin(a + .8) * b);
+    ctx.moveTo(c * m, s * m); ctx.lineTo(c * m + Math.cos(a - .8) * b, s * m + Math.sin(a - .8) * b); }
+  ctx.stroke(); ctx.restore();
+}
+const PUFFS = [[-40, 10, 28], [-12, -12, 36], [26, -4, 31], [50, 14, 21]];   // the cloud: circles + a flat base
+function cloudShape(grow) {
+  ctx.beginPath();
+  for (const [x, y, r] of PUFFS) { ctx.moveTo(x + r + grow, y); ctx.arc(x, y, r + grow, 0, Math.PI * 2); }
+  ctx.roundRect(-64 - grow, 6 - grow, 132 + grow * 2, 32 + grow * 2, 16 + grow);
+}
+
+// ---------- sound (tiny Web Audio blips, start after the first tap) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } }
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur + .02);
+}
+const sfx = {
+  click() { tone("square", 1600, 700, .04, .04); },
+  warm() { [440, 554, 659, 880].forEach((f, i) => tone("triangle", f, f, .35, .05, i * .06)); },
+  cold() { tone("sine", 520, 260, .35, .06); },
+  tick() { tone("square", 2400, 2300, .015, .012); },
+  full() { [880, 1109, 1319, 1760].forEach((f, i) => tone("triangle", f, f, .5, .06, i * .07)); },
+  giggle() { [988, 1175, 988, 1319].forEach((f, i) => tone("sine", f, f * 1.05, .1, .06, i * .07)); },
+};
+const EV = window.__ev = [];                          // event log (the video renderer reads it to sync the music)
+const ev = k => EV.push([k, +now.toFixed(3)]);
+
+// ---------- state ----------
+// U = seconds into the "with them" timeline. Everything on screen is a function of U, so it can run backwards too.
+const TL = { cloud: [0, .75], sun: [.12, 1.0], sky: [.15, 1.35], temp: [.2, 1.75], hours: .85, feels: 1.0, chance: [1.0, .8], full: 2.0, max: 2.2 };
+let now = 0, last = 0, t0 = 0, U = 0, mode = 0, kpos = 0, gigT = -9, fullT = -9, lastTemp = null;
+let drag = null, snow = [], parts = [];
+function reset() { t0 = now; U = 0; mode = 0; kpos = 0; gigT = -9; fullT = -9; drag = null; parts = []; lastTemp = null; }
+const sceneT = () => now - t0;
+function setMode(m) { if (m === mode) return; mode = m; sfx.click(); if (m) { sfx.warm(); ev("warm"); } else { sfx.cold(); ev("cold"); } }
+
+// ---------- snow that turns into hearts ----------
+function seedSnow() {
+  const xl = -OX / S - 10, xr = (W - OX) / S + 10, n = Math.round((xr - xl) * CH / 1700);
+  snow = []; for (let i = 0; i < n; i++) snow.push(newFlake(xl + Math.random() * (xr - xl), Math.random() * (CH + 20) - 10));
+}
+function newFlake(x, y) { return { x, y, r: 3.5 + Math.random() ** 1.6 * 7.5, v: .75 + Math.random() * .5, ph: Math.random() * 7, rot: Math.random() * 7, m: .3 + Math.random() * 1.05, front: Math.random() < .22, dh: [0, 14, -14, 26][Math.floor(Math.random() * 4)] }; }
+function drawSnow(dt, front) {
+  const xl = -OX / S - 12, xr = (W - OX) / S + 12;
+  for (const f of snow) {
+    if (f.front !== front) continue;
+    const mp = clamp((U - f.m) / .24, 0, 1);
+    if (!front || true) {
+      const vy = lerp(46, 26, mp) * f.v * (1 + f.r / 14), vx = lerp(-14, 0, mp) + Math.sin(now * (1.4 + f.v) + f.ph) * lerp(7, 16, mp);
+      f.y += vy * dt; f.x += vx * dt; f.rot += dt * lerp(.8, 0, mp) * (f.ph > 3.5 ? 1 : -1);
+      if (f.y > CH + 16) { f.y = -16 - Math.random() * 20; f.x = xl + Math.random() * (xr - xl); }
+      if (f.x < xl - 6) f.x = xr; if (f.x > xr + 6) f.x = xl;
+    }
+    const a = front ? .95 : .8;
+    if (mp <= 0) flake(f.x, f.y, f.r, f.rot, `rgba(255,255,255,${a})`, Math.max(1.3, f.r * .2));
+    else if (mp >= 1) { ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(Math.sin(now * 2 + f.ph) * .25); heart(0, 0, f.r * 2.5, H(64, 90, a, f.dh)); ctx.restore(); }
+    else {
+      if (mp < .5) flake(f.x, f.y, f.r * (1 - mp * 1.6), f.rot, `rgba(255,255,255,${a})`, Math.max(1.2, f.r * .2));
+      else { const k = outBack((mp - .5) / .5); heart(f.x, f.y, f.r * 2.5 * k, H(64, 90, a, f.dh)); }
+      const g = Math.sin(mp * Math.PI); star(f.x, f.y, f.r * 2.2 * g, `rgba(255,246,210,${g})`, mp * 2);
+    }
+  }
+}
+
+// ---------- ?auto=1: a scripted cursor plays the story (used for the video) ----------
+const cur = { on: false, x: 0, y: 0, down: -9, held: false, seg: null };
+const knobC = k => ({ x: L.chip.x + 4 + (L.chip.w - 8) / 2 * (k + .5), y: L.chip.y + L.chip.h / 2 + 4 });
+const AUTO = [
+  [0, "move", .55, () => knobC(0), () => ({ x: DW * .72, y: CH * .62 })],
+  [.7, "down", () => { cur.held = true; drag = { auto: true, x0: cur.x, k0: kpos, moved: 0 }; sfx.click(); ev("press"); }],
+  [.76, "drag", .5, () => knobC(1)],
+  [1.25, "up", () => { cur.held = false; drag = null; setMode(1); }],
+  [1.32, "move", .9, () => ({ x: DW * .5, y: L.tempY + 64 })],
+  [6.5, "move", .6, () => ({ x: L.sun.x + 8, y: L.sun.y + 8 })],
+  [7.25, "tap", () => giggle()],
+  [7.45, "move", .8, () => ({ x: DW * .62, y: CH * .74 })],
+];
+let autoI = 0;
+function runAuto() {
+  const t = sceneT();
+  while (autoI < AUTO.length && t >= AUTO[autoI][0]) {
+    const a = AUTO[autoI++];
+    if (a[1] === "move" || a[1] === "drag") { const from = a[4] ? a[4]() : { x: cur.x, y: cur.y }; cur.seg = { t0: t0 + a[0], len: a[2], from, to: a[3](), drag: a[1] === "drag" }; cur.on = true; if (a[1] === "drag") ev("swipe"); }
+    else { if (a[1] !== "up") cur.down = now; a[2](); }
+  }
+  if (cur.seg) { const u = clamp((now - cur.seg.t0) / cur.seg.len, 0, 1), e = cur.seg.drag ? inOut(u) : sm(u), arc = Math.sin(u * Math.PI) * (cur.seg.drag ? 0 : 14);
+    cur.x = lerp(cur.seg.from.x, cur.seg.to.x, e); cur.y = lerp(cur.seg.from.y, cur.seg.to.y, e) - arc; }
+  if (drag && drag.auto) kpos = clamp(drag.k0 + (cur.x - drag.x0) / ((L.chip.w - 8) / 2), 0, 1);
+  if (t > 11.5) { reset(); autoI = 0; cur.on = false; }
+}
+
+// ---------- input: swipe (or tap) the location switch, tap the sun ----------
+const inChip = u => u.x > L.chip.x - 8 && u.x < L.chip.x + L.chip.w + 8 && u.y > L.chip.y - 10 && u.y < L.chip.y + L.chip.h + 10;
+addEventListener("pointerdown", e => {
+  audio(); if (CONFIG.auto) return; const u = toU(e.clientX, e.clientY);
+  if (inChip(u)) { drag = { x0: u.x, k0: kpos, moved: 0, side: u.x > L.chip.x + L.chip.w / 2 ? 1 : 0, t: now }; return; }
+  if (U > 1 && Math.hypot(u.x - L.sun.x, u.y - L.sun.y) < L.sun.r * 1.4) giggle();
+});
+addEventListener("pointermove", e => {
+  if (!drag || drag.auto) return; const u = toU(e.clientX, e.clientY);
+  drag.moved = Math.max(drag.moved, Math.abs(u.x - drag.x0)); kpos = clamp(drag.k0 + (u.x - drag.x0) / ((L.chip.w - 8) / 2), 0, 1);
+});
+addEventListener("pointerup", () => {
+  if (!drag || drag.auto) return; const d = drag; drag = null;
+  if (d.moved < 8) setMode(d.side === mode ? 1 - mode : d.side); else setMode(kpos > .5 ? 1 : 0);
+});
+
+// ---------- particles ----------
+function burst(x, y, n, spd = 1) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = (90 + Math.random() * 170) * spd;
+    parts.push({ k: Math.random() < .6 ? "heart" : "star", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, t: now, life: .9 + Math.random() * .7, s: 4 + Math.random() * 5, r: Math.random() * 6, dh: [0, 16, -16][i % 3] }); }
+}
+function giggle() { gigT = now; burst(L.sun.x, L.sun.y, 22); sfx.giggle(); ev("giggle"); }
+function drawParts(dt) {
+  parts = parts.filter(p => now - p.t < p.life);
+  for (const p of parts) {
+    p.vx *= Math.exp(-dt * 2.4); p.vy = p.vy * Math.exp(-dt * 2.4) + 220 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += dt * 3;
+    ctx.globalAlpha = Math.min(1, (1 - (now - p.t) / p.life) * 2.2);
+    if (p.k === "heart") heart(p.x, p.y, p.s * 2, H(62, 90, 1, p.dh)); else star(p.x, p.y, p.s * 1.2, p.dh > 0 ? "#ffd65c" : "#fff", p.r);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- the scene ----------
+function drawSky(k) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const g = ctx.createLinearGradient(0, 0, 0, Hh);
+  [0, .55, 1].forEach((s, i) => g.addColorStop(s, mix(SKY.cold[i], SKY.warm[i], k)));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh);
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, OX * DPR, 0);
+  // sun glow
+  if (k > 0) { const s = L.sun, gl = ctx.createRadialGradient(s.x, s.y, 10, s.x, s.y, s.r * 5);
+    gl.addColorStop(0, `rgba(255,236,170,${.75 * k})`); gl.addColorStop(.35, `rgba(255,214,150,${.32 * k})`); gl.addColorStop(1, "rgba(255,214,150,0)");
+    ctx.fillStyle = gl; ctx.fillRect(-OX / S, 0, W / S, CH); }
+  // the heavy cloud bank at the top: parts to both sides
+  const e = inOut(U / .9), xl = -OX / S, xr = (W - OX) / S;
+  const bank = [[.05, -6, 62], [.3, -18, 70], [.55, -10, 58], [.8, -20, 72], [1, -4, 56], [-.12, 12, 44], [1.12, 14, 46]];
+  ctx.fillStyle = mix(hex("#4c5666"), [255, 236, 236], k, lerp(.55, .4, k));
+  ctx.beginPath();
+  for (const [fx, y, r] of bank) { const x = xl + fx * (xr - xl), side = fx < .5 ? -1 : 1, d = e * (90 + Math.abs(fx - .5) * 120) * side;
+    ctx.moveTo(x + d + r, y); ctx.arc(x + d, y, r * lerp(1, .7, e), 0, Math.PI * 2); }
+  ctx.fill();
+  // soft hills behind the hourly card
+  const hc = [mix(hex("#dfe4ea"), hsl(CONFIG.hue + 10, 70, 86), k), mix(hex("#eef1f5"), hsl(38, 95, 86), k)];
+  [[CH - 92, 26, .011, 0], [CH - 74, 20, .016, 2]].forEach(([y0, a, f, ph], i) => {
+    ctx.beginPath(); ctx.moveTo(xl, CH + 2); for (let x = xl; x <= xr + 8; x += 8) ctx.lineTo(x, y0 + Math.sin(x * f + ph) * a * .5 + Math.cos(x * f * 2.3 + ph) * a * .25);
+    ctx.lineTo(xr + 8, CH + 2); ctx.closePath(); ctx.fillStyle = hc[i]; ctx.fill(); });
+}
+function drawSun() {
+  const p = (U - TL.sun[0]) / (TL.sun[1] - TL.sun[0]); if (p <= 0) return;
+  const s = L.sun, e = outBack(p), y = s.y + (1 - e) * 190, r = s.r;
+  const g = now - gigT, gk = g < .9 ? Math.exp(-g * 4) * Math.sin(g * 26) : 0, bob = Math.sin(now * 2.4) * 3 * sm((U - 1) / .6);
+  ctx.save(); ctx.translate(s.x, y + bob); ctx.scale(1 + gk * .1, 1 - gk * .1); ctx.globalAlpha = clamp(p * 2.5, 0, 1);
+  // rays
+  ctx.save(); ctx.rotate(now * .35);
+  for (let i = 0; i < 12; i++) { ctx.rotate(Math.PI / 6); const l = r * (i % 2 ? .34 : .48) * (1 + .08 * Math.sin(now * 4 + i)); rr(-5.5, -r - 9 - l, 11, l, 5.5); ctx.fillStyle = "#ffc43d"; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke(); }
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); const bg = ctx.createRadialGradient(-r * .3, -r * .35, 4, 0, 0, r); bg.addColorStop(0, "#fff1a6"); bg.addColorStop(1, "#ffc23a"); ctx.fillStyle = bg; ctx.fill(); ctx.lineWidth = 3.5; ctx.strokeStyle = INK; ctx.stroke();
+  // face: shy, blushing; it giggles when tapped
+  const sq = g < .9, bl = .6 + .25 * Math.sin(now * 3) + (sq ? .3 * Math.exp(-g * 2) : 0) + .15 * sm((U - TL.full) / .4);
+  ctx.fillStyle = H(66, 92, clamp(bl, 0, 1)); for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sx * r * .52, r * .2, r * .2, r * .12, 0, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = H(50, 80, .85); ctx.lineWidth = 1.8; ctx.lineCap = "round";
+  for (const sx of [-1, 1]) for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(sx * r * .52 + i * r * .1 - 2, r * .26); ctx.lineTo(sx * r * .52 + i * r * .1 + 3, r * .14); ctx.stroke(); }
+  ctx.strokeStyle = INK; ctx.lineWidth = 3.6; ctx.lineJoin = "round";
+  for (const sx of [-1, 1]) { const ex = sx * r * .34, ey = -r * .12; ctx.beginPath();
+    if (sq) { ctx.moveTo(ex - 7 * sx * -1, ey - 6); ctx.lineTo(ex + 6 * sx * -1 * -1 * -1, ey); ctx.lineTo(ex - 7 * sx * -1, ey + 6); }   // > <
+    else ctx.arc(ex, ey + 4, r * .14, Math.PI * 1.15, Math.PI * 1.85);                                                        // ^ ^
+    ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(-r * .22, r * .2); ctx.quadraticCurveTo(0, r * (sq ? .55 : .45), r * .22, r * .2); ctx.closePath();
+  ctx.fillStyle = "#8a2f3e"; ctx.fill(); ctx.stroke();
+  ctx.restore(); ctx.globalAlpha = 1;
+}
+function drawCloud() {
+  const m = inOut((U - TL.cloud[0]) / (TL.cloud[1] - TL.cloud[0])), a = L.cloudFrom, b = L.cloudTo;
+  const x = lerp(a.x, b.x, m) - Math.sin(m * Math.PI) * 30, y = lerp(a.y, b.y, m) - Math.sin(m * Math.PI) * 26, sc = lerp(a.s, b.s, m);
+  const shiver = U < .01 ? Math.sin(now * 46) * .9 * (Math.sin(now * 1.7) > .3 ? 1 : 0) : 0, bob = Math.sin(now * 1.6) * 2.5;
+  ctx.save(); ctx.translate(x + shiver, y + bob); ctx.scale(sc, sc);
+  const k = sm(U / .8);
+  cloudShape(3.5); ctx.fillStyle = INK; ctx.fill();
+  cloudShape(0); const g = ctx.createLinearGradient(0, -48, 0, 40);
+  g.addColorStop(0, mix(hex("#d6dbe2"), [255, 255, 255], k)); g.addColorStop(1, mix(hex("#a3abb8"), hsl(CONFIG.hue, 85, 88), k)); ctx.fillStyle = g; ctx.fill();
+  // face
+  const face = U < .04 ? "sad" : U < .5 ? "oh" : "happy";
+  ctx.strokeStyle = INK; ctx.fillStyle = INK; ctx.lineWidth = 3.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (face === "happy") { ctx.fillStyle = H(70, 92, .8); for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sx * 30, 16, 10, 6, 0, 0, 7); ctx.fill(); } }
+  for (const sx of [-1, 1]) {
+    const ex = sx * 19, ey = 4;
+    if (face === "sad") {
+      ctx.beginPath(); ctx.ellipse(ex, ey + 2, 5, 6.5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#d3d8df"; ctx.fillRect(ex - 7, ey - 7, 14, 6); ctx.fillStyle = INK;          // heavy lids
+      ctx.beginPath(); ctx.moveTo(ex - 7, ey - 1); ctx.lineTo(ex + 7, ey - 1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ex - sx * 3, ey - 10); ctx.lineTo(ex + sx * 8, ey - 6); ctx.stroke(); // worried brows
+    } else if (face === "oh") { ctx.beginPath(); ctx.arc(ex, ey, 5.5, 0, 7); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex + 1.8, ey - 2, 1.8, 0, 7); ctx.fill(); ctx.fillStyle = INK; }
+    else { ctx.beginPath(); ctx.arc(ex, ey + 4, 6, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
+  }
+  if (face === "sad") { ctx.beginPath(); ctx.arc(0, 24, 7, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
+    const d = (now * .9) % 1; ctx.globalAlpha = 1 - d; ctx.fillStyle = "#9fd0f5"; ctx.beginPath(); const tx = -19, ty = 12 + d * 26;   // a tear
+    ctx.moveTo(tx, ty - 6); ctx.quadraticCurveTo(tx + 5, ty + 2, tx, ty + 4); ctx.quadraticCurveTo(tx - 5, ty + 2, tx, ty - 6); ctx.fill(); ctx.lineWidth = 1.6; ctx.stroke(); ctx.globalAlpha = 1; }
+  else if (face === "oh") { ctx.beginPath(); ctx.ellipse(0, 20, 4.5, 6, 0, 0, 7); ctx.fillStyle = "#7a2a33"; ctx.fill(); ctx.stroke(); }
+  else { ctx.beginPath(); ctx.arc(0, 15, 7, Math.PI * .15, Math.PI * .85); ctx.stroke(); }
+  ctx.restore();
+}
+function drawHeader(k) {
+  ctx.globalAlpha = .9; text(CONFIG.lines.app, 16, L.headY, F.mono(500, 11), 11, "#fff");
+  text(CONFIG.lines.date, DW - 16, L.headY, F.mono(400, 11), 11, "#fff", "right"); ctx.globalAlpha = 1;
+}
+function drawChip(k) {
+  const c = L.chip, pad = 4, kw = (c.w - pad * 2) / 2, kx = c.x + pad + kpos * kw;
+  ctx.save(); ctx.shadowColor = "rgba(40,20,40,.18)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+  rr(c.x, c.y, c.w, c.h, c.h / 2); ctx.fillStyle = mix([42, 50, 64], [120, 40, 70], k, lerp(.34, .22, k)); ctx.fill(); ctx.restore();
+  rr(c.x, c.y, c.w, c.h, c.h / 2); ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.lineWidth = 1.5; ctx.stroke();
+  const press = drag ? .96 : 1;
+  ctx.save(); ctx.translate(kx + kw / 2, c.y + c.h / 2); ctx.scale(press, press);
+  rr(-kw / 2, -c.h / 2 + pad, kw, c.h - pad * 2, (c.h - pad * 2) / 2); ctx.fillStyle = "#fff"; ctx.fill(); ctx.restore();
+  const labels = (col, hc) => {
+    const cy = c.y + c.h / 2 + 6, f = F.ui(900, 17);
+    const la = CONFIG.lines.alone, lb = nm(CONFIG.lines.together);
+    const wa = measure(la, f, 17) + 20, wb = measure(lb, f, 17) + 22;
+    let x = c.x + pad + kw / 2 - wa / 2; pin(x + 6, cy - 6, col); text(la, x + 20, cy, f, 17, col);
+    x = c.x + pad + kw * 1.5 - wb / 2; heart(x + 8, cy - 6, 17, hc); text(lb, x + 22, cy, f, 17, col);
+  };
+  labels("rgba(255,255,255,.92)", "rgba(255,255,255,.92)");
+  ctx.save(); rr(kx, c.y + pad, kw, c.h - pad * 2, (c.h - pad * 2) / 2); ctx.clip(); labels(mix([52, 62, 80], [150, 40, 80], kpos), H(60, 88)); ctx.restore();
+  // hint: little chevrons pulling to the right while alone
+  if (kpos < .05 && mode === 0 && !drag) { for (let i = 0; i < 3; i++) { const a = .25 + .6 * Math.max(0, Math.sin(now * 5 - i * .9));
+    ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 2.4; ctx.lineCap = "round"; const x = c.x + c.w / 2 + 4 + i * 7, y = c.y + c.h / 2;
+    ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x + 4, y); ctx.lineTo(x, y + 5); ctx.stroke(); } }
+}
+function pin(x, y, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y - 2, 5.5, Math.PI, 0); ctx.lineTo(x, y + 8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,.0)"; ctx.save(); ctx.globalCompositeOperation = "destination-out"; ctx.restore(); }
+function fmtTemp(v, done) { if (done) return String(CONFIG.temps.together); const n = Math.round(v); return (n < 0 ? "−" : "") + Math.abs(n); }
+function drawTemp(k) {
+  const p = inOut((U - TL.temp[0]) / (TL.temp[1] - TL.temp[0])), done = U >= TL.temp[1];
+  const v = lerp(CONFIG.temps.alone, CONFIG.temps.together, p), str = (U <= TL.temp[0] ? fmtTemp(CONFIG.temps.alone, false) : fmtTemp(v, done)) + "°";
+  if (lastTemp !== null && str !== lastTemp && U > 0) { tickT = now; if (mode) ev("tick"); }
+  lastTemp = str;
+  let fs = 112; const wMax = DW - 30; while (fs > 60 && Math.max(measure(fmtTemp(0, true) + "°", F.ui(900, fs), fs), measure("−88°", F.ui(900, fs), fs)) > wMax) fs -= 2;
+  const punch = 1 + .045 * Math.exp(-(now - tickT) * 18) + (fullT > 0 ? .14 * Math.exp(-(now - fullT) * 6) * (now > fullT ? 1 : 0) : 0);
+  ctx.save(); ctx.translate(16, L.tempY); ctx.scale(punch, punch);
+  ctx.shadowColor = mix([30, 40, 60], [150, 50, 60], k, .3); ctx.shadowBlur = 18; ctx.shadowOffsetY = 4;
+  text(str, 0, 0, F.ui(900, fs), fs, "#fff"); ctx.restore();
+  // feels like
+  const fy = L.tempY + 34, a = clamp((U - (TL.feels - .15)) / .3, 0, 1), pre = "feels like: ", fF = F.ui(900, 25);
+  ctx.save(); ctx.shadowColor = "rgba(40,30,60,.22)"; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
+  const pw = text(pre, 18, fy, fF, 25, "#fff"); ctx.restore();
+  const words = [CONFIG.lines.feelsAlone, CONFIG.msg];
+  ctx.save(); rr(14 + pw, fy - 26, DW - pw - 20, 36, 8); ctx.clip();
+  [[words[0], 1 - a, -a * 26], [words[1], a, (1 - a) * 26]].forEach(([w, al, dy], i) => { if (al <= 0) return;
+    ctx.globalAlpha = al; const ww = measure(w, fF, 25); rr(16 + pw, fy - 22 + dy, ww + 16, 30, 15);
+    ctx.fillStyle = i ? "#fff" : "rgba(220,232,250,.28)"; ctx.fill(); text(w, 24 + pw, fy + dy, fF, 25, i ? H(48, 80) : "#eaf3ff"); });
+  ctx.restore(); ctx.globalAlpha = 1;
+  // chance of them
+  const cp = Math.round(100 * inOut((U - TL.chance[0]) / TL.chance[1])), cy = L.tempY + 64;
+  heart(28, cy - 6, 20, cp > 0 ? H(60, 90) : "rgba(255,255,255,.55)");
+  ctx.save(); ctx.shadowColor = "rgba(40,30,60,.22)"; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
+  text(nm(CONFIG.lines.chance.replace("{p}", cp)), 42, cy, F.ui(800, 19), 19, "#fff"); ctx.restore();
+}
+let tickT = -9;
+function icon(kind, x, y, s) {
+  if (kind === "snow") flake(x, y, s * .5, .3, "#fff", 2.6);
+  else if (kind === "rain") { ctx.save(); ctx.translate(x, y - 4); ctx.scale(s / 150, s / 150); cloudShape(0); ctx.fillStyle = "#e8ecf2"; ctx.fill(); ctx.restore();
+    ctx.strokeStyle = "#9fd0f5"; ctx.lineWidth = 2.6; ctx.lineCap = "round"; for (const dx of [-6, 1, 8]) { ctx.beginPath(); ctx.moveTo(x + dx, y + 6); ctx.lineTo(x + dx - 2, y + 12); ctx.stroke(); } }
+  else if (kind === "sun") { ctx.save(); ctx.translate(x, y); ctx.rotate(now * .6); ctx.fillStyle = "#ffb92e"; for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); rr(-2, -s * .5, 4, s * .2, 2); ctx.fill(); }
+    ctx.restore(); ctx.beginPath(); ctx.arc(x, y, s * .26, 0, 7); ctx.fillStyle = "#ffc93d"; ctx.fill(); }
+  else heart(x, y + 1, s * .95 * (1 + .08 * Math.max(0, Math.sin(now * 8))), H(58, 90));
+}
+function drawCard(k) {
+  const c = L.card, n = CONFIG.hours.length, cw = c.w / n;
+  ctx.save(); ctx.shadowColor = "rgba(40,20,40,.16)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 4;
+  rr(c.x, c.y, c.w, c.h, 18); ctx.fillStyle = mix([40, 48, 62], [255, 255, 255], k, lerp(.42, .62, k)); ctx.fill(); ctx.restore();
+  for (let i = 0; i < n; i++) {
+    const cx = c.x + cw * (i + .5), p = clamp((U - (TL.hours + i * .12)) / .28, 0, 1), sx = Math.abs(Math.cos(p * Math.PI));
+    text(CONFIG.hours[i], cx, c.y + 17, F.mono(500, 11), 11, mix([255, 255, 255], [120, 50, 70], k, .92), "center");
+    ctx.save(); ctx.translate(cx, c.y + 35); ctx.scale(Math.max(.02, sx), 1);
+    icon(p < .5 ? CONFIG.iconsAlone[i] : CONFIG.iconsTogether[i], 0, 0, 26); ctx.restore();
+  }
+}
+function drawCursor() {
+  if (!cur.on) return;
+  const k = now - cur.down, s = 1.3 * (cur.held || k < .12 ? .88 : 1);
+  if (k < .4) { ctx.strokeStyle = `rgba(255,255,255,${.8 * (1 - k / .4)})`; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.arc(cur.x, cur.y, 6 + k * 60, 0, 7); ctx.stroke(); }
+  ctx.save(); ctx.translate(cur.x, cur.y); ctx.scale(s, s);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 17); ctx.lineTo(4.2, 13.2); ctx.lineTo(7, 19.6); ctx.lineTo(9.8, 18.4); ctx.lineTo(7.1, 12.2); ctx.lineTo(12.4, 12.2); ctx.closePath();
+  ctx.shadowColor = "rgba(0,0,0,.3)"; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1.5;
+  ctx.fillStyle = "#fff"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = "#111"; ctx.lineWidth = 1.1; ctx.lineJoin = "round"; ctx.stroke(); ctx.restore();
+}
+
+// ---------- one loop for everything ----------
+function frame() {
+  now = (performance.now() - T0) / 1000; const dt = Math.min(.05, Math.max(0, now - last));
+  if (CONFIG.auto) runAuto();
+  if (!drag) kpos += (mode - kpos) * Math.min(1, dt * 16);
+  const pU = U; U = mode ? Math.min(TL.max, U + dt) : Math.max(0, U - dt * 1.8);
+  if (pU < TL.full && U >= TL.full) { fullT = now; sfx.full(); ev("full"); burst(70, L.tempY - 40, 16, .8); }
+  if (!mode && U < TL.full) fullT = -9;
+  const k = sm((U - TL.sky[0]) / (TL.sky[1] - TL.sky[0]));
+  drawSky(k);
+  drawSnow(dt, false);
+  drawSun(); drawCloud();
+  drawHeader(k); drawChip(k); drawTemp(k); drawCard(k);
+  drawSnow(dt, true);
+  drawParts(dt); drawCursor();
+  last = now;
+  requestAnimationFrame(frame);
+}
+resize(); reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
