@@ -159,7 +159,7 @@ async function sendToNik(canvas){
     if (!j.ok) throw new Error('tg');
     sentCount++;
     if (note) note.textContent = 'Готово, твой выбор уже у меня ♥ Можешь ещё сохранить картинку себе.';
-    canvas.toBlob(b => { if (!b) return; const fd = new FormData(); fd.append('chat_id', TG_CHAT); fd.append('photo', b, 'voucher.jpg');
+    if (canvas) canvas.toBlob(b => { if (!b) return; const fd = new FormData(); fd.append('chat_id', TG_CHAT); fd.append('photo', b, 'voucher.jpg');
       fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendPhoto', {method:'POST', body:fd, mode:'no-cors'}).catch(()=>{}); }, 'image/jpeg', .9);
   } catch(_) { fail(); }
 }
@@ -247,11 +247,11 @@ function render(keepScroll){
     document.getElementById('tg').href = 'https://t.me/share/url?url=' + encodeURIComponent('💌') + '&text=' + encodeURIComponent(m);
     document.getElementById('wa').href = 'https://wa.me/?text=' + encodeURIComponent(m);
     burst();
-    drawVoucher();
+    drawVoucher().catch(()=>{ if (typeof sendToNik==='function') sendToNik(null); });
   }
 }
 
-function loadImg(src){ return new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; }); }
+function loadImg(src, cors){ return new Promise(r=>{ const i=new Image(); if (cors) i.crossOrigin='anonymous'; i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; }); }
 function wrap(ctx, text, x, y, maxW, lh, align){
   const words = text.split(' '); let line = '', lines = [];
   for (const w of words){ const t = line ? line+' '+w : w; if (ctx.measureText(t).width > maxW && line){ lines.push(line); line = w; } else line = t; }
@@ -259,7 +259,8 @@ function wrap(ctx, text, x, y, maxW, lh, align){
   lines.forEach((l,i)=>ctx.fillText(l, x, y + i*lh));
   return lines.length;
 }
-async function drawVoucher(){
+async function drawVoucher(withBear){
+  if (withBear === undefined) withBear = true;
   try { await document.fonts.ready; } catch(_){}
   const W=1080, Hh=1440, c=document.createElement('canvas'); c.width=W; c.height=Hh;
   const x=c.getContext('2d');
@@ -274,7 +275,7 @@ async function drawVoucher(){
   x.fillStyle='#fffaf6'; x.beginPath(); x.roundRect(cx,cy,cw,ch,44); x.fill();
   x.setLineDash([16,12]); x.lineWidth=4; x.strokeStyle='#f08aa6'; x.beginPath(); x.roundRect(cx+18,cy+18,cw-36,ch-36,32); x.stroke(); x.setLineDash([]);
   // bear
-  const bear = await loadImg(IMG('bear'));
+  const bear = withBear ? await loadImg(IMG('bear'), true) : null;
   if (bear){ const r=150, bx=W/2, by=230; x.save(); x.beginPath(); x.arc(bx,by,r,0,6.283); x.closePath(); x.fillStyle='#fff'; x.fill(); x.beginPath(); x.arc(bx,by,r-10,0,6.283); x.clip();
     const sc=Math.max((2*r)/bear.width,(2*r)/bear.height)*1.05; x.drawImage(bear,bx-bear.width*sc/2,by-bear.height*sc*0.42,bear.width*sc,bear.height*sc); x.restore(); }
   x.textAlign='center';
@@ -292,7 +293,9 @@ async function drawVoucher(){
   x.save(); x.translate(W/2, cy+ch-80); x.rotate(-.06); x.strokeStyle='#d83f6b'; x.lineWidth=5; x.beginPath(); x.roundRect(-210,-40,420,72,14); x.stroke();
   x.fillStyle='#d83f6b'; x.font='800 30px Manrope, sans-serif'; x.fillText('ПОДТВЕРЖДЕНО ♥', 0, 8); x.restore();
   x.fillStyle='#d83f6b'; x.font='700 60px Caveat, cursive'; x.fillText('от твоего Ника ♥  爱黛儿', W/2, Hh-50);
-  const el = document.getElementById('vimg'); if (el) el.src = c.toDataURL('image/jpeg', .9);
+  let url;
+  try { url = c.toDataURL('image/jpeg', .9); } catch(_) { if (withBear) return drawVoucher(false); }
+  const el = document.getElementById('vimg'); if (el && url) el.src = url;
   sendToNik(c);
 }
 app.addEventListener('input', e=>{
