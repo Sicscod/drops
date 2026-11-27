@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ваучер для Адели</title>
+<style>html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head><body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;1,500;1,600&family=Caveat:wght@500;700&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one narrow column of steps, like a love-letter card with a torn-off voucher */
+:root{
+  --blush:#fff1f4; --petal:#ffdce5; --rose:#f08aa6; --berry:#d83f6b; --wine:#7d1d3f;
+  --cream:#fffaf6; --muted:#a15d74; --line:rgba(216,63,107,.22);
+  --serif:"Cormorant Garamond", Georgia, serif;
+  --hand:"Caveat", "Segoe Print", cursive;
+  --sans:"Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{background:var(--blush)}
+body{color:var(--wine);font-family:var(--sans);font-size:15px;line-height:1.55;min-height:100%;
+  background:
+    radial-gradient(700px 420px at 100% 0%, #ffd0dc 0%, transparent 60%),
+    radial-gradient(600px 420px at 0% 100%, #ffe3ea 0%, transparent 60%),
+    var(--blush);
+  background-attachment:fixed}
+#hearts{position:fixed;inset:0;pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;max-width:520px;margin:0 auto;
+  padding-left:max(16px, env(safe-area-inset-left,0px));
+  padding-right:max(16px, env(safe-area-inset-right,0px));
+  padding-block:24px 56px}
+.step{display:flex;flex-direction:column;gap:18px;animation:rise .5s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes beat{0%,100%{transform:scale(1)}15%{transform:scale(1.12)}30%{transform:scale(1)}45%{transform:scale(1.08)}}
+@keyframes sway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
+@media (prefers-reduced-motion:reduce){.step,.bear,.beat{animation:none!important}}
+
+.eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--berry);font-weight:700}
+h1,h2{font-family:var(--serif);font-weight:600;line-height:1.05;margin:0;text-wrap:balance;color:var(--wine)}
+h1{font-size:clamp(40px,11vw,56px)}
+h2{font-size:clamp(30px,8vw,40px)}
+h1 em,h2 em{font-style:italic;color:var(--berry)}
+p{margin:0}
+.lead{color:var(--muted);font-size:15.5px}
+.hand{font-family:var(--hand);font-size:26px;line-height:1.1;color:var(--berry)}
+
+/* cover bear */
+.bear{width:min(64vw,260px);aspect-ratio:3/4;max-width:100%;align-self:center;border-radius:46% 46% 28px 28px / 36% 36% 28px 28px;overflow:hidden;
+  box-shadow:0 24px 50px -22px rgba(125,29,63,.45), 0 0 0 6px #fff;animation:sway 5s ease-in-out infinite;transform-origin:bottom center}
+.bear img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* voucher */
+.voucher{position:relative;background:var(--cream);border-radius:20px;padding:22px 22px 20px;
+  box-shadow:0 22px 46px -26px rgba(125,29,63,.5);border:1.5px dashed var(--rose)}
+.voucher::before,.voucher::after{content:"";position:absolute;top:50%;width:26px;height:26px;margin-top:-13px;border-radius:50%;background:var(--blush);border:1.5px dashed var(--rose)}
+.voucher::before{left:-14px;clip-path:inset(0 0 0 50%)}
+.voucher::after{right:-14px;clip-path:inset(0 50% 0 0)}
+.voucher h3{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.02;margin:6px 0 4px;color:var(--wine)}
+.voucher .top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.voucher .no{font-family:var(--hand);font-size:24px;color:var(--rose);white-space:nowrap}
+.voucher .bottom{display:flex;justify-content:space-between;gap:12px;margin-top:20px;font-size:12.5px;color:var(--muted)}
+.voucher .bottom strong{display:block;color:var(--wine);font-size:14px}
+.zh{font-family:var(--serif);font-size:20px;color:var(--berry)}
+.beat{display:inline-block;animation:beat 1.6s ease-in-out infinite}
+
+/* buttons */
+.btn{appearance:none;border:0;cursor:pointer;font:700 15px/1 var(--sans);padding:17px 22px;border-radius:999px;
+  background:linear-gradient(180deg,#f2648b,var(--berry));color:#fff;box-shadow:0 12px 26px -12px rgba(216,63,107,.8);
+  transition:transform .15s,opacity .2s;text-align:center;text-decoration:none;display:inline-block}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.35;cursor:default;box-shadow:none}
+.btn.ghost{background:#fff;color:var(--berry);box-shadow:inset 0 0 0 1.5px var(--line)}
+.btn:focus-visible,.card:focus-visible,textarea:focus-visible{outline:2px solid var(--berry);outline-offset:3px}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.actions .btn{flex:1 1 auto}
+.back{background:none;border:0;color:var(--muted);font:500 13px var(--sans);cursor:pointer;padding:0;align-self:flex-start}
+
+.dots{display:flex;gap:6px;align-items:center;color:var(--rose);font-size:14px}
+.dots i{font-style:normal;opacity:.35}.dots i.on{opacity:1}
+
+/* photo cards */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{position:relative;appearance:none;border:0;padding:0;cursor:pointer;border-radius:18px;overflow:hidden;
+  aspect-ratio:3/4;max-width:100%;background:var(--petal);color:#fff;text-align:left;font:inherit;
+  box-shadow:0 0 0 3px #fff, 0 10px 24px -16px rgba(125,29,63,.6);transition:transform .2s}
+.card.wide{grid-column:1/-1;aspect-ratio:16/10}
+.card img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .5s}
+.card::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(90,14,42,.82) 100%)}
+.card .cap{position:absolute;left:12px;right:12px;bottom:11px;z-index:2}
+.card .cap b{display:block;font-family:var(--serif);font-size:23px;font-weight:600;line-height:1.05}
+.card .cap span{font-size:12px;color:#ffe3ea}
+.card .tick{position:absolute;top:10px;right:10px;z-index:2;width:32px;height:32px;border-radius:50%;
+  background:rgba(255,255,255,.75);display:grid;place-items:center;font-size:16px;line-height:1;transition:all .2s;color:#e7b3c2}
+.card[aria-pressed="true"]{box-shadow:0 0 0 3px var(--berry), 0 14px 30px -14px rgba(216,63,107,.8)}
+.card[aria-pressed="true"] img{transform:scale(1.05)}
+.card[aria-pressed="true"] .tick{background:var(--berry);color:#fff;transform:scale(1.1)}
+.card.small{aspect-ratio:1/1}
+.card.small .cap b{font-size:18px}
+.hint{font-size:12.5px;color:var(--muted)}
+.sub{font-family:var(--serif);font-size:26px;font-weight:600;margin-top:6px}
+
+.own{display:flex;flex-direction:column;gap:6px;background:#fff;border-radius:16px;padding:14px;box-shadow:inset 0 0 0 1.5px var(--line)}
+.own label{font-family:var(--hand);font-size:23px;color:var(--berry);line-height:1}
+textarea{width:100%;min-height:70px;resize:vertical;border-radius:12px;border:1px solid var(--line);
+  background:var(--blush);color:var(--wine);padding:10px 12px;font:inherit}
+textarea::placeholder{color:#c48a9c}
+
+/* final */
+.summary{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.row{display:flex;justify-content:space-between;gap:14px;border-bottom:1px dashed var(--line);padding-bottom:8px}
+.row:last-child{border-bottom:0}
+.row span{color:var(--muted);font-size:12.5px;white-space:nowrap}
+.row b{text-align:right;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.stamp{display:inline-block;margin-top:14px;transform:rotate(-6deg);border:2px solid var(--berry);color:var(--berry);
+  border-radius:8px;padding:5px 10px;font:800 11px/1 var(--sans);letter-spacing:.18em}
+.letter{font-family:var(--hand);font-size:25px;line-height:1.25;color:var(--wine)}
+.bears{width:100%;aspect-ratio:4/3;max-width:100%;border-radius:18px;overflow:hidden;box-shadow:0 0 0 4px #fff}
+.bears img{width:100%;height:100%;object-fit:cover;display:block}
+.vimg{margin:0;display:flex;flex-direction:column;gap:8px;align-items:center}
+.vimg img{width:100%;max-width:100%;aspect-ratio:3/4;border-radius:18px;background:var(--petal);box-shadow:0 18px 40px -22px rgba(125,29,63,.6);-webkit-touch-callout:default}
+.copied{font-size:12.5px;color:var(--berry);min-height:1em;white-space:pre-line}
+</style>
+
+<canvas id="hearts" aria-hidden="true"></canvas>
+<main class="wrap" id="app"></main>
+
+<script>
+const IMG = k => `img/${k}.jpg`;
+const ACTS = [
+  {id:'karting2', t:'Картинг', s:'кто кого обгонит'},
+  {id:'cooking', t:'Готовим вместе', s:'я не умею, ты научишь'},
+  {id:'shooting', t:'Стрелковый клуб', s:'твоя идея, кстати'},
+  {id:'roof', t:'Рыбалка', s:'ну почти рыбалка: крыша и закат'},
+  {id:'home', t:'Фильм дома или кинорум', s:'плед, обнимашки и что-нибудь с Леонардо', wide:true},
+];
+const FOOD = [
+  {id:'sushi', t:'Суши', s:'роллы, сеты'},
+  {id:'pasta', t:'Паста', s:'итальянский вечер'},
+  {id:'pizza', t:'Пицца', s:'классика'},
+  {id:'steak', t:'Стейк', s:'по-взрослому'},
+  {id:'burger', t:'Бургеры', s:'без майонеза, конечно'},
+  {id:'khinkali', t:'Хинкали', s:'грузинская кухня'},
+];
+const SWEET = [
+  {id:'cheesecake', t:'Баскский чизкейк', s:'тот самый'},
+  {id:'hotchoc', t:'Горячий шоколад', s:'или мокачино'},
+  {id:'macarons', t:'Макаронс', s:'разноцветные'},
+];
+const TG_TOKEN = '9185040137:AAHmrENVcOy5RT_pwtVSRgQG2riK1biY0Ls';
+const TG_CHAT = '6049441431';
+let sentCount = 0;
+async function sendToNik(canvas){
+  const note = document.getElementById('sentNote'), manual = document.getElementById('manual');
+  const fail = () => { if (note) note.textContent = 'Отправь это мне, чтобы я всё подготовил: нажми кнопку и выбери наш чат, или просто скинь картинку.'; if (manual) manual.hidden = false; };
+  const head = sentCount ? '🔁 Делли поменяла выбор' : '💌 Делли активировала ваучер!';
+  const text = head + '\n\nИдём: ' + actsText() + '\nКушаем: ' + foodText() + '\nДесерт: ' + sweetText();
+  try {
+    const r = await fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage?chat_id=' + encodeURIComponent(TG_CHAT) + '&text=' + encodeURIComponent(text));
+    const j = await r.json();
+    if (!j.ok) throw new Error('tg');
+    sentCount++;
+    if (note) note.textContent = 'Готово, твой выбор уже у меня ♥ Можешь ещё сохранить картинку себе.';
+    canvas.toBlob(b => { if (!b) return; const fd = new FormData(); fd.append('chat_id', TG_CHAT); fd.append('photo', b, 'voucher.jpg');
+      fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendPhoto', {method:'POST', body:fd, mode:'no-cors'}).catch(()=>{}); }, 'image/jpeg', .9);
+  } catch(_) { fail(); }
+}
+const st = {step:0, acts:[], actOwn:'', food:null, foodOwn:'', sweets:[]};
+const app = document.getElementById('app');
+const byId = (arr,id)=>arr.find(x=>x.id===id);
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const dots = n => `<div class="dots" aria-hidden="true">${[1,2].map(i=>`<i class="${i<=n?'on':''}">♥</i>`).join('')}</div>`;
+const card = (o,on,small) => `<button class="card${small?' small':''}${o.wide?' wide':''}" data-id="${o.id}" aria-pressed="${on}">
+  <img src="${IMG(o.id)}" alt="" loading="lazy"><span class="tick">${on?'♥':'♡'}</span>
+  <span class="cap"><b>${o.t}</b><span>${o.s}</span></span></button>`;
+
+function actsText(){ const a = st.acts.map(id=>byId(ACTS,id).t); if (st.actOwn.trim()) a.push(st.actOwn.trim()); return a.join(' + '); }
+function foodText(){ const f = st.food ? [byId(FOOD,st.food).t] : []; if (st.foodOwn.trim()) f.push(st.foodOwn.trim()); return f.join(' + '); }
+function sweetText(){ return st.sweets.map(id=>byId(SWEET,id).t).join(', ') || 'без десерта'; }
+
+const views = [
+  () => `<section class="step">
+    <div class="bear"><img src="${IMG('bear')}" alt="Мишка с сердечком"></div>
+    <p class="hand" style="text-align:center">Делли, это тебе <span class="beat">♥</span></p>
+    <div class="voucher">
+      <div class="top"><p class="eyebrow">Ваучер на свидание</p><span class="no">№ 1</span></div>
+      <h3>Свидание<br>на твой выбор</h3>
+      <p class="lead">Любое. Куда скажешь, туда и пойдём.</p>
+      <div class="bottom">
+        <div>Выдан<strong>Кашакбаевой Адель</strong></div>
+        <div style="text-align:right"><span class="zh">爱黛儿</span><strong>от твоего Ника</strong></div>
+      </div>
+    </div>
+    <button class="btn" data-go="1">Открыть ♥</button>
+  </section>`,
+
+  () => `<section class="step">
+    ${dots(1)}
+    <h2>Как ты хочешь отпраздновать <em style="white-space:nowrap">2‑е число</em> вместе?</h2>
+    <p class="lead">Выбери одно или два. Или напиши своё внизу.</p>
+    <div class="grid" data-kind="acts">${ACTS.map(a=>card(a, st.acts.includes(a.id))).join('')}</div>
+    <div class="own"><label for="actOwn">Или на свой выбор</label>
+      <textarea id="actOwn" data-field="actOwn" placeholder="Напиши, куда хочешь">${esc(st.actOwn)}</textarea></div>
+    <div class="actions"><button class="btn" data-go="2" id="next1" ${(st.acts.length||st.actOwn.trim())?'':'disabled'}>Дальше</button></div>
+    <button class="back" data-go="0">← назад</button>
+  </section>`,
+
+  () => `<section class="step">
+    ${dots(2)}
+    <h2>Что <em>кушаем?</em></h2>
+    <div class="grid" data-kind="food">${FOOD.map(f=>card(f, st.food===f.id)).join('')}</div>
+    <div class="own"><label for="foodOwn">Или на свой выбор</label>
+      <textarea id="foodOwn" data-field="foodOwn" placeholder="Например: шаурма в 2 ночи">${esc(st.foodOwn)}</textarea></div>
+    <p class="sub">И на десерт</p>
+    <div class="grid" data-kind="sweets" style="grid-template-columns:repeat(3,1fr)">${SWEET.map(f=>card(f, st.sweets.includes(f.id), true)).join('')}</div>
+    <p class="hint">Можно несколько. Но сладкого не переедать 🙂</p>
+    <div class="actions"><button class="btn" data-go="3" id="next2" ${(st.food||st.foodOwn.trim())?'':'disabled'}>Готово ♥</button></div>
+    <button class="back" data-go="1">← назад</button>
+  </section>`,
+
+  () => `<section class="step">
+    <p class="eyebrow">Ваучер активирован</p>
+    <h2>Договорились, <em>Делли</em> <span class="beat">♥</span></h2>
+    <figure class="vimg"><img id="vimg" alt="Твой ваучер на свидание"><figcaption class="hint">Это твой ваучер. Зажми картинку, чтобы сохранить.</figcaption></figure>
+    <p class="lead" id="sentNote">Отправляю твой выбор Нику…</p>
+    <div class="actions" id="manual" hidden>
+      <a class="btn" id="tg" target="_blank" rel="noopener">Отправить Нику в Telegram</a>
+      <a class="btn ghost" id="wa" target="_blank" rel="noopener">WhatsApp</a>
+      <button class="btn ghost" id="copy">Скопировать</button>
+    </div>
+    <p class="copied" id="copied" aria-live="polite"></p>
+    <div class="bears"><img src="${IMG('bears')}" alt="Два мишки на закате"></div>
+    <p class="letter">Я тебя очень люблю и очень жду нашей встречи. Скоро буду рядом.</p>
+    <p class="hand" style="text-align:right">твой Ник</p>
+    <button class="back" data-go="1">← поменять выбор</button>
+  </section>`,
+];
+
+function message(){
+  return `Ник, я активировала ваучер на свидание 💌\nИдём: ${actsText()}\nКушаем: ${foodText()}\nДесерт: ${sweetText()}`;
+}
+function render(keepScroll){
+  const y = window.scrollY;
+  app.innerHTML = views[st.step]();
+  window.scrollTo(0, keepScroll ? y : 0);
+  if (st.step===3){
+    const m = message();
+    document.getElementById('tg').href = 'https://t.me/share/url?url=' + encodeURIComponent('💌') + '&text=' + encodeURIComponent(m);
+    document.getElementById('wa').href = 'https://wa.me/?text=' + encodeURIComponent(m);
+    burst();
+    drawVoucher();
+  }
+}
+
+function loadImg(src){ return new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; }); }
+function wrap(ctx, text, x, y, maxW, lh, align){
+  const words = text.split(' '); let line = '', lines = [];
+  for (const w of words){ const t = line ? line+' '+w : w; if (ctx.measureText(t).width > maxW && line){ lines.push(line); line = w; } else line = t; }
+  if (line) lines.push(line);
+  lines.forEach((l,i)=>ctx.fillText(l, x, y + i*lh));
+  return lines.length;
+}
+async function drawVoucher(){
+  try { await document.fonts.ready; } catch(_){}
+  const W=1080, Hh=1440, c=document.createElement('canvas'); c.width=W; c.height=Hh;
+  const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,W,Hh); g.addColorStop(0,'#ffe3ea'); g.addColorStop(1,'#ffc4d3');
+  x.fillStyle=g; x.fillRect(0,0,W,Hh);
+  // hearts confetti
+  for (let i=0;i<46;i++){ const s=10+Math.random()*26, hx=Math.random()*W, hy=Math.random()*Hh;
+    x.save(); x.translate(hx,hy); x.scale(s/16,s/16); x.globalAlpha=.18+Math.random()*.25; x.fillStyle=['#f08aa6','#d83f6b','#fff'][i%3];
+    x.beginPath(); x.moveTo(0,5); x.bezierCurveTo(-9,-3,-6,-12,0,-6); x.bezierCurveTo(6,-12,9,-3,0,5); x.fill(); x.restore(); }
+  // card
+  const cx=70, cy=330, cw=W-140, ch=990;
+  x.fillStyle='#fffaf6'; x.beginPath(); x.roundRect(cx,cy,cw,ch,44); x.fill();
+  x.setLineDash([16,12]); x.lineWidth=4; x.strokeStyle='#f08aa6'; x.beginPath(); x.roundRect(cx+18,cy+18,cw-36,ch-36,32); x.stroke(); x.setLineDash([]);
+  // bear
+  const bear = await loadImg(IMG('bear'));
+  if (bear){ const r=150, bx=W/2, by=230; x.save(); x.beginPath(); x.arc(bx,by,r,0,6.283); x.closePath(); x.fillStyle='#fff'; x.fill(); x.beginPath(); x.arc(bx,by,r-10,0,6.283); x.clip();
+    const sc=Math.max((2*r)/bear.width,(2*r)/bear.height)*1.05; x.drawImage(bear,bx-bear.width*sc/2,by-bear.height*sc*0.42,bear.width*sc,bear.height*sc); x.restore(); }
+  x.textAlign='center';
+  x.fillStyle='#d83f6b'; x.font='700 30px Manrope, sans-serif'; x.fillText('В А У Ч Е Р   Н А   С В И Д А Н И Е', W/2, cy+110);
+  x.fillStyle='#7d1d3f'; x.font='600 92px "Cormorant Garamond", Georgia, serif'; x.fillText('Свидание № 1', W/2, cy+210);
+  x.fillStyle='#a15d74'; x.font='italic 500 44px "Cormorant Garamond", Georgia, serif'; x.fillText('для Кашакбаевой Адель', W/2, cy+272);
+  const rows=[['Идём',actsText()],['Кушаем',foodText()],['Десерт',sweetText()]];
+  let y=cy+380;
+  for (const [k,v] of rows){
+    x.fillStyle='#d83f6b'; x.font='700 26px Manrope, sans-serif'; x.fillText(k.toUpperCase(), W/2, y);
+    x.fillStyle='#7d1d3f'; x.font='600 46px Manrope, sans-serif';
+    const n = wrap(x, v, W/2, y+58, cw-140, 54);
+    y += 58 + n*54 + 34;
+  }
+  x.save(); x.translate(W/2, cy+ch-80); x.rotate(-.06); x.strokeStyle='#d83f6b'; x.lineWidth=5; x.beginPath(); x.roundRect(-210,-40,420,72,14); x.stroke();
+  x.fillStyle='#d83f6b'; x.font='800 30px Manrope, sans-serif'; x.fillText('ПОДТВЕРЖДЕНО ♥', 0, 8); x.restore();
+  x.fillStyle='#d83f6b'; x.font='700 60px Caveat, cursive'; x.fillText('от твоего Ника ♥  爱黛儿', W/2, Hh-50);
+  const el = document.getElementById('vimg'); if (el) el.src = c.toDataURL('image/jpeg', .9);
+  sendToNik(c);
+}
+app.addEventListener('input', e=>{
+  const f = e.target.dataset.field; if (!f) return;
+  st[f] = e.target.value;
+  const n1 = document.getElementById('next1'); if (n1) n1.disabled = !(st.acts.length || st.actOwn.trim());
+  const n2 = document.getElementById('next2'); if (n2) n2.disabled = !(st.food || st.foodOwn.trim());
+});
+app.addEventListener('click', e=>{
+  const go = e.target.closest('[data-go]');
+  if (go && !go.disabled){ st.step = +go.dataset.go; render(); return; }
+  const c = e.target.closest('.card');
+  if (c){
+    const kind = c.parentElement.dataset.kind, id = c.dataset.id;
+    if (kind==='acts'){
+      if (st.acts.includes(id)) st.acts = st.acts.filter(x=>x!==id);
+      else { st.acts.push(id); if (st.acts.length>2) st.acts.shift(); }
+    } else if (kind==='food'){ st.food = st.food===id ? null : id; }
+    else if (kind==='sweets'){ st.sweets = st.sweets.includes(id) ? st.sweets.filter(x=>x!==id) : [...st.sweets, id]; }
+    render(true); return;
+  }
+  if (e.target.id==='copy'){
+    const m = message(), out = document.getElementById('copied');
+    try { navigator.clipboard.writeText(m).then(()=>{ out.textContent = 'Скопировано. Вставь в наш чат ♥'; }, ()=>{ out.textContent = m; }); }
+    catch(_) { out.textContent = m; }
+  }
+});
+
+// floating hearts
+const H = (function(){
+  const c = document.getElementById('hearts'), x = c.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let w,h,dpr,items=[];
+  const cols = ['#f08aa6','#ffb3c6','#d83f6b','#ffc8d6'];
+  function size(){ dpr=devicePixelRatio||1; w=c.width=innerWidth*dpr; h=c.height=innerHeight*dpr; c.style.width=innerWidth+'px'; c.style.height=innerHeight+'px'; }
+  function make(y, fast){ return {x:Math.random()*w, y:y ?? h+20*dpr, s:(6+Math.random()*12)*dpr, v:(fast?2.2:.35+Math.random()*.5)*dpr, a:fast?.9:.25+Math.random()*.35, p:Math.random()*6.28, col:cols[Math.random()*4|0], fast}; }
+  function heart(o){ x.save(); x.translate(o.x + Math.sin(o.p)*8*dpr, o.y); x.scale(o.s/16,o.s/16); x.globalAlpha=o.a; x.fillStyle=o.col;
+    x.beginPath(); x.moveTo(0,5); x.bezierCurveTo(-9,-3,-6,-12,0,-6); x.bezierCurveTo(6,-12,9,-3,0,5); x.fill(); x.restore(); }
+  function tick(){ x.clearRect(0,0,w,h);
+    for (const o of items){ o.y -= o.v; o.p += .02; if (o.fast) o.a -= .006; heart(o); }
+    items = items.filter(o => o.y > -30*dpr && o.a > 0);
+    while (items.filter(o=>!o.fast).length < Math.round(innerWidth/22)) items.push(make());
+    if (!reduce) requestAnimationFrame(tick); }
+  addEventListener('resize', size); size();
+  for (let i=0;i<Math.round(innerWidth/22);i++) items.push(make(Math.random()*h));
+  if (reduce) tick(); else requestAnimationFrame(tick);
+  return { burst(){ if (reduce) return; for (let i=0;i<40;i++) items.push(make(h - Math.random()*h*.3, true)); } };
+})();
+function burst(){ H.burst(); }
+render();
+</script>
+
+</body></html>
