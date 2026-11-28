@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>npm install</title>
+<meta name="description" content="A node_modules box that eats every package, grows heavier than the sun, and flies around the room like a balloon when you rm -rf it. Free code by @sicscod.drops">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@500;700&display=block">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{background:#171922}
+canvas{position:fixed;left:0;top:0;width:100%;height:calc(100% - 30px);display:block}
+.credit{position:fixed;left:0;right:0;bottom:0;height:30px;display:flex;align-items:center;justify-content:center;font:500 11.5px "JetBrains Mono",ui-monospace,monospace;color:rgba(255,255,255,.6);background:#0f1016}
+.credit a{color:#fff;text-decoration:none}
+.pre{position:fixed;left:-999px;top:0;visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">free code by&nbsp;<a href="https://www.instagram.com/sicscod.drops/" target="_blank" rel="noopener">@sicscod.drops</a></div>
+<span class="pre" style="font:700 20px 'Space Grotesk'">a</span><span class="pre" style="font:500 20px 'Space Grotesk'">a</span><span class="pre" style="font:500 20px 'JetBrains Mono'">a</span><span class="pre" style="font:700 20px 'JetBrains Mono'">a</span>
+<script>
+// ===== npm install · free code by @sicscod.drops =====
+// Try: yoursite/?project=my-app&size=4.7&hue=30   (?auto=1 plays it by itself)
+const P = new URLSearchParams(location.search);
+const num = (k, d) => { const v = parseFloat(P.get(k)); return isFinite(v) ? v : d; };
+const CONFIG = {
+  project: (P.get("project") || "my-app").slice(0, 14),   // folder name in the prompt
+  sizeGB: Math.max(.1, Math.min(999, num("size", 4.7))),  // final node_modules size
+  hue: ((num("hue", 30) % 360) + 360) % 360,              // box colour: 30 cardboard, 200 blue, 330 pink
+  installSecs: 3.6,                                       // how long the install takes
+  packages: 1337,                                         // "added N packages"
+  auto: P.get("auto") === "1",                            // a cursor plays the whole thing
+  sound: true,
+  names: ["left-pad", "is-odd", "is-even", "lodash", "react", "webpack", "babel-core", "chalk", "moment", "rxjs",
+          "is-number", "core-js", "typescript", "eslint", "jquery", "express", "axios", "uuid", "debug", "glob",
+          "rimraf", "semver", "yargs", "colors", "ms", "tslib", "esbuild", "vite", "next", "is-true"],
+  lines: {
+    done: "added {n} packages in 4m",
+    vuln: "found 0 vulnerabilities",
+    vulnLie: "(87 high severity)",
+    heavy: "heavier than the sun",
+    rm: "rm -rf node_modules",
+    install: "npm install",
+    clean: "much better.",
+  },
+};
+
+// ---------- setup ----------
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const T0 = performance.now();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const sm = x => (x = clamp(x, 0, 1), x * x * (3 - 2 * x));
+const HU = (l, s = 55, a = 1, dh = 0) => `hsla(${CONFIG.hue + dh},${s}%,${l}%,${a})`;
+const F = { ui: (w, s) => `${w} ${s}px "Space Grotesk", system-ui, sans-serif`, mono: (w, s) => `${w} ${s}px "JetBrains Mono", ui-monospace, monospace` };
+const PCOL = ["#ff6b6b", "#ffd166", "#06d6a0", "#4cc9f0", "#b388ff", "#ff9f1c", "#f15bb5", "#9ef01a"];
+
+let W = 0, Hh = 0, DPR = 1, S = 1, CW = 360, CH = 380, L = {};
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; Hh = Math.max(300, innerHeight - 30);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(Hh * DPR);
+  S = Math.min(W / 360, Hh / 380, 2.4); CW = W / S; CH = Hh / S;
+  const cx = CW / 2;
+  L = { cx, floor: CH - 64, btn: { x: cx - 150, y: CH - 50, w: 300, h: 40 }, weightY: 96 + Math.max(0, CH - 380) * .15 };
+  L.smax = clamp((L.floor - L.weightY - 40) / 80, 1.6, 2.7);
+}
+addEventListener("resize", resize);
+const toU = (x, y) => ({ x: x / S, y: y / S });
+
+// ---------- sound (tiny WebAudio blips) ----------
+let AC = null;
+function audio() { if (!CONFIG.sound) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) { AC = null; } }
+function tone(type, f0, f1, dur, vol) {
+  if (!AC) return; const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur); o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur + .02);
+}
+const sfx = { gulp: () => tone("sine", 420, 160, .08, .05), click: () => tone("square", 1500, 700, .04, .04),
+  pff: () => tone("sawtooth", 180, 60, 1.6, .06), boing: () => tone("sine", 200, 600, .25, .08) };
+
+// ---------- state ----------
+// mode: "install" -> "done" -> "deflate" -> "clean" -> (button) "install" ...
+let now = 0, last = 0, mode = "install", mT = 0, f = 0, eaten = 0, gulpT = -9, pk = [], parts = [], spawnAcc = 0, nameI = 0, btnT = -9;
+const box = { x: 0, y: 0, s: 1, rot: 0 };
+const defl = { x0: 0, y0: 0, s0: 1, D: 2.3 };
+function setMode(m) {
+  mode = m; mT = now;
+  if (m === "install") { f = 0; eaten = 0; pk = []; }
+  if (m === "deflate") { sfx.pff(); defl.x0 = box.x; defl.y0 = box.y; defl.s0 = box.s; }
+  if (m === "clean") sfx.boing();
+}
+function pressButton() { audio(); sfx.click(); btnT = now;
+  if (mode === "done") setMode("deflate"); else if (mode === "clean") setMode("install"); }
+
+function spawnPkg() {
+  const side = Math.random() < .5 ? -1 : 1, name = CONFIG.names[nameI++ % CONFIG.names.length];
+  pk.push({ name, col: PCOL[Math.floor(Math.random() * PCOL.length)], t: 0, dur: .55 + Math.random() * .25,
+    x0: L.cx + side * (CW / 2 + 40), y0: 120 + Math.random() * 140, arc: 60 + Math.random() * 70, rot: (Math.random() - .5) * 2 });
+}
+function burst(x, y, n, spd = 1) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * 7, v = (60 + Math.random() * 160) * spd;
+    parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: 0, max: .7 + Math.random() * .6, col: PCOL[i % PCOL.length], w: 8 + Math.random() * 8, r: Math.random() * 7, vr: (Math.random() - .5) * 10 }); }
+}
+
+// ---------- drawing helpers ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function fmtSize(b) { if (b < 1e6) return (b / 1e3).toFixed(0) + " KB"; if (b < 1e9) return (b / 1e6).toFixed(b < 1e7 ? 1 : 0) + " MB"; return (b / 1e9).toFixed(1) + " GB"; }
+
+function drawBg() {
+  ctx.fillStyle = "#171922"; ctx.fillRect(0, 0, CW, CH);
+  ctx.strokeStyle = "rgba(255,255,255,.035)"; ctx.lineWidth = 1;
+  for (let x = (CW / 2) % 24; x < CW; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, L.floor); ctx.stroke(); }
+  for (let y = 12; y < L.floor; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke(); }
+  ctx.fillStyle = "#20222e"; ctx.fillRect(0, L.floor, CW, CH - L.floor);
+  ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fillRect(0, L.floor, CW, 1.5);
+}
+function drawPrompt() {
+  rr(10, 9, CW - 20, 30, 9); ctx.fillStyle = "#0f1016"; ctx.fill();
+  ctx.font = F.mono(500, 12.5); ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  let x = 22; const y = 24.5;
+  ctx.fillStyle = "#06d6a0"; ctx.fillText("~/" + CONFIG.project, x, y); x += ctx.measureText("~/" + CONFIG.project).width + 7;
+  ctx.fillStyle = "#8a8fa8"; ctx.fillText("$", x, y); x += ctx.measureText("$").width + 7;
+  const cmd = mode === "deflate" || mode === "clean" ? CONFIG.lines.rm : CONFIG.lines.install;
+  ctx.fillStyle = "#fff"; ctx.fillText(cmd, x, y); x += ctx.measureText(cmd).width + 3;
+  if (mode === "install") { const sp = "|/-\\"[Math.floor(now * 12) % 4]; ctx.fillStyle = "#ffd166"; ctx.fillText(" " + sp, x, y); }
+  else if (Math.floor(now * 2) % 2 === 0) { ctx.fillStyle = "#fff"; ctx.fillRect(x + 2, y - 7, 7, 14); }
+  ctx.textAlign = "right"; ctx.fillStyle = "#8a8fa8"; ctx.font = F.mono(500, 11);
+  ctx.fillText(Math.round(eaten) + " pkgs", CW - 22, y);
+}
+function drawWeight() {
+  let txt, sub = null, col = "#fff";
+  const b = 12e3 * Math.pow(CONFIG.sizeGB * 1e9 / 12e3, f);
+  if (mode === "install") { txt = fmtSize(b); if (f > .82) sub = CONFIG.lines.heavy; col = f > .6 ? "#ffd166" : "#fff"; }
+  else if (mode === "done") { txt = fmtSize(CONFIG.sizeGB * 1e9); sub = CONFIG.lines.heavy; col = "#ff6b6b"; }
+  else if (mode === "deflate") { const k = sm((now - mT) / defl.D); txt = fmtSize(CONFIG.sizeGB * 1e9 * Math.pow(12e3 / (CONFIG.sizeGB * 1e9), k)); col = "#4cc9f0"; }
+  else { txt = "12 KB"; sub = CONFIG.lines.clean; col = "#06d6a0"; }
+  const shake = mode === "install" ? f ** 3 * 2.5 : mode === "done" ? 1.5 : 0;
+  ctx.save(); ctx.translate(L.cx + (Math.random() - .5) * shake, L.weightY + (Math.random() - .5) * shake);
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  ctx.lineJoin = "round"; ctx.strokeStyle = "#171922";
+  ctx.font = F.ui(700, 46); ctx.lineWidth = 9; ctx.strokeText(txt, 0, 4); ctx.fillStyle = col; ctx.fillText(txt, 0, 4);
+  if (sub) { ctx.font = F.ui(700, 16); ctx.lineWidth = 6; ctx.strokeText(sub, 0, 26); ctx.fillStyle = mode === "clean" ? "#06d6a0" : "#ffd166"; ctx.fillText(sub, 0, 26); }
+  ctx.restore();
+}
+
+// the box: (x, y) = bottom centre, s = scale (1 = 90x80)
+function drawBox(x, y, s, rot, k, face) {
+  const w = 90 * s, h = 80 * s, bul = k * .13 * w, g = now - gulpT, gq = g < .18 ? Math.sin(g / .18 * Math.PI) : 0;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(1 + gq * .06, 1 - gq * .07);
+  if (face !== "fly") { ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(0, 2, w * .6, 6 + s * 2, 0, 0, 7); ctx.fill(); }
+  const top = -h;
+  const flap = (sgn) => { const a = (.5 + .25 * Math.sin(now * 14 + sgn) * (mode === "install" ? 1 : .1)) * sgn;
+    ctx.save(); ctx.translate(sgn * w / 2, top); ctx.rotate(a);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-sgn * w * .48, 0); ctx.lineTo(-sgn * w * .44, -h * .3); ctx.lineTo(sgn * 2, -h * .3); ctx.closePath();
+    ctx.fillStyle = HU(42); ctx.fill(); ctx.strokeStyle = HU(28); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); };
+  flap(-1); flap(1);
+  ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.quadraticCurveTo(-w / 2 - bul, top / 2, -w / 2, top); ctx.lineTo(w / 2, top);
+  ctx.quadraticCurveTo(w / 2 + bul, top / 2, w / 2, 0); ctx.closePath();
+  const gr = ctx.createLinearGradient(-w / 2, 0, w / 2, 0); gr.addColorStop(0, HU(52)); gr.addColorStop(.6, HU(60)); gr.addColorStop(1, HU(46));
+  ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = HU(28); ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = HU(18, 40); ctx.fillRect(-w / 2 + 2, top - 1, w - 4, 4 * s);
+  ctx.fillStyle = HU(75, 35, .55); ctx.fillRect(-w * .07, top, w * .14, h * .22);
+  if (k > .55) { ctx.strokeStyle = HU(25, 40, (k - .55) * 2); ctx.lineWidth = 1.4;
+    for (const [px, py] of [[-.38, .35], [.36, .55], [-.3, .78]]) { ctx.beginPath(); ctx.moveTo(px * w, top + py * h); ctx.lineTo(px * w + 6 * s, top + py * h + 4 * s); ctx.lineTo(px * w + 3 * s, top + py * h + 9 * s); ctx.stroke(); } }
+  const lw = w * .76, lh = h * .2, ly = top + h * .68;
+  rr(-lw / 2, ly, lw, lh, 3 * s); ctx.fillStyle = "#f5efe3"; ctx.fill();
+  ctx.fillStyle = "#2b2b2b"; ctx.font = F.mono(700, 9.4 * s); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("node_modules", 0, ly + lh / 2 + .5 * s);
+  const ey = top + h * .36, ex = w * .2, er = 5.5 * s;
+  ctx.fillStyle = "#1d1d1d"; ctx.strokeStyle = "#1d1d1d"; ctx.lineWidth = 2.4 * s; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (face === "strain") {
+    for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sg * ex - sg * er, ey - er); ctx.lineTo(sg * ex + sg * er * .6, ey); ctx.lineTo(sg * ex - sg * er, ey + er); ctx.stroke(); }
+    ctx.beginPath(); ctx.ellipse(0, ey + h * .15, 7 * s, 5 * s, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "rgba(255,90,90,.35)"; for (const sg of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sg * ex * 1.65, ey + h * .12, 6 * s, 3.5 * s, 0, 0, 7); ctx.fill(); }
+    ctx.fillStyle = "#7fd3ff"; const sy = (now * 1.6) % 1;
+    ctx.beginPath(); ctx.ellipse(w * .42, ey - 4 * s + sy * 18 * s, 3 * s, 4.5 * s, 0, 0, 7); ctx.fill();
+  } else if (face === "fly") {
+    for (const sg of [-1, 1]) { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(sg * ex, ey, er * 1.35, 0, 7); ctx.fill(); ctx.fillStyle = "#1d1d1d"; ctx.beginPath(); ctx.arc(sg * ex, ey, er * .55, 0, 7); ctx.fill(); }
+    ctx.beginPath(); ctx.ellipse(0, ey + h * .16, 5 * s, 7 * s, 0, 0, 7); ctx.fill();
+  } else if (face === "smug") {
+    ctx.beginPath(); ctx.arc(-ex, ey, er * .8, 0, 7); ctx.fill();
+    const tw = Math.sin(now * 30) * (Math.floor(now * 2) % 2) * 1.5 * s;
+    ctx.beginPath(); ctx.moveTo(ex - er, ey + tw); ctx.lineTo(ex + er, ey + tw); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-6 * s, ey + h * .15); ctx.quadraticCurveTo(0, ey + h * .19, 7 * s, ey + h * .13); ctx.stroke();
+  } else {
+    for (const sg of [-1, 1]) { ctx.beginPath(); ctx.arc(sg * ex, ey + er * .4, er * .9, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(0, ey + h * .08, 7 * s, .2, Math.PI - .2); ctx.stroke();
+    ctx.fillStyle = "rgba(255,120,140,.5)"; for (const sg of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sg * ex * 1.55, ey + h * .1, 5 * s, 3 * s, 0, 0, 7); ctx.fill(); }
+  }
+  ctx.restore();
+}
+function drawCracks(k) {
+  if (k <= 0) return; ctx.strokeStyle = `rgba(0,0,0,${.6 * k})`; ctx.lineWidth = 2;
+  const segs = [[[-30, 0], [-55, 8], [-70, 6], [-95, 16]], [[25, 0], [50, 10], [62, 7], [92, 18]], [[8, 0], [14, 14], [6, 26]]];
+  for (const pts of segs) { ctx.beginPath(); pts.forEach(([x, y], i) => { const px = L.cx + x * (.4 + k * .9), py = L.floor + y * k; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }); ctx.stroke(); }
+}
+function drawPkgs(dt) {
+  const tx = box.x, ty = box.y - 80 * box.s + 4;
+  for (let i = pk.length - 1; i >= 0; i--) {
+    const p = pk[i]; p.t += dt / p.dur; const u = clamp(p.t, 0, 1);
+    const x = lerp(p.x0, tx, u), y = lerp(p.y0, ty, u) - Math.sin(u * Math.PI) * p.arc, sc = 1 - u * .45;
+    if (p.t >= 1) { pk.splice(i, 1); gulpT = now; sfx.gulp(); continue; }
+    ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot * u * 3); ctx.scale(sc, sc);
+    ctx.font = F.mono(700, 12); const tw = ctx.measureText(p.name).width + 18;
+    rr(-tw / 2, -12, tw, 24, 7); ctx.fillStyle = p.col; ctx.fill();
+    ctx.fillStyle = "#14141c"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(p.name, 0, 1); ctx.restore();
+  }
+}
+function drawParts(dt) {
+  for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life += dt; if (p.life > p.max) { parts.splice(i, 1); continue; }
+    p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
+    ctx.save(); ctx.globalAlpha = 1 - p.life / p.max; ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.col; ctx.fillRect(-p.w / 2, -p.w / 3, p.w, p.w * .66); ctx.restore(); }
+}
+function drawResult() {
+  if (mode !== "done") return; const k = sm((now - mT) / .35);
+  ctx.save(); ctx.globalAlpha = k; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  const n = CONFIG.packages.toLocaleString("en-US"), y = L.weightY + 46, bw = 236, bx = L.cx - bw / 2;
+  ctx.translate(0, (1 - k) * 10);
+  rr(bx, y, bw, 58, 10); ctx.fillStyle = "rgba(15,16,22,.94)"; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.font = F.mono(500, 11.5); ctx.fillStyle = "#c9cde0"; ctx.fillText(CONFIG.lines.done.replace("{n}", n), bx + 12, y + 15);
+  ctx.fillStyle = "#06d6a0"; ctx.fillText(CONFIG.lines.vuln, bx + 12, y + 30);
+  if (now - mT > .6) { ctx.fillStyle = "#ff6b6b"; ctx.font = F.mono(700, 11); ctx.fillText(CONFIG.lines.vulnLie, bx + 12, y + 45); }
+  ctx.restore();
+}
+function drawButton() {
+  const b = L.btn, act = mode === "done" || mode === "clean", red = mode === "done" || mode === "deflate";
+  const pr = now - btnT < .15 ? .95 : 1;
+  ctx.save(); ctx.translate(b.x + b.w / 2, b.y + b.h / 2); ctx.scale(pr, pr);
+  rr(-b.w / 2, -b.h / 2 + 3, b.w, b.h, 12); ctx.fillStyle = red ? "#8c2a35" : "#08805f"; ctx.globalAlpha = act ? 1 : .45; ctx.fill();
+  rr(-b.w / 2, -b.h / 2, b.w, b.h, 12); ctx.fillStyle = red ? "#e5484d" : "#0fb886"; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = "#fff"; ctx.font = F.mono(700, 15); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("$ " + (red ? CONFIG.lines.rm : CONFIG.lines.install), 0, 1);
+  ctx.restore();
+}
+
+// ---------- ?auto=1: a scripted cursor ----------
+const cur = { on: false, x: 0, y: 0, down: -9, seg: null };
+const btnC = () => ({ x: L.btn.x + L.btn.w * .62, y: L.btn.y + L.btn.h * .55 });
+const I = CONFIG.installSecs;
+const AUTO = [
+  [0, "move", .01, () => ({ x: CW * .84, y: CH * .58 })],
+  [I + .25, "move", .6, btnC],
+  [I + 1.0, "tap"],
+  [I + 1.15, "move", .7, () => ({ x: CW * .86, y: CH * .5 })],
+  [I + 3.9, "move", .5, btnC],
+  [I + 4.6, "tap"],
+  [I + 4.75, "move", .6, () => ({ x: CW * .84, y: CH * .58 })],
+];
+let autoI = 0;
+function runAuto() {
+  while (autoI < AUTO.length && now >= AUTO[autoI][0]) {
+    const a = AUTO[autoI++];
+    if (a[1] === "move") { cur.seg = { t0: a[0], len: a[2], from: { x: cur.x, y: cur.y }, to: a[3]() }; cur.on = true; }
+    else { cur.down = now; pressButton(); }
+  }
+  if (cur.seg) { const u = clamp((now - cur.seg.t0) / cur.seg.len, 0, 1), e = sm(u);
+    cur.x = lerp(cur.seg.from.x, cur.seg.to.x, e); cur.y = lerp(cur.seg.from.y, cur.seg.to.y, e) - Math.sin(u * Math.PI) * 12; }
+}
+function drawCursor() {
+  if (!cur.on) return; const k = now - cur.down, s = 1.35 * (k < .12 ? .86 : 1);
+  if (k < .4) { ctx.strokeStyle = `rgba(255,255,255,${.8 * (1 - k / .4)})`; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.arc(cur.x, cur.y, 6 + k * 60, 0, 7); ctx.stroke(); }
+  ctx.save(); ctx.translate(cur.x, cur.y); ctx.scale(s, s);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 17); ctx.lineTo(4.2, 13.2); ctx.lineTo(7, 19.6); ctx.lineTo(9.8, 18.4); ctx.lineTo(7.1, 12.2); ctx.lineTo(12.4, 12.2); ctx.closePath();
+  ctx.shadowColor = "rgba(0,0,0,.4)"; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1.5;
+  ctx.fillStyle = "#fff"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = "#111"; ctx.lineWidth = 1.1; ctx.lineJoin = "round"; ctx.stroke(); ctx.restore();
+}
+
+// ---------- input: tap the button (or press Enter) ----------
+addEventListener("pointerdown", e => { audio(); if (CONFIG.auto) return; const u = toU(e.clientX, e.clientY), b = L.btn;
+  if (u.x > b.x && u.x < b.x + b.w && u.y > b.y - 6 && u.y < b.y + b.h + 6) pressButton(); });
+addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") pressButton(); });
+
+// ---------- one loop for everything ----------
+function frame() {
+  now = (performance.now() - T0) / 1000; const dt = Math.min(.05, Math.max(0, now - last));
+  if (CONFIG.auto) runAuto();
+  let face = "happy", k = 0;
+  if (mode === "install") {
+    f = clamp((now - mT) / CONFIG.installSecs, 0, 1); k = f;
+    spawnAcc += dt * (6 + f * 16); while (spawnAcc > 1 && f < .95) { spawnAcc -= 1; spawnPkg(); }
+    eaten = Math.round(CONFIG.packages * f);
+    box.s = 1 + (L.smax - 1) * (1 - Math.pow(1 - f, 1.6)); box.x = L.cx + (Math.random() - .5) * f ** 3 * 5; box.y = L.floor + f ** 2 * 6; box.rot = 0;
+    face = f > .3 ? "strain" : "happy";
+    if (f >= 1 && pk.length === 0) setMode("done");
+  } else if (mode === "done") {
+    k = 1; face = "smug"; box.s = L.smax; box.x = L.cx + Math.sin(now * 40) * .8; box.y = L.floor + 6;
+  } else if (mode === "deflate") {
+    const u = clamp((now - mT) / defl.D, 0, 1), e = sm(u);
+    box.s = lerp(defl.s0, 1, Math.pow(u, .5));
+    const fly = Math.sin(u * Math.PI);
+    box.x = L.cx + Math.sin(u * 17) * (CW * .28) * fly;
+    box.y = lerp(defl.y0, L.floor, e) - fly * (Math.sin(u * 11 + 1) * .5 + .5) * (L.floor - 170);
+    box.rot = Math.sin(u * 23) * 1.1 * fly;
+    k = 1 - u; face = "fly";
+    if (u < .95 && Math.random() < .8) { const a = box.rot + Math.PI / 2; parts.push({ x: box.x - Math.sin(box.rot) * 40 * box.s, y: box.y - Math.cos(box.rot) * 40 * box.s, vx: Math.cos(a) * 200 + (Math.random() - .5) * 120, vy: Math.sin(a) * 200 - 60, life: 0, max: .7, col: PCOL[Math.floor(Math.random() * 8)], w: 7 + Math.random() * 7, r: 0, vr: 8 }); }
+    if (u >= 1) { box.rot = 0; burst(box.x, box.y - 30, 14, .6); setMode("clean"); }
+  } else {
+    const u = now - mT, bounce = Math.abs(Math.sin(u * 9)) * Math.exp(-u * 4) * 30;
+    box.s = 1; box.x = L.cx; box.y = L.floor - bounce; box.rot = 0; face = "happy";
+  }
+  ctx.setTransform(DPR * S, 0, 0, DPR * S, 0, 0);
+  drawBg();
+  drawCracks(mode === "install" ? clamp((f - .55) / .45, 0, 1) : mode === "done" ? 1 : mode === "deflate" ? 1 - sm((now - mT) / .6) : 0);
+  drawBox(box.x, box.y, box.s, box.rot, k, face);
+  drawPkgs(dt); drawParts(dt);
+  drawWeight(); drawResult();
+  drawPrompt(); drawButton(); drawCursor();
+  last = now;
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -61,6 +61,7 @@ Saw a drop in a video? Its number is the folder.
 | 52 | [💔 Ctrl+Z Us](52-undo-us) | A fight saved as us.txt: Ctrl+Z un-types every angry line while a big broken heart stitches itself back together, then snaps whole: "i love you · we're okay". |
 | 53 | [🧛 Light Mode](53-light-mode) | A tiny vampire developer codes at 3:00 AM. Flip the theme toggle and the editor flashbangs: he screams, sizzles and shrinks. Flip it back and he sips: "much better." Try again and he padlocks the toggle. |
 | 54 | [☀️ Love Forecast](54-love-forecast) | A weather app where swiping to them turns −12° snow into 36.6° sunshine and falling hearts. |
+| 55 | [📦 npm install](55-npm-install) | A node_modules box that eats packages until it's heavier than the sun, then deflates like a balloon on rm -rf. |
 
 ## How to use a drop
 1. Open its folder → download `index.html`
